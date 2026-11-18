@@ -116,8 +116,7 @@ function availableActivities(npc){
 }
 function sceneFor(npc){
  const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
-  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away, hunger '+Math.round(n.needs.hunger)+
-    ', social need '+Math.round(n.needs.social)+')').join(', ')||'Nobody nearby';
+  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
  const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
  const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=18)
   .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
