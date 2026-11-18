@@ -1,0 +1,87 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+
+function makeBrowser() {
+  const events = new Map();
+  const counters = { staticRects: 0, screenImages: 0 };
+  const fakeContext = type => new Proxy({
+    measureText: str => ({ width: String(str).length * 8 }),
+    fillRect: (...args) => {
+      if(type==='static') counters.staticRects++;
+    },
+    drawImage: () => {
+      if(type==='screen') counters.screenImages++;
+    }
+  }, {
+    get(target, key) { return target[key] ?? (() => {}); },
+    set(target, key, value) { target[key] = value; return true; }
+  });
+  const mapCtx=fakeContext('screen'), staticCtx=fakeContext('static');
+  const canvas={
+    width: 1120,height:728,
+    getContext:()=>mapCtx,
+    addEventListener(name,fn){ events.set('canvas:'+name,fn); }
+  };
+  const elements = new Map([['world', canvas]]);
+  const createElement = tag => {
+    if(tag==='canvas')return {width:0,height:0,getContext:()=>staticCtx};
+    return {className:'',style:{},textContent:'',disabled:false,
+      append(){},replaceChildren(){},addEventListener(){},
+      classList:{toggle(){}},setAttribute(){},scrollTop:0};
+  };
+  const doc = {
+    createElement,
+    createTextNode: str=>({textContent:str}),
+    querySelectorAll:()=>[],
+    getElementById(id) {
+      if(!elements.has(id))elements.set(id,createElement('div'));
+      return elements.get(id);
+    }
+  };
+  const win = {
+    addEventListener(name,fn){events.set('window:'+name,fn);},
+    confirm:()=>true,location:{reload(){}}
+  };
+  const context = {
+    document:doc,window:win,console,
+    localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+    requestAnimationFrame(){},setInterval(){},
+    performance:{now:()=>0},
+    fetch:async()=>({ok:true,json:async()=>({connected:false})})
+  };
+  const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+  vm.runInNewContext(source + '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind};',context);
+  return { ...context.__expose, counters, events };
+}
+
+test('cached static map is painted once, while dynamic frames reuse it',()=>{
+  const browser=makeBrowser();
+  const before=browser.counters.staticRects;
+  assert.ok(before>100,'Map should be initialized');
+  browser.drawWorld();browser.drawWorld();
+  assert.equal(browser.counters.staticRects,before,'Static tiles should not be redrawn each frame');
+  assert.equal(browser.counters.screenImages,2);
+});
+
+test('held WASD moves continuously rather than resetting movement paths',()=>{
+  const browser=makeBrowser();
+  browser.events.get('window:keydown')({key:'w',preventDefault(){}});
+  for(let i=0;i<5;i++)browser.step(0.2);
+  assert.ok(browser.state.player.y < 11,
+    'Holding W should move multiple tiles rather than repeatedly resetting to the same tile');
+  browser.events.get('window:keyup')({key:'w'});
+  const original=browser.state.player.y;
+  for(let i=0;i<4;i++)browser.step(0.2);
+  assert.equal(browser.state.player.y,original);
+});
+
+test('none action preserves the prior NPC goal',()=>{
+  const browser=makeBrowser();
+  const npc=browser.state.npcs[0];
+  npc.goal='Visiting the square';
+  browser.setAction(npc,'none','offline routine',null);
+  browser.setAction(npc,'none','offline routine',null);
+  assert.equal(npc.goal,'Visiting the square');
+});
