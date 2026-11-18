@@ -32,7 +32,7 @@ const initialNPCs = [
   memories:[], chat:[], relationships:{}, path:[], travel:0, thoughtAt:8*60+10+i*7, lastSeen:0}));
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
-  auto:true, busy:false, selected:'mara', lastDecisionMs:0, player:{x:21,y:12,path:[],travel:0},
+  auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0, player:{x:21,y:12,path:[],travel:0},
   npcs:initialNPCs, events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
@@ -89,7 +89,7 @@ function approach(actor,target){
   const point={x:target.x+d[0],y:target.y+d[1]};
   if(isBlocked(point.x,point.y))continue;
   const route=pathfind(actor,point);
-  if(route.length<dist){dist=route.length;best=point;}
+  if((route.length>0 || manhattan(actor,point)===0)&&route.length<dist){dist=route.length;best=point;}
  }
  return best ? moveTo(actor,best) : false;
 }
@@ -135,14 +135,15 @@ function setAction(npc,action,source,scores){
   else result=approach(npc,other);
   if(result&&other){
    npc.goal='Catch up with '+other.name;
-   const curr=npc.relationships[other.id]??50;
-   npc.relationships[other.id]=clamp(curr+1);
-   remember(npc,'Decided to seek out '+other.name+' for a chat');
+   npc.socialTarget=other.id;
   }
- }else if(action==='none') npc.goal='Continue '+npc.goal.toLowerCase();
- else{
+ }else if(action==='none') {
+  // A continuation is not a new destination or an ever-growing goal string.
+  result=true;
+ }else{
   const target=locations[targets[action]];
-  result=!!target&&moveTo(npc,target);
+  result=!!target&&(npc.action===action&&npc.path.length>0?true:moveTo(npc,target));
+  if(result)npc.socialTarget=null;
   if(result)npc.goal=action==='work'?'Working at '+npc.work:
     action==='cafe'?'Visiting the café':action==='square'?'Visiting the square':
     action==='home'?'Going home':'Resting at home';
@@ -157,7 +158,11 @@ function setAction(npc,action,source,scores){
 async function jsonPost(path,body){
  const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
  const data=await response.json();
- if(!response.ok)throw new Error(data.error||'HTTP '+response.status);
+ if(!response.ok){
+  const error=new Error(data.error||'HTTP '+response.status);
+  error.status=response.status;
+  throw error;
+ }
  return data;
 }
 async function checkModel(){
@@ -171,26 +176,34 @@ async function checkModel(){
  tag.innerHTML='<i class="status-dot"></i> '+(state.connected?'Rein connected':'Offline · simulated routines');
 }
 async function deliberate(npc){
- state.busy=true;
+ state.backgroundBusy=true;
  try{
   const options=backgroundOptions(npc);
   if(state.connected){
    const data=await jsonPost('/api/decide',{
     persona:npc.personality,scene:sceneFor(npc),
-    history:[],question:'Given the resident’s current needs, goals and situation, which available world action should they take next?',options
+    history:[],question:'Which available action is most appropriate for this resident’s current needs and circumstances?',options
    });
-   if(options.some(o=>o.key===data.action))setAction(npc,data.action,'rein',data.scores);
-   else record('Rejected an invalid model action for '+npc.name,'warning');
-  }else setAction(npc,fallbackBackground(npc),'offline routine',null);
+   if(!state.paused&&!state.conversationBusy&&options.some(o=>o.key===data.action)){
+    setAction(npc,data.action,'rein',data.scores);
+    record(npc.name+' inference completed in '+data.durationMs+'ms','ai');
+   }
+  }else if(!state.paused&&!state.conversationBusy){
+   setAction(npc,fallbackBackground(npc),'offline routine',null);
+  }
  }catch(error){
-  record(npc.name+': inference error — '+error.message,'warning');
-  state.connected=false;
-  setAction(npc,fallbackBackground(npc),'offline routine',null);
-  checkModel();
+  if(error.status===429){
+   record(npc.name+': background decision deferred for conversation','routine');
+  }else{
+   record(npc.name+': inference error — '+error.message,'warning');
+   if(!state.paused&&!state.conversationBusy)
+    setAction(npc,fallbackBackground(npc),'offline routine',null);
+   void checkModel();
+  }
  }finally{
-  npc.thoughtAt=state.clock+28;
+  npc.thoughtAt=state.clock+(state.connected?55:60);
   state.lastDecisionMs=performance.now();
-  state.busy=false;
+  state.backgroundBusy=false;
  }
 }
 function selectNpc(id){
@@ -200,7 +213,7 @@ function selectNpc(id){
 function selectedNpc(){return state.npcs.find(n=>n.id===state.selected);}
 function addConversation(npc,role,content,source){
  npc.chat.push({role,content,source});npc.chat=npc.chat.slice(-22);
- renderChat();
+ if(state.selected===npc.id)renderChat();
 }
 function socialOptions(npc){
  return [
@@ -222,36 +235,32 @@ async function sendMessage(event){
  event.preventDefault();
  const npc=selectedNpc(),input=$('messageInput');
  const message=input.value.trim();
- if(!npc||!message||state.busy)return;
+ if(!npc||!message||state.conversationBusy)return;
  if(manhattan(state.player,npc)>4){$('chatHint').textContent='Move within 4 tiles to talk to '+npc.name+'.';return;}
+ // Persist the target identity. UI selection may change while inference runs.
  input.value='';
- const prior=npc.chat.slice(-8).map(({role,content})=>({role:role==='player'?'user':'assistant',content}));
+ npc.path=[];npc.travel=0;
+ const prior=npc.chat.slice(-8).filter(item=>item.role!=='system')
+  .map(({role,content})=>({role:role==='player'?'user':'assistant',content}));
  addConversation(npc,'player',message,'player');
  record('You spoke to '+npc.name+': '+message.slice(0,75),'social');
- state.busy=true;$('sendBtn').disabled=true;$('chatHint').textContent='Evaluating social choice…';
+ state.conversationBusy=true;$('sendBtn').disabled=true;
+ $('chatHint').textContent='Prioritizing your conversation…';
  try{
-  let action,source='offline routine',scores=null,reply;
+  let action,source='offline routine',scores=null,reply,durationMs=0;
   const options=socialOptions(npc);
   if(state.connected){
-   const decision=await jsonPost('/api/decide',{
+   const response=await jsonPost('/api/interact',{
     persona:npc.personality,scene:sceneFor(npc),
-    history:prior.concat([{role:'user',content:message}]),
-    question:'How should this character socially respond to the visitor’s latest words, given their personality and relationship?',options
+    history:prior,message,
+    question:'How should this character respond to the visitor’s latest words, given their personality and relationship?',
+    options
    });
-   action=decision.action;scores=decision.scores;source='rein';
-   if(!options.some(o=>o.key===action))throw new Error('Model returned an unknown social choice');
-  }else action=fallbackSocial(npc,message);
-  npc.action=action;npc.source=source;npc.scores=scores;
-  record(npc.name+' social response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+' ['+source+']',source==='rein'?'ai':'routine');
-  if(action==='warm'||action==='helpful')npc.trust=clamp(npc.trust+2);
-  if(action==='refuse'||action==='avoid')npc.trust=clamp(npc.trust-2);
-  if(state.connected){
-   $('chatHint').textContent='Generating dialogue…';
-   const spoken=await jsonPost('/api/speak',{
-    persona:npc.personality,scene:sceneFor(npc),history:prior,message,action
-   });
-   reply=spoken.reply;
+   action=response.action;scores=response.scores;reply=response.reply;
+   durationMs=response.durationMs;source='rein';
+   if(!options.some(o=>o.key===action))throw new Error('Model returned an unknown social action');
   }else{
+   action=fallbackSocial(npc,message);
    const phrases={
     warm:'Good to see you! Pull up a chair and tell me what is on your mind.',
     guarded:'Well, that depends. What exactly are you asking?',
@@ -262,23 +271,32 @@ async function sendMessage(event){
    };
    reply=phrases[action];
   }
+  // Commit state only after a complete, validated response from both Rein calls.
+  npc.action=action;npc.source=source;npc.scores=scores;
+  if(action==='warm'||action==='helpful')npc.trust=clamp(npc.trust+2);
+  if(action==='refuse'||action==='avoid')npc.trust=clamp(npc.trust-2);
   addConversation(npc,'npc',reply,source);
   remember(npc,'Player said: '+message.slice(0,85)+'; I replied: '+reply.slice(0,80));
-  record(npc.name+' replied: '+reply.slice(0,90),source==='rein'?'ai':'social');
+  record(npc.name+' response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+
+   ' ['+source+']'+(source==='rein'?' '+durationMs+'ms':''),source==='rein'?'ai':'social');
   if(action==='avoid')moveTo(npc,locations[npc.home]);
   npc.mood=clamp(npc.mood+(action==='warm'?2:action==='refuse'?-2:0));
  }catch(error){
-  state.connected=false;
-  record(npc.name+': model dialogue error — '+error.message,'warning');
-  addConversation(npc,'npc','[Model unavailable: no generated reply. Retry after checking llama-server.]','error');
-  checkModel();
+  record(npc.name+': conversation failed — '+error.message,'warning');
+  // A failed request must not poison NPC memory or grant relationship changes.
+  const index=npc.chat.findLastIndex(item=>item.role==='player'&&item.content===message);
+  if(index>=0)npc.chat.splice(index,1);
+  addConversation(npc,'system','No model reply was completed. Your message was not applied; please retry.','error');
+  input.value=message;
+  void checkModel();
  }finally{
-  state.busy=false;$('sendBtn').disabled=false;
-  $('chatHint').textContent='Responses labeled Rein or offline simulation.';
+  state.conversationBusy=false;$('sendBtn').disabled=false;
+  $('chatHint').textContent='Interactions are prioritized over background decisions.';
   state.lastDecisionMs=performance.now();
   save();updateInspector();
  }
 }
+
 function updateMovement(actor,dt,tilesPerSec){
  if(!actor.path?.length)return;
  actor.travel+=dt*tilesPerSec;
@@ -296,7 +314,11 @@ function position(actor){
  }
  return {x:actor.x,y:actor.y};
 }
-function drawWorld(){
+const staticCanvas=document.createElement('canvas');
+staticCanvas.width=canvas.width;staticCanvas.height=canvas.height;
+const staticContext=staticCanvas.getContext('2d');
+function drawStaticWorld(){
+ const ctx=staticContext;
  const t=TILE;
  ctx.fillStyle='#506b57';ctx.fillRect(0,0,canvas.width,canvas.height);
  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
@@ -344,7 +366,9 @@ function drawWorld(){
   ctx.strokeStyle='#18272acc';ctx.strokeText(b.name,X+BW/2,Y+17);
   ctx.fillStyle='#fff1d4';ctx.fillText(b.name,X+BW/2,Y+17);
  }
- // Residents and player are drawn last, so they are always visible.
+}
+function drawWorld(){
+ ctx.drawImage(staticCanvas,0,0);
  for(const npc of state.npcs)drawPerson(npc,false);
  drawPerson(state.player,true);
 }
@@ -420,7 +444,7 @@ function renderChat(){
  for(const item of npc.chat){
   const bubble=document.createElement('div');bubble.className='chat-bubble'+(item.role==='player'?' player-msg':'');
   const label=document.createElement('small');
-  label.textContent=item.role==='player'?'You':npc.name+' · '+(item.source==='rein'?'Rein':'offline');
+  label.textContent=item.role==='player'?'You':item.role==='system'?'System':npc.name+' · '+(item.source==='rein'?'Rein':'offline');
   const body=document.createElement('span');body.textContent=item.content;
   bubble.append(label,body);area.append(bubble);
  }
@@ -456,8 +480,15 @@ function restore(){
   }
  }catch{ /* Ignore stale or corrupt browser state. */ }
 }
+const heldKeys=new Set();
 function step(dt){
  if(state.paused)return;
+ if(!state.player.path.length&&heldKeys.size){
+  const key=Array.from(heldKeys).at(-1);
+  const delta={w:[0,-1],arrowup:[0,-1],s:[0,1],arrowdown:[0,1],
+   a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]}[key];
+  if(delta)moveTo(state.player,{x:state.player.x+delta[0],y:state.player.y+delta[1]});
+ }
  const beforeDay=Math.floor(state.clock/1440);
  state.clock+=dt*state.speed*3;
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
@@ -467,6 +498,16 @@ function step(dt){
   npc.energy=clamp(npc.energy-dt*state.speed*0.04);
   if(npc.action==='rest'&&manhattan(npc,locations[npc.home])<=1)
    npc.energy=clamp(npc.energy+dt*state.speed*0.36);
+  if(npc.socialTarget&&!npc.path.length){
+   const other=state.npcs.find(n=>n.id===npc.socialTarget);
+   npc.socialTarget=null;
+   if(other&&manhattan(npc,other)<=2){
+    npc.relationships[other.id]=clamp((npc.relationships[other.id]??50)+1);
+    other.relationships[npc.id]=clamp((other.relationships[npc.id]??50)+1);
+    remember(npc,'Met '+other.name+' after seeking them out');
+    record(npc.name+' met '+other.name+' [simulation event]','social');
+   }
+  }
  }
  if(state.clock-state.lastSocial>16){
   state.lastSocial=state.clock;
@@ -480,7 +521,7 @@ function step(dt){
    }
   }
  }
- if(state.auto&&!state.busy&&performance.now()-state.lastDecisionMs>6500){
+ if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&performance.now()-state.lastDecisionMs>(state.connected?25000:8000)){
   const due=state.npcs.filter(n=>state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
  }
@@ -490,10 +531,10 @@ function updateHUD(now){
  state.nextUI=now+500;
  $('worldTime').textContent=timeString();
  $('worldDay').textContent='DAY '+String(state.day).padStart(2,'0');
- $('worldStatus').textContent=state.paused?'Simulation paused':state.busy?'NPC thinking…':'World running';
+ $('worldStatus').textContent=state.paused?'Simulation paused':state.conversationBusy?'Conversing with NPC…':state.backgroundBusy?'Background thinking…':'World running';
  $('footerNote').textContent=state.connected?'Model decisions are labeled Rein.':'No model connected: deterministic routines active.';
  $('pauseBtn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';
- updateInspector();
+ if(!state.conversationBusy)updateInspector();
  if(now>state.nextSave){save();state.nextSave=now+5000;}
 }
 function animate(now){
@@ -514,18 +555,19 @@ canvas.addEventListener('click',event=>{
 window.addEventListener('keydown',event=>{
  const active=document.activeElement?.tagName;
  if(active==='INPUT'||active==='TEXTAREA')return;
- if(event.key.toLowerCase()==='e'){
+ const key=event.key.toLowerCase();
+ if(key==='e'){
   const npc=selectedNpc();if(npc&&manhattan(state.player,npc)<=4)$('messageInput').focus();
   return;
  }
- const delta={w:[0,-1],arrowup:[0,-1],s:[0,1],arrowdown:[0,1],
- a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]}[event.key.toLowerCase()];
- if(!delta)return;
- event.preventDefault();
- const now=performance.now();if(now-(window.lastMove||0)<120)return;window.lastMove=now;
- const destination={x:state.player.x+delta[0],y:state.player.y+delta[1]};
- if(!isBlocked(destination.x,destination.y))moveTo(state.player,destination);
+ if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)){
+  event.preventDefault();heldKeys.add(key);
+ }
 });
+window.addEventListener('keyup',event=>heldKeys.delete(event.key.toLowerCase()));
+window.addEventListener('blur',()=>heldKeys.clear());
+window.addEventListener('pagehide',save);
+
 $('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
 $('autoAI').addEventListener('change',event=>{state.auto=event.target.checked;record('Autonomous decisions '+(state.auto?'enabled':'disabled'));});
 for(const btn of document.querySelectorAll('[data-speed]')){
@@ -540,6 +582,7 @@ $('resetBtn').addEventListener('click',()=>{
  localStorage.removeItem(STORE);window.location.reload();
 });
 $('chatForm').addEventListener('submit',sendMessage);
+drawStaticWorld();
 restore();
 renderResidents();updateInspector();renderChat();
 record('Hearthbrook village initialized — click a resident to inspect their state.');
