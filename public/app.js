@@ -105,12 +105,17 @@ function sceneFor(npc){
   'Actions must be plausible and physically possible in this world.';
 }
 function backgroundOptions(npc){
- const options=[
-  {key:'work',when:'Go about '+npc.role+' duties at the workplace during working hours'},
-  {key:'cafe',when:'Go to the cafe for food, relaxation or company'},
-  {key:'square',when:'Visit the village square to watch people or enjoy fresh air'},
-  {key:'home',when:'Return home for quiet, safety or sleep'},
-  {key:'rest',when:'Take a break to regain energy and avoid exhaustion'}];
+ const hour=(state.clock%1440)/60;
+ const options=[];
+ // Filter obviously implausible options before asking Rein to choose.
+ // The model ranks available actions; it does not overrule world constraints.
+ if(hour>=7&&hour<19)
+  options.push({key:'work',when:'Perform '+npc.role+' duties at the workplace during working hours'});
+ if(hour>=6&&hour<23)
+  options.push({key:'cafe',when:'Visit the cafe for food, relaxation or company'});
+ options.push({key:'square',when:'Spend time in the village square or outdoors'});
+ options.push({key:'home',when:'Return home for quiet, safety or sleep'});
+ options.push({key:'rest',when:'Rest if tired and conserve energy'});
  if(nearest(npc,6)) options.push({key:'socialize',when:'Speak briefly with a nearby resident to maintain a relationship'});
  options.push({key:'none',when:'Continue present activity without changing plans'});
  return options;
@@ -490,7 +495,7 @@ function step(dt){
   if(delta)moveTo(state.player,{x:state.player.x+delta[0],y:state.player.y+delta[1]});
  }
  const beforeDay=Math.floor(state.clock/1440);
- state.clock+=dt*state.speed*3;
+ state.clock+=dt*state.speed;
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
  updateMovement(state.player,dt,5.2);
  for(const npc of state.npcs){
@@ -521,14 +526,14 @@ function step(dt){
    }
   }
  }
- if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&performance.now()-state.lastDecisionMs>(state.connected?25000:8000)){
+ if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
   const due=state.npcs.filter(n=>state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
  }
 }
 function updateHUD(now){
  if(now<state.nextUI)return;
- state.nextUI=now+500;
+ state.nextUI=now+750;
  $('worldTime').textContent=timeString();
  $('worldDay').textContent='DAY '+String(state.day).padStart(2,'0');
  $('worldStatus').textContent=state.paused?'Simulation paused':state.conversationBusy?'Conversing with NPC…':state.backgroundBusy?'Background thinking…':'World running';
@@ -538,6 +543,11 @@ function updateHUD(now){
  if(now>state.nextSave){save();state.nextSave=now+5000;}
 }
 function animate(now){
+ // Cap drawing at 30 fps to leave CPU budget for inference and browser input.
+ if(animate.last&&now-animate.last<33){
+  requestAnimationFrame(animate);
+  return;
+ }
  const dt=Math.min(0.06,(now-(animate.last||now))/1000);
  animate.last=now;
  step(dt);drawWorld();updateHUD(now);requestAnimationFrame(animate);
