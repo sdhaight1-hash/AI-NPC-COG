@@ -93,7 +93,10 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
 
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /Hearthbrook Village/);
+  assert.match(await html.text(), /Hearthbrook · Emergent World/);
+  const emergence = await fetch(origin + '/emergence.js');
+  assert.equal(emergence.status,200);
+  assert.match(await emergence.text(), /root\.AgentWorld=/);
   const renderer = await fetch(origin + '/pixel-art.js');
   assert.equal(renderer.status, 200);
   const rendererSource = await renderer.text();
@@ -101,6 +104,8 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   const htmlSource = await (await fetch(origin + '/')).text();
   assert.ok(htmlSource.indexOf('/pixel-art.js') < htmlSource.indexOf('/app.js'),
     'The art renderer must load before app.js');
+  assert.ok(htmlSource.indexOf('/emergence.js') < htmlSource.indexOf('/app.js'),
+    'The world rules must load before app.js');
 
   const js = await fetch(origin + '/app.js');
   assert.equal(js.status, 200);

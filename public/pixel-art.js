@@ -353,5 +353,39 @@
     for(const b of buildings)building(ctx,b);
     details(ctx);
   }
-  root.VillageArt={ TILE, drawWorld, drawActor:actor, hash };
+  function drawWorldObjects(ctx,world){
+    if(!world)return;
+    for(const node of world.nodes||[]){
+      const x=node.x*16,y=node.y*16;
+      if(node.kind==='food'){
+        rect(ctx,'#264d36',x+2,y+8,13,7);
+        rect(ctx,node.stock?'#548f46':'#486b42',x+3,y+5,10,7);
+        rect(ctx,'#81ab53',x+4,y+4,5,3);
+        if(node.stock>0)for(let i=0;i<Math.min(4,node.stock);i++)
+          rect(ctx,i%2?'#bf6270':'#d87c70',x+4+(i%2)*5,y+7+(i>>1)*3,2,2);
+      }else if(node.kind==='wood'){
+        rect(ctx,'#493928',x+2,y+10,13,5);
+        rect(ctx,node.stock?'#93683f':'#6d5e43',x+3,y+7,12,5);
+        rect(ctx,'#d2a472',x+3,y+7,3,5);
+        rect(ctx,'#563e2b',x+5,y+8,1,3);
+        if(node.stock>0)rect(ctx,'#c29465',x+6,y+5,7,2);
+      }else if(node.kind==='stone'){
+        rect(ctx,'#3c514a',x+2,y+12,13,3);
+        rect(ctx,node.stock?'#8d968e':'#64736e',x+2,y+7,12,6);
+        rect(ctx,'#bec4b2',x+5,y+6,6,2);
+        if(node.stock>0)rect(ctx,'#d1d1ba',x+3,y+10,3,1);
+      }
+    }
+    for(const site of world.structures||[]){
+      if(site.type!=='campfire')continue;
+      const x=site.x*16,y=site.y*16;
+      rect(ctx,'#42463f',x+1,y+11,14,3);
+      rect(ctx,'#b4a18a',x+3,y+9,11,3);
+      rect(ctx,'#62442d',x+4,y+11,10,3);
+      rect(ctx,'#e7b862',x+6,y+5,5,8);
+      rect(ctx,'#f8df83',x+8,y+3,3,8);
+      rect(ctx,'#da6747',x+6,y+9,7,3);
+    }
+  }
+  root.VillageArt={ TILE, drawWorld, drawWorldObjects, drawActor:actor, hash };
 })(globalThis);

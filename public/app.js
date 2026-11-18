@@ -8,12 +8,12 @@ const W = 40, H = 26;
 const STORE = 'ai-npc-cog-v1';
 
 const buildings = [
-  { id:'cottage', name:'Oak Cottage', x:4, y:3, w:7, h:5, door:{x:7,y:8}, roof:'#97674c' },
-  { id:'cafe', name:'Hearth Café', x:15, y:3, w:8, h:5, door:{x:19,y:8}, roof:'#bd775d' },
-  { id:'clinic', name:'Clinic', x:29, y:3, w:8, h:5, door:{x:33,y:8}, roof:'#7e93a4' },
-  { id:'forge', name:'Workshop', x:4, y:16, w:7, h:5, door:{x:7,y:21}, roof:'#78665a' },
-  { id:'library', name:'Library', x:16, y:17, w:8, h:5, door:{x:20,y:22}, roof:'#6a7c9f' },
-  { id:'market', name:'Market', x:29, y:17, w:8, h:5, door:{x:33,y:22}, roof:'#b58c5a' }
+  { id:'cottage', name:'Longhouse', x:4, y:3, w:7, h:5, door:{x:7,y:8}, roof:'#97674c' },
+  { id:'cafe', name:'Common House', x:15, y:3, w:8, h:5, door:{x:19,y:8}, roof:'#bd775d' },
+  { id:'clinic', name:'Storehouse', x:29, y:3, w:8, h:5, door:{x:33,y:8}, roof:'#7e93a4' },
+  { id:'forge', name:'Old Shed', x:4, y:16, w:7, h:5, door:{x:7,y:21}, roof:'#78665a' },
+  { id:'library', name:'Meeting Hall', x:16, y:17, w:8, h:5, door:{x:20,y:22}, roof:'#6a7c9f' },
+  { id:'market', name:'Covered Stalls', x:29, y:17, w:8, h:5, door:{x:33,y:22}, roof:'#b58c5a' }
 ];
 const locations = Object.fromEntries(buildings.map(b => [b.id, b.door]));
 locations.square={x:26,y:12};
@@ -22,19 +22,27 @@ locations.bench={x:12,y:14};
 const trees=[[1,2],[12,3],[26,4],[38,4],[2,9],[12,9],[26,9],[38,10],[1,16],[12,18],[27,18],[38,16],[2,23],[13,23],[26,24],[38,24],[3,13],[36,24]];
 
 const initialNPCs = [
- { id:'mara', name:'Mara', role:'Café owner', home:'cottage', work:'cafe', x:19,y:8, mood:79, energy:84, trust:56, color:'#e9aa85', personality:'Mara, 32, runs the Hearth Café. Warm, observant, protective of her friends, quietly stubborn. Dislikes gossip and values honesty.' },
- { id:'jonas', name:'Jonas', role:'Mechanic', home:'cottage', work:'forge', x:7,y:21, mood:55, energy:80, trust:41, color:'#9bc3cc', personality:'Jonas, 40, repairs equipment at the Workshop. Dry humor, pragmatic, guarded with strangers, deeply loyal once trust is earned.' },
- { id:'asha', name:'Asha', role:'Librarian', home:'cottage', work:'library', x:20,y:22, mood:72, energy:73, trust:63, color:'#bc9add', personality:'Asha, 28, keeps the village library. Curious, patient, precise about facts, a little shy in groups, loves local history.' },
- { id:'rowan', name:'Rowan', role:'Nurse', home:'cottage', work:'clinic', x:33,y:8, mood:65, energy:71, trust:62, color:'#a1d6aa', personality:'Rowan, 35, is the village nurse. Calm under pressure, empathic but blunt, avoids exaggeration, respects boundaries.' },
- { id:'lina', name:'Lina', role:'Market trader', home:'cottage', work:'market', x:33,y:22, mood:83, energy:90, trust:48, color:'#d9cb79', personality:'Lina, 24, runs a produce stall at the market. Spirited, business-minded, outgoing, competitive and fond of teasing friends.' },
- { id:'nico', name:'Nico', role:'Courier', home:'cottage', work:'market', x:26,y:12, mood:68, energy:76, trust:51, color:'#e693ad', personality:'Nico, 21, delivers mail through Hearthbrook. Restless, cheerful, socially awkward when surprised and always looking for adventure.' }
-].map((n,i) => ({...n, goal:'Starting the day', action:'none', source:'routine', scores:null,
-  memories:[], chat:[], relationships:{}, path:[], travel:0, thoughtAt:8*60+10+i*7, lastSeen:0}));
+ { id:'mara', name:'Mara', x:21,y:11, mood:79, energy:84, trust:56, color:'#e9aa85',
+   personality:'Mara, 32. Warm, observant, protective of friends, quietly stubborn. Values honesty and dislikes gossip.' },
+ { id:'jonas', name:'Jonas', x:12,y:11, mood:55, energy:80, trust:41, color:'#9bc3cc',
+   personality:'Jonas, 40. Dry humor, pragmatic, guarded with strangers, loyal once trust is earned.' },
+ { id:'asha', name:'Asha', x:30,y:12, mood:72, energy:73, trust:63, color:'#bc9add',
+   personality:'Asha, 28. Curious, patient, precise about facts, sometimes shy, loves learning and exploring.' },
+ { id:'rowan', name:'Rowan', x:15,y:13, mood:65, energy:71, trust:62, color:'#a1d6aa',
+   personality:'Rowan, 35. Calm under pressure, empathic but blunt, cautious, respects boundaries.' },
+ { id:'lina', name:'Lina', x:26,y:14, mood:83, energy:90, trust:48, color:'#d9cb79',
+   personality:'Lina, 24. Spirited, resourceful, outgoing, competitive, fond of teasing friends.' },
+ { id:'nico', name:'Nico', x:8,y:12, mood:68, energy:76, trust:51, color:'#e693ad',
+   personality:'Nico, 21. Restless, cheerful, socially awkward when surprised, loves discovering new places.' }
+].map((n,i) => AgentWorld.newAgent({...n,
+  goal:'Learning about this place',action:'none',source:'simulation',scores:null,
+  memories:[],chat:[],relationships:{},path:[],travel:0,
+  thoughtAt:8*60+10+i*5,lastSeen:0},i));
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
   auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0,
   zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
-  npcs:initialNPCs, events:[], nextUI:0, nextSave:0, lastSocial:0};
+  npcs:initialNPCs, world:AgentWorld.newWorld(), events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
 const manhattan=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
@@ -99,73 +107,86 @@ function approach(actor,target){
  }
  return best ? moveTo(actor,best) : false;
 }
+function reachableFrom(npc,point){
+ return !isBlocked(point.x,point.y)&&
+  (manhattan(npc,point)===0||pathfind(npc,point).length>0);
+}
+function availableActivities(npc){
+ return AgentWorld.available(npc,state.world,state.npcs,point=>reachableFrom(npc,point));
+}
 function sceneFor(npc){
- const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=7)
-  .map(n=>n.name+' ('+n.role+', '+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
- const memories=npc.memories.slice(-5).map(m=>m.time+': '+m.text).join('; ')||'No notable prior events';
- return 'Hearthbrook, day '+state.day+' at '+timeString()+'. '+npc.name+
-  ' is at tile ('+npc.x+','+npc.y+'), currently '+npc.goal+'. Mood '+Math.round(npc.mood)+
-  '/100, energy '+Math.round(npc.energy)+'/100; trust in player '+Math.round(npc.trust)+
-  '/100. Nearby residents: '+around+'. Recent real memories: '+memories+
-  '. Known locations: home cottage, '+npc.work+' workplace, cafe, square and market. '+
-  'Actions must be plausible and physically possible in this world.';
+ const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
+  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away, hunger '+Math.round(n.needs.hunger)+
+    ', social need '+Math.round(n.needs.social)+')').join(', ')||'Nobody nearby';
+ const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
+ const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=18)
+  .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
+ return 'Small settlement, day '+state.day+' at '+timeString()+'. '+
+  npc.name+' is at ('+npc.x+','+npc.y+'). Personality: '+npc.personality+
+  ' Physical needs: hunger '+Math.round(npc.needs.hunger)+'/100 (high is hungry), energy '+
+  Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
+  '/100 (high is lonely), curiosity '+Math.round(npc.needs.curiosity)+'/100. Inventory: '+
+  Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
+  '. Earned experience: '+Object.entries(npc.skills).map(([k,v])=>k+' '+v).join(', ')+
+  ' (practice increases gathering yield). Current intention: '+npc.goal+
+  '. Other residents within earshot: '+around+
+  '. Observed usable resources: '+nearby+'. Personal memories: '+memories+
+  '. Nobody has been assigned a profession, destination or routine. You choose one available action; '+
+  'the environment validates it and supplies consequences.';
 }
 function backgroundOptions(npc){
- const hour=(state.clock%1440)/60;
- const options=[];
- // Filter obviously implausible options before asking Rein to choose.
- // The model ranks available actions; it does not overrule world constraints.
- if(hour>=7&&hour<19)
-  options.push({key:'work',when:'Perform '+npc.role+' duties at the workplace during working hours'});
- if(hour>=6&&hour<23)
-  options.push({key:'cafe',when:'Visit the cafe for food, relaxation or company'});
- options.push({key:'square',when:'Spend time in the village square or outdoors'});
- options.push({key:'home',when:'Return home for quiet, safety or sleep'});
- options.push({key:'rest',when:'Rest if tired and conserve energy'});
- if(nearest(npc,6)) options.push({key:'socialize',when:'Speak briefly with a nearby resident to maintain a relationship'});
- options.push({key:'none',when:'Continue present activity without changing plans'});
- return options;
+ return availableActivities(npc).map(({key,when})=>({key,when}));
 }
 function fallbackBackground(npc){
- const hour=(state.clock%1440)/60;
- if(npc.energy<30)return 'rest';
- if(hour>=8&&hour<17) return npc.work==='cafe'&&npc.mood<40?'square':'work';
- if(hour>=17&&hour<20)return 'cafe';
- return 'home';
+ return AgentWorld.fallback(npc,backgroundOptions(npc));
+}
+function completeActivity(npc){
+ if(!npc.task)return;
+ const outcome=AgentWorld.complete(npc,state.world,state.npcs);
+ if(outcome.ok){
+  remember(npc,outcome.message);
+  record(npc.name+': '+outcome.message,'social');
+  npc.goal='Considering what to do next';
+  npc.thoughtAt=state.clock+1;
+ }else{
+  record(npc.name+': '+outcome.message+' [world rejected]','warning');
+  npc.goal='Reconsidering after a failed attempt';
+  npc.thoughtAt=state.clock+1;
+ }
 }
 function setAction(npc,action,source,scores){
- const other=nearest(npc,6);
- const targets={work:npc.work,cafe:'cafe',square:'square',home:npc.home,rest:npc.home,
-   socialize:other?null:undefined};
- if(!['work','cafe','square','home','rest','socialize','none'].includes(action)) {
-  record(npc.name+': rejected unknown action '+action,'warning');return;
+ const candidate=availableActivities(npc).find(option=>option.key===action);
+ if(!candidate){
+  record(npc.name+': unavailable action rejected: '+action,'warning');
+  return false;
  }
- let result=true;
- if(action==='socialize') {
-  if(!other)result=false;
-  else result=approach(npc,other);
-  if(result&&other){
-   npc.goal='Catch up with '+other.name;
-   npc.socialTarget=other.id;
-  }
- }else if(action==='none') {
-  // A continuation is not a new destination or an ever-growing goal string.
-  result=true;
+ if(action==='none'){
+  npc.action='none';npc.source=source;npc.scores=scores;npc.task=null;
+  if(!npc.goal)npc.goal='Observing the world';
+ }else if(action==='rest'){
+  npc.action='rest';npc.source=source;npc.scores=scores;npc.task=null;
+  npc.path=[];npc.travel=0;npc.goal='Resting and recovering';
  }else{
-  const target=locations[targets[action]];
-  result=!!target&&(npc.action===action&&npc.path.length>0?true:moveTo(npc,target));
-  if(result)npc.socialTarget=null;
-  if(result)npc.goal=action==='work'?'Working at '+npc.work:
-    action==='cafe'?'Visiting the café':action==='square'?'Visiting the square':
-    action==='home'?'Going home':'Resting at home';
+  const target=candidate.target;
+  if(target&&manhattan(npc,target)>1&&
+     (action==='share_food'||action==='socialize'
+       ?!approach(npc,target):!moveTo(npc,target))){
+    record(npc.name+': could not reach chosen action','warning');
+    return false;
+  }
+  npc.action=action;npc.source=source;npc.scores=scores;
+  npc.task={key:action,ref:candidate.ref||null};
+  npc.goal=action.replaceAll('_',' ')+' (self-chosen)';
+  if(!npc.path.length)completeActivity(npc);
  }
- if(!result){record(npc.name+': action not reachable; world rejected it','warning');return;}
- npc.action=action;npc.source=source;npc.scores=scores;
  const score=scores&&Number.isFinite(scores[action])?' ('+Math.round(scores[action]*100)+'%)':'';
- record(npc.name+' → '+action.replace('_',' ') +score+' ['+source+']',source==='rein'?'ai':'routine');
- if(source==='rein')remember(npc,'Chose '+action+' while '+sceneFor(npc).slice(0,80));
+ record(npc.name+' chose '+action.replaceAll('_',' ')+score+' ['+source+']',
+  source==='rein'?'ai':'routine');
+ if(source==='rein')remember(npc,'Chose '+action+' based on current needs and local opportunities');
  updateInspector();
+ return true;
 }
+
 async function jsonPost(path,body){
  const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
  const data=await response.json();
@@ -193,7 +214,7 @@ async function deliberate(npc){
   if(state.connected){
    const data=await jsonPost('/api/decide',{
     persona:npc.personality,scene:sceneFor(npc),
-    history:[],question:'Which available action is most appropriate for this resident’s current needs and circumstances?',options
+    history:[],question:'What do you choose to do next for your own reasons, with your current needs, possessions, nearby people and resources?',options
    });
    if(!state.paused&&!state.conversationBusy&&options.some(o=>o.key===data.action)){
     setAction(npc,data.action,'rein',data.scores);
@@ -212,7 +233,7 @@ async function deliberate(npc){
    void checkModel();
   }
  }finally{
-  npc.thoughtAt=state.clock+(state.connected?55:60);
+  npc.thoughtAt=state.clock+(state.connected?32:30);
   state.lastDecisionMs=performance.now();
   state.backgroundBusy=false;
  }
@@ -248,9 +269,11 @@ async function sendMessage(event){
  const message=input.value.trim();
  if(!npc||!message||state.conversationBusy)return;
  if(manhattan(state.player,npc)>4){$('chatHint').textContent='Move within 4 tiles to talk to '+npc.name+'.';return;}
- // Persist the target identity. UI selection may change while inference runs.
+ // Pause the previous plan rather than silently abandoning a gathering journey.
+ // Selection may change while the shared model is generating a reply.
+ const interrupted={task:npc.task,path:npc.path.slice(),action:npc.action,goal:npc.goal};
  input.value='';
- npc.path=[];npc.travel=0;
+ npc.path=[];npc.travel=0;npc.task=null;
  const prior=npc.chat.slice(-8).filter(item=>item.role!=='system')
   .map(({role,content})=>({role:role==='player'?'user':'assistant',content}));
  addConversation(npc,'player',message,'pending');
@@ -293,8 +316,8 @@ async function sendMessage(event){
   record(npc.name+' response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+
    ' ['+source+']'+(source==='rein'?' '+durationMs+'ms':''),source==='rein'?'ai':'social');
   if(action==='avoid'){
-   npc.socialTarget=null;
-   moveTo(npc,locations[npc.home]);
+   npc.task=null;
+   moveTo(npc,locations.square);
   }
   npc.mood=clamp(npc.mood+(action==='warm'?2:action==='refuse'?-2:0));
  }catch(error){
@@ -306,6 +329,16 @@ async function sendMessage(event){
   input.value=message;
   void checkModel();
  }finally{
+  if(interrupted.action==='rest'&&npc.action!=='avoid'){
+   npc.action='rest';npc.goal=interrupted.goal;
+  }
+  if(interrupted.task&&npc.action!=='avoid'){
+   npc.task=interrupted.task;
+   npc.path=interrupted.path;
+   npc.travel=0;
+   npc.action=interrupted.action;
+   npc.goal=interrupted.goal;
+  }
   state.conversationBusy=false;$('sendBtn').disabled=false;
   $('chatHint').textContent='Interactions are prioritized over background decisions.';
   state.lastDecisionMs=performance.now();
@@ -364,6 +397,7 @@ function drawWorld(){
  ctx.scale(state.zoom,state.zoom);
  ctx.translate(-state.camera.x,-state.camera.y);
  ctx.drawImage(staticCanvas,0,0);
+ VillageArt.drawWorldObjects(ctx,state.world);
  const actors=state.npcs.map(n=>({actor:n,player:false}));
  actors.push({actor:state.player,player:true});
  actors.sort((a,b)=>position(a.actor).y-position(b.actor).y);
@@ -397,12 +431,19 @@ function renderResidents(){
 function updateInspector(){
  const npc=selectedNpc();if(!npc)return;
  $('npcPortrait').textContent=npc.name[0];$('npcPortrait').style.background=npc.color+'44';
- $('npcName').textContent=npc.name;$('npcMeta').textContent=npc.role+' · '+npc.personality.split('.')[1]?.trim();
+ $('npcName').textContent=npc.name;
+ $('npcMeta').textContent=AgentWorld.focus(npc);
  for(const [prefix,value] of [['mood',npc.mood],['energy',npc.energy],['trust',npc.trust]]){
   $(prefix+'Val').textContent=Math.round(value)+'/100';
   $(prefix+'Meter').style.width=clamp(value)+'%';
  }
  $('npcGoal').textContent=npc.goal;
+ $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
+ $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
+ $('inventoryVal').textContent='Food '+npc.inventory.food+' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone;
+ $('experienceVal').textContent=Object.entries(npc.skills).filter(([,v])=>v>0)
+   .map(([k,v])=>k+' '+v).join(' · ')||'None yet';
+ $('socialVal').textContent=Math.round(npc.needs.social)+'/100';
  $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
  $('talkDistance').textContent=manhattan(state.player,npc)+' tiles away';
  const scores=$('npcDecisions');scores.replaceChildren();
@@ -438,14 +479,19 @@ function renderChat(){
 }
 function save(){
  try{
-  const pack={clock:state.clock,day:state.day,player:{x:state.player.x,y:state.player.y},npcs:state.npcs.map(n=>({
-   id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
-   source:n.source,action:n.action,scores:n.scores,facing:n.facing,memories:n.memories,
-   chat:n.chat.filter(item=>item.source!=='pending'),relationships:n.relationships,
-   path:n.path,socialTarget:n.socialTarget||null
-  }))};
+  const pack={clock:state.clock,day:state.day,
+   player:{x:state.player.x,y:state.player.y},
+   world:state.world,
+   npcs:state.npcs.map(n=>({
+    id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
+    source:n.source,action:n.action,scores:n.scores,facing:n.facing,
+    memories:n.memories,chat:n.chat.filter(item=>item.source!=='pending'),
+    relationships:n.relationships,path:n.path,needs:n.needs,inventory:n.inventory,
+    skills:n.skills,visited:n.visited,task:n.task
+   }))
+  };
   localStorage.setItem(STORE,JSON.stringify(pack));
- }catch{ /* Private mode / storage denied: keep playing without persistence. */ }
+ }catch{ /* Storage disabled or quota exceeded; the live simulation continues. */ }
 }
 function validSavedPath(path, start){
  if(!Array.isArray(path)||path.length>W*H)return false;
@@ -462,6 +508,7 @@ function restore(){
   const data=JSON.parse(localStorage.getItem(STORE)||'null');if(!data)return;
   if(Number.isFinite(data.clock)&&data.clock>=0)state.clock=data.clock;
   if(Number.isFinite(data.day))state.day=clamp(data.day,1,9999);
+  AgentWorld.restoreWorld(state.world,data.world);
   if(data.player&&!isBlocked(data.player.x,data.player.y)){
    state.player.x=Math.round(data.player.x);state.player.y=Math.round(data.player.y);
   }
@@ -469,18 +516,33 @@ function restore(){
    const prev=data.npcs?.find(n=>n.id===npc.id);if(!prev)continue;
    if(!isBlocked(prev.x,prev.y)){npc.x=prev.x;npc.y=prev.y;}
    for(const k of ['mood','energy','trust'])if(Number.isFinite(prev[k]))npc[k]=clamp(prev[k]);
-   for(const k of ['goal','source','action'])if(typeof prev[k]==='string')npc[k]=prev[k].slice(0,130);
+   if(typeof prev.goal==='string')npc.goal=prev.goal.slice(0,130);
+   if(AgentWorld.KEYS.includes(prev.action))npc.action=prev.action;
+   else {npc.action='none';npc.goal='Learning about this place';}
+   if(typeof prev.source==='string')npc.source=prev.source.slice(0,40);
    if(['up','down','left','right'].includes(prev.facing))npc.facing=prev.facing;
    if(prev.scores&&typeof prev.scores==='object')npc.scores=prev.scores;
    if(Array.isArray(prev.memories))npc.memories=prev.memories.slice(-16);
-   if(Array.isArray(prev.chat))npc.chat=prev.chat.slice(-22);
+   if(Array.isArray(prev.chat))npc.chat=prev.chat.filter(item=>item.source!=='pending').slice(-22);
    if(prev.relationships&&typeof prev.relationships==='object')npc.relationships=prev.relationships;
    if(validSavedPath(prev.path,npc))npc.path=prev.path.map(tile=>({x:tile.x,y:tile.y}));
-   if(typeof prev.socialTarget==='string'&&state.npcs.some(other=>other.id===prev.socialTarget))
-    npc.socialTarget=prev.socialTarget;
-   npc.thoughtAt=state.clock+10+state.npcs.indexOf(npc)*3;
+   for(const key of ['hunger','social','curiosity'])
+    if(Number.isFinite(prev.needs?.[key]))npc.needs[key]=clamp(prev.needs[key]);
+   for(const key of ['food','wood','stone'])
+    if(Number.isInteger(prev.inventory?.[key])&&prev.inventory[key]>=0)
+     npc.inventory[key]=Math.min(prev.inventory[key],1000);
+   for(const key of Object.keys(npc.skills))
+    if(Number.isInteger(prev.skills?.[key])&&prev.skills[key]>=0)
+     npc.skills[key]=Math.min(prev.skills[key],100000);
+   if(Array.isArray(prev.visited))npc.visited=prev.visited.filter(x=>typeof x==='string').slice(-32);
+   // Old job-based save files have no task. Do not resurrect their scripted routes.
+   if(prev.task&&AgentWorld.KEYS.includes(prev.task.key)&&
+       (prev.task.ref===null||typeof prev.task.ref==='string'))
+    npc.task={key:prev.task.key,ref:prev.task.ref};
+   else if(!data.world){npc.path=[];npc.action='none';}
+   npc.thoughtAt=state.clock+4+state.npcs.indexOf(npc)*3;
   }
- }catch{ /* Ignore stale or corrupt browser state. */ }
+ }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
 }
 const heldKeys=new Set();
 function step(dt){
@@ -491,40 +553,27 @@ function step(dt){
    a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]}[key];
   if(delta)moveTo(state.player,{x:state.player.x+delta[0],y:state.player.y+delta[1]});
  }
+ const elapsed=dt*state.speed;
  const beforeDay=Math.floor(state.clock/1440);
- state.clock+=dt*state.speed;
+ state.clock+=elapsed;
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
  updateMovement(state.player,dt,5.2);
+ AgentWorld.regenerate(state.world,elapsed);
  for(const npc of state.npcs){
   updateMovement(npc,dt,2.0);
-  npc.energy=clamp(npc.energy-dt*state.speed*0.04);
-  if(npc.action==='rest'&&manhattan(npc,locations[npc.home])<=1)
-   npc.energy=clamp(npc.energy+dt*state.speed*0.36);
-  if(npc.socialTarget&&!npc.path.length){
-   const other=state.npcs.find(n=>n.id===npc.socialTarget);
-   npc.socialTarget=null;
-   if(other&&manhattan(npc,other)<=2){
-    npc.relationships[other.id]=clamp((npc.relationships[other.id]??50)+1);
-    other.relationships[npc.id]=clamp((other.relationships[npc.id]??50)+1);
-    remember(npc,'Met '+other.name+' after seeking them out');
-    record(npc.name+' met '+other.name+' [simulation event]','social');
-   }
+  const recovered=AgentWorld.stepNeeds(npc,state.world,elapsed);
+  if(recovered){
+   remember(npc,'Recovered energy after resting');
+   npc.thoughtAt=state.clock+2;
   }
+  if(npc.task&&!npc.path.length)completeActivity(npc);
  }
- if(state.clock-state.lastSocial>16){
-  state.lastSocial=state.clock;
-  for(let i=0;i<state.npcs.length;i++)for(let j=i+1;j<state.npcs.length;j++){
-   const a=state.npcs[i],b=state.npcs[j];
-   if(manhattan(a,b)<=2&&rand(i+Math.floor(state.clock/16),j)>.54){
-    a.relationships[b.id]=clamp((a.relationships[b.id]??50)+1);
-    b.relationships[a.id]=clamp((b.relationships[a.id]??50)+1);
-    remember(a,'Briefly encountered '+b.name+' near '+a.goal.toLowerCase());
-    record(a.name+' and '+b.name+' crossed paths [simulation event]','social');
-   }
-  }
- }
- if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
-  const due=state.npcs.filter(n=>state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
+ // No automatic relationship gain from simply standing nearby.
+ // Characters must choose to socialize, share or help to affect each other.
+ if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&
+    performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
+  const due=state.npcs.filter(n=>!n.task&&n.action!=='rest'&&state.clock>=n.thoughtAt)
+    .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
  }
 }
