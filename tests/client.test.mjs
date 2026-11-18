@@ -240,3 +240,15 @@ test('a player conversation pauses and resumes an NPC resource plan',async()=>{
  assert.equal(npc.goal,'Collecting wood');
  assert.equal(npc.chat.at(-1).role,'npc');
 });
+
+test('repeated practice makes a gathering specialist measurably better',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs.find(n=>n.id==='asha');
+ const node=browser.state.world.nodes.find(n=>n.id==='tree_3');
+ npc.x=node.x;npc.y=node.y;
+ npc.skills.gathering=3;
+ const before=node.stock;
+ assert.equal(browser.setAction(npc,'collect_wood','rein',null),true);
+ assert.equal(npc.inventory.wood,3,'Learned gathering must yield more than base two units');
+ assert.equal(node.stock,before-3,'Extra yield must still deplete the shared resource');
+});
