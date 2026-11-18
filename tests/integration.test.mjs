@@ -94,6 +94,14 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
   assert.match(await html.text(), /Hearthbrook Village/);
+  const renderer = await fetch(origin + '/pixel-art.js');
+  assert.equal(renderer.status, 200);
+  const rendererSource = await renderer.text();
+  assert.match(rendererSource, /root\.VillageArt=/);
+  const htmlSource = await (await fetch(origin + '/')).text();
+  assert.ok(htmlSource.indexOf('/pixel-art.js') < htmlSource.indexOf('/app.js'),
+    'The art renderer must load before app.js');
+
   const js = await fetch(origin + '/app.js');
   assert.equal(js.status, 200);
   assert.match(await js.text(), /function pathfind/);

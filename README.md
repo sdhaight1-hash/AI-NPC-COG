@@ -22,6 +22,20 @@ If llama-server.exe reports out-of-memory on an RTX 2060 6GB, close other GPU ap
 
 **Troubleshooting:** If Windows blocks the download, verify the archive is from the official [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/releases) project. If the model server immediately exits with a CUDA DLL error, check that your NVIDIA graphics driver supports CUDA 12.4. Inspect the model server console for exact errors; the village UI will label offline fallback routines whenever Rein is not connected.
 
+## Graphics — pixel-art village
+
+Hearthbrook now uses an **original 16×16 pixel-art rendering layer** inspired by classic top-down RPG tilesets, including [Anokolisa's Pixel Crawler free pack](https://anokolisa.itch.io/free-pixel-art-asset-pack-topdown-tileset-rpg-16x16-sprites).
+
+- Hand-authored procedural pixel tiles for grass, stone and dirt roads, flowerbeds, water, shrubs, trees, fences, lamps, well and market props.
+- Six visually distinct NPC sprites plus the player, with four facing directions and two walking frames.
+- Buildings differentiated by roofing, windows, signs, doors, awnings, and other decorations.
+- A **nearest-neighbor/pixel-perfect Canvas renderer** at a 640×416 logical resolution, with 1×/2×/3× camera zoom. The camera follows the player when zoomed in. The original 40×26 grid, pathfinding, interaction ranges, and save-state format are preserved.
+- Static scenery remains cached for performance; only the characters and view are composited while moving. No heavy graphic library, new GPU model, or image download is required.
+
+**Licensing:** This repo does **not** include Anokolisa's artwork. The linked pack is a visual reference, not a dependency, and all art in `public/pixel-art.js` is newly authored for this project. If you want the exact Pixel Crawler sprites later, obtain the pack from its creator and check the included terms before distributing them with a public repository.
+
+**Camera:** Click `−` or `+` beside Camera, or use the minus/plus keys when the chat field isn't focused. 1× shows the complete village; 2× and 3× zoom follow the player. Click-to-move and NPC selection continue to work at all zoom levels.
+
 ## Controls
 
 - Click a villager to inspect their mood, goal, memories and relationships.

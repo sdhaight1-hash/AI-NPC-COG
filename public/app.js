@@ -3,7 +3,7 @@
 // Browser-only world simulation. Rein inference lives in the separate local Node bridge.
 const canvas = document.getElementById('world');
 const ctx = canvas.getContext('2d');
-const TILE = 28;
+const TILE = VillageArt.TILE;
 const W = 40, H = 26;
 const STORE = 'ai-npc-cog-v1';
 
@@ -32,7 +32,8 @@ const initialNPCs = [
   memories:[], chat:[], relationships:{}, path:[], travel:0, thoughtAt:8*60+10+i*7, lastSeen:0}));
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
-  auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0, player:{x:21,y:12,path:[],travel:0},
+  auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0,
+  zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
   npcs:initialNPCs, events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
@@ -81,7 +82,12 @@ function remember(npc,entry){
 function moveTo(actor,target){
  const path=pathfind(actor,target);
  if(path.length===0 && manhattan(actor,target)>0) return false;
- actor.path=path;actor.travel=0;return true;
+ actor.path=path;actor.travel=0;
+ if(path.length){
+  const next=path[0],dx=next.x-actor.x,dy=next.y-actor.y;
+  actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+ }
+ return true;
 }
 function approach(actor,target){
  let best=null,dist=Infinity;
@@ -313,6 +319,8 @@ function updateMovement(actor,dt,tilesPerSec){
  while(actor.travel>=1&&actor.path.length){
   const next=actor.path.shift();
   if(isBlocked(next.x,next.y)){actor.path=[];break;}
+  const dx=next.x-actor.x,dy=next.y-actor.y;
+  actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
   actor.x=next.x;actor.y=next.y;actor.travel-=1;
  }
  if(!actor.path.length)actor.travel=0;
@@ -325,78 +333,46 @@ function position(actor){
  return {x:actor.x,y:actor.y};
 }
 const staticCanvas=document.createElement('canvas');
-staticCanvas.width=canvas.width;staticCanvas.height=canvas.height;
+staticCanvas.width=W*TILE;staticCanvas.height=H*TILE;
 const staticContext=staticCanvas.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+staticContext.imageSmoothingEnabled=false;
 function drawStaticWorld(){
- const ctx=staticContext;
- const t=TILE;
- ctx.fillStyle='#506b57';ctx.fillRect(0,0,canvas.width,canvas.height);
- for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-  const r=rand(x,y);
-  let color=r>.81?'#56735f':r>.43?'#526f5b':'#4c6956';
-  const road=(y>=11&&y<=13)||(y>=22&&y<=23)||
-    ((x===7||x===19||x===33)&&y>=7&&y<=23);
-  if(road)color=r>.5?'#a69c82':'#aaa18a';
-  ctx.fillStyle=color;ctx.fillRect(x*t,y*t,t,t);
-  if(!road&&r>.96){ctx.fillStyle='#d4bb84';ctx.fillRect(x*t+8,y*t+12,3,3);}
- }
- // Pond and shoreline.
- ctx.fillStyle='#7c997a';ctx.beginPath();ctx.ellipse(38*t+11,21*t+12,69,72,0,0,Math.PI*2);ctx.fill();
- ctx.fillStyle='#406d84';ctx.beginPath();ctx.ellipse(38*t+11,21*t+12,56,58,0,0,Math.PI*2);ctx.fill();
- ctx.strokeStyle='#8cb7bb';ctx.lineWidth=2;
- for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(39*t,21*t+12,i*14+6,0.3,1.9);ctx.stroke();}
- // Trees and low vegetation.
- for(const [x,y] of trees){
-  ctx.fillStyle='#253f35';ctx.beginPath();ctx.ellipse(x*t+15,y*t+19,12,8,0,0,7);ctx.fill();
-  ctx.fillStyle='#274f3f';ctx.beginPath();ctx.arc(x*t+14,y*t+9,12,0,7);ctx.fill();
-  ctx.fillStyle='#3b7557';ctx.beginPath();ctx.arc(x*t+9,y*t+6,9,0,7);ctx.fill();
-  ctx.fillStyle='#568468';ctx.beginPath();ctx.arc(x*t+17,y*t+5,7,0,7);ctx.fill();
- }
- // Village fountain and benches.
- ctx.fillStyle='#70848a';ctx.fillRect(25*t+9,11*t+13,36,36);
- ctx.fillStyle='#9fc9d1';ctx.beginPath();ctx.arc(26*t+13,12*t+2,12,0,7);ctx.fill();
- ctx.fillStyle='#d3e9e7';ctx.beginPath();ctx.arc(26*t+13,12*t+2,4,0,7);ctx.fill();
- for(const p of [[10,12],[27,14],[15,14]]){
-  ctx.fillStyle='#634e40';ctx.fillRect(p[0]*t+2,p[1]*t+11,21,7);
-  ctx.fillStyle='#b49c79';ctx.fillRect(p[0]*t+3,p[1]*t+8,20,4);
- }
- // Buildings, windows and doors.
- for(const b of buildings){
-  const X=b.x*t,Y=b.y*t,BW=b.w*t,BH=b.h*t;
-  ctx.fillStyle='#233d37';ctx.fillRect(X+7,Y+9,BW+7,BH+6);
-  ctx.fillStyle='#d0c0a2';ctx.fillRect(X+4,Y+4,BW-8,BH-5);
-  ctx.fillStyle=b.roof;ctx.fillRect(X-3,Y-4,BW+6,BH-23);
-  ctx.fillStyle='#ffffff12';ctx.fillRect(X+2,Y+1,BW-4,6);
-  ctx.strokeStyle='#2b3f46';ctx.lineWidth=2;ctx.strokeRect(X-3,Y-4,BW+6,BH-23);
-  ctx.fillStyle='#c4d9d3';
-  for(const j of [1,2,3])if(j*t < BW-22)ctx.fillRect(X+j*t-6,Y+BH-27,15,13);
-  ctx.fillStyle='#4e433a';ctx.fillRect(b.door.x*t+6,Y+BH-20,17,20);
-  ctx.fillStyle='#e9c682';ctx.beginPath();ctx.arc(b.door.x*t+19,Y+BH-10,2,0,7);ctx.fill();
-  ctx.textAlign='center';ctx.font='bold 12px system-ui';ctx.lineWidth=4;
-  ctx.strokeStyle='#18272acc';ctx.strokeText(b.name,X+BW/2,Y+17);
-  ctx.fillStyle='#fff1d4';ctx.fillText(b.name,X+BW/2,Y+17);
- }
+ VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees);
+}
+function updateCamera(){
+ const zoom=state.zoom;
+ const viewW=canvas.width/zoom,viewH=canvas.height/zoom;
+ const p=position(state.player);
+ state.camera.x=clamp(Math.round((p.x+.5)*TILE-viewW/2),0,W*TILE-viewW);
+ state.camera.y=clamp(Math.round((p.y+.5)*TILE-viewH/2),0,H*TILE-viewH);
+}
+function clientToTile(clientX,clientY,rect){
+ const sx=(clientX-rect.left)*canvas.width/rect.width;
+ const sy=(clientY-rect.top)*canvas.height/rect.height;
+ return {
+  x:Math.floor((state.camera.x+sx/state.zoom)/TILE),
+  y:Math.floor((state.camera.y+sy/state.zoom)/TILE)
+ };
 }
 function drawWorld(){
+ updateCamera();
+ ctx.imageSmoothingEnabled=false;
+ ctx.fillStyle='#233e30';
+ ctx.fillRect(0,0,canvas.width,canvas.height);
+ ctx.save();
+ ctx.scale(state.zoom,state.zoom);
+ ctx.translate(-state.camera.x,-state.camera.y);
  ctx.drawImage(staticCanvas,0,0);
- for(const npc of state.npcs)drawPerson(npc,false);
- drawPerson(state.player,true);
-}
-function drawPerson(person,isPlayer){
- const p=position(person),X=(p.x+.5)*TILE,Y=(p.y+.55)*TILE;
- const color=isPlayer?'#71b5ec':person.color;
- ctx.fillStyle='#15262188';ctx.beginPath();ctx.ellipse(X,Y+12,11,5,0,0,7);ctx.fill();
- if(!isPlayer&&state.selected===person.id){
-  ctx.strokeStyle='#f9d48b';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(X,Y+6,17,14,0,0,7);ctx.stroke();
+ const actors=state.npcs.map(n=>({actor:n,player:false}));
+ actors.push({actor:state.player,player:true});
+ actors.sort((a,b)=>position(a.actor).y-position(b.actor).y);
+ const now=performance.now();
+ for(const item of actors){
+  VillageArt.drawActor(ctx,item.actor,item.player,position(item.actor),
+   !item.player&&state.selected===item.actor.id,now);
  }
- ctx.fillStyle=color;ctx.beginPath();ctx.roundRect(X-9,Y-3,18,18,5);ctx.fill();
- ctx.fillStyle=isPlayer?'#e1d0aa':'#e6bf9d';ctx.beginPath();ctx.arc(X,Y-9,9,0,7);ctx.fill();
- ctx.fillStyle=isPlayer?'#314b6e':'#584b42';ctx.beginPath();ctx.arc(X,Y-13,8,Math.PI,2*Math.PI);ctx.fill();
- ctx.fillStyle='#293140';ctx.fillRect(X-4,Y-8,2,2);ctx.fillRect(X+3,Y-8,2,2);
- const name=isPlayer?'YOU':person.name;
- ctx.font='bold 10px system-ui';const bw=ctx.measureText(name).width+13;
- ctx.fillStyle='#182330ee';ctx.beginPath();ctx.roundRect(X-bw/2,Y-36,bw,16,5);ctx.fill();
- ctx.textAlign='center';ctx.fillStyle=isPlayer?'#b6e4ff':'#f5eada';ctx.fillText(name,X,Y-25);
+ ctx.restore();
 }
 function renderEvents(){
  const area=$('eventLog');area.replaceChildren();
@@ -464,7 +440,7 @@ function save(){
  try{
   const pack={clock:state.clock,day:state.day,player:{x:state.player.x,y:state.player.y},npcs:state.npcs.map(n=>({
    id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
-   source:n.source,action:n.action,scores:n.scores,memories:n.memories,
+   source:n.source,action:n.action,scores:n.scores,facing:n.facing,memories:n.memories,
    chat:n.chat.filter(item=>item.source!=='pending'),relationships:n.relationships,
    path:n.path,socialTarget:n.socialTarget||null
   }))};
@@ -494,6 +470,7 @@ function restore(){
    if(!isBlocked(prev.x,prev.y)){npc.x=prev.x;npc.y=prev.y;}
    for(const k of ['mood','energy','trust'])if(Number.isFinite(prev[k]))npc[k]=clamp(prev[k]);
    for(const k of ['goal','source','action'])if(typeof prev[k]==='string')npc[k]=prev[k].slice(0,130);
+   if(['up','down','left','right'].includes(prev.facing))npc.facing=prev.facing;
    if(prev.scores&&typeof prev.scores==='object')npc.scores=prev.scores;
    if(Array.isArray(prev.memories))npc.memories=prev.memories.slice(-16);
    if(Array.isArray(prev.chat))npc.chat=prev.chat.slice(-22);
@@ -574,8 +551,7 @@ function animate(now){
 }
 canvas.addEventListener('click',event=>{
  const rect=canvas.getBoundingClientRect();
- const tile={x:Math.floor((event.clientX-rect.left)*canvas.width/rect.width/TILE),
-             y:Math.floor((event.clientY-rect.top)*canvas.height/rect.height/TILE)};
+ const tile=clientToTile(event.clientX,event.clientY,rect);
  const npc=state.npcs.find(n=>manhattan(position(n),tile)<=1);
  if(npc){selectNpc(npc.id);return;}
  if(!isBlocked(tile.x,tile.y)){
@@ -586,6 +562,8 @@ window.addEventListener('keydown',event=>{
  const active=document.activeElement?.tagName;
  if(active==='INPUT'||active==='TEXTAREA')return;
  const key=event.key.toLowerCase();
+ if(key==='+'||key==='='){event.preventDefault();setZoom(state.zoom+1);return;}
+ if(key==='-'||key==='_'){event.preventDefault();setZoom(state.zoom-1);return;}
  if(key==='e'){
   const npc=selectedNpc();if(npc&&manhattan(state.player,npc)<=4)$('messageInput').focus();
   return;
@@ -598,6 +576,13 @@ window.addEventListener('keyup',event=>heldKeys.delete(event.key.toLowerCase()))
 window.addEventListener('blur',()=>heldKeys.clear());
 window.addEventListener('pagehide',save);
 
+function setZoom(next){
+ state.zoom=clamp(next,1,3);
+ $('zoomLevel').textContent=state.zoom+'×';
+ updateCamera();
+}
+$('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
+$('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
 $('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
 $('autoAI').addEventListener('change',event=>{state.auto=event.target.checked;record('Autonomous decisions '+(state.auto?'enabled':'disabled'));});
 for(const btn of document.querySelectorAll('[data-speed]')){
