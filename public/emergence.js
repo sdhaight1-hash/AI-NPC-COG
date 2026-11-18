@@ -135,9 +135,12 @@
         other.needs.social=clamp(other.needs.social-16);
         message='Spent time with '+other.name;
       }
-      n.relationships[other.id]=clamp((n.relationships[other.id]??50)+2);
-      other.relationships[n.id]=clamp((other.relationships[n.id]??50)+2);
-      if(task.key==='socialize'){
+      // Talk alone is not proof of friendship. Cooperative material acts
+      // earn trust; dialogue changes needs and memory, not automatic affection.
+      if(task.key==='share_food'){
+        n.relationships[other.id]=clamp((n.relationships[other.id]??50)+2);
+        other.relationships[n.id]=clamp((other.relationships[n.id]??50)+2);
+      }else{
         n.lastPeerAt=world.now;
         other.lastPeerAt=world.now;
       }
