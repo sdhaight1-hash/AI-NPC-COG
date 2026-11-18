@@ -443,3 +443,43 @@ test('in-flight peer responses do not mutate world state after player preemption
  assert.equal(b.peerPending,false);
  assert.equal(browser.state.backgroundBusy,false);
 });
+
+test('a multi-step intention rests when tired and does not spam repeated decisions',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const npc=browser.state.npcs[0];
+ assert.equal(browser.setAction(npc,'make_campfire','rein',null),true);
+ npc.energy=9;
+ browser.advancePlan(npc);
+ assert.equal(npc.action,'rest');
+ assert.equal(npc.plan.key,'make_campfire');
+ browser.advancePlan(npc);
+ assert.equal(npc.action,'rest');
+ assert.equal(npc.plan.steps,0);
+ npc.energy=91;
+ browser.step(.1);
+ assert.equal(npc.plan.key,'make_campfire','The intention survives a rest period');
+ assert.ok(npc.action==='collect_wood'||npc.action==='none');
+});
+
+test('a peer conversation cannot commit if the other resident walks away',async()=>{
+ let finish;
+ const waiting=new Promise(resolve=>{finish=resolve;});
+ const browser=makeBrowser({fetch:async(path)=>
+   path==='/api/peer-exchange'?waiting:
+     {ok:true,json:async()=>({connected:true})}
+ });
+ browser.state.connected=true;browser.state.auto=false;
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ assert.equal(browser.setAction(a,'socialize','rein',null),true);
+ const pending=browser.peerExchange(a,b);
+ b.x=2;b.y=2;
+ finish({ok:true,json:async()=>({first:'Hello.',second:'Hello back.',durationMs:100})});
+ await pending;
+ assert.equal(a.peerLog.length,0);
+ assert.equal(b.peerLog.length,0);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(a.task.key,'socialize','A stale exchange cannot complete the task');
+ assert.equal(a.peerPending,false);
+});
