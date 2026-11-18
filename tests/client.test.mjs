@@ -56,8 +56,8 @@ function makeBrowser() {
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   vm.runInNewContext(art+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity};',context);
-  return { ...context.__expose, counters, events, saved };
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage};',context);
+  return { ...context.__expose, counters, events, saved, elements };
 }
 
 test('cached static map is painted once, while dynamic frames reuse it',()=>{
@@ -218,4 +218,25 @@ test('earned skills only reflect completed actions, never their starting persona
  assert.equal(forest.stock,stock-2);
  assert.equal(npc.skills.gathering,1);
  assert.equal(npc.skills.building,0);
+});
+
+test('a player conversation pauses and resumes an NPC resource plan',async()=>{
+ const browser=makeBrowser();
+ browser.state.connected=false;
+ const npc=browser.state.npcs.find(n=>n.id==='asha');
+ const target=browser.state.world.nodes.find(n=>n.id==='tree_3');
+ const path=browser.pathfind(npc,target);
+ assert.ok(path.length>0);
+ npc.path=path;
+ npc.task={key:'collect_wood',ref:target.id};
+ npc.action='collect_wood';
+ npc.goal='Collecting wood';
+ browser.state.player.x=npc.x;browser.state.player.y=npc.y;
+ browser.state.selected=npc.id;
+ browser.elements.get('messageInput').value='Hello there';
+ await browser.sendMessage({preventDefault(){}});
+ assert.equal(npc.task.key,'collect_wood','Conversation must not erase active plans');
+ assert.equal(npc.path.length,path.length);
+ assert.equal(npc.goal,'Collecting wood');
+ assert.equal(npc.chat.at(-1).role,'npc');
 });
