@@ -48,12 +48,11 @@ Hearthbrook is a compact **2D autonomy experiment**, inspired by the world-first
 4. Successful actions improve earned skills; practiced gatherers eventually collect more per trip while still depleting finite sources. The inspector describes the most common observed behavior only after it has happened multiple times; this is not a permanent class or job assignment. Memories preserve the consequences.
 5. Idle inhabitants take turns using the **same model server**, while player conversation preempts background decisions. Offline fallback is marked as deterministic survival behavior, **not AI-driven emergence**.
 
-The existing buildings are starting scenery and communal places, not employers or assigned homes. This is a **first testable slice**, not full VoxelMind feature parity. There are no farms, governments, advanced crafts, independently generated multi-step plans, or LLM-generated inhabitant-to-inhabitant dialogue yet. NPC-to-NPC interactions currently have deterministic social consequences but no invented scripted quotes. Meaningful civilization development requires extending the world action set and long-term memory.
+The existing buildings are starting scenery and communal places, not employers or assigned homes. This remains a **small emergent-agent testbed**, not VoxelMind feature parity. There are no farms, governments, advanced craft chains, a real economy, reflective memory retrieval, or general-purpose open-ended planning yet. Characters can now sustain two world-grounded intentions and exchange short model-generated dialogue with nearby agents.
 
 **Existing save migration:** Old trust, dialogue and memories are retained if a legacy browser save exists, but obsolete job actions and their routes are discarded. If you want every inhabitant to start without history from the previous job-based prototype, click **Reset** in the simulation. Reset clears local browser state.
 
-## Controls
-
+()=>addition+marker
 - Click a villager to inspect their mood, goal, memories and relationships.
 - Click open ground to move the player; WASD / arrow keys also work.
 - Approach an NPC within four tiles to talk; hit E or use Talk.
@@ -78,7 +77,7 @@ This is a prototype for *behavioral testing*, not a finished persistent-persona 
 The browser runs the **2D simulation continuously**, while the local Node bridge serializes access to `llama-server`. There are two request priorities:
 
 - **Foreground conversation:** `POST /api/interact` combines Rein's trained decision pass and its dialogue pass in a *single priority job*. It includes the player's latest message in both stages, commits NPC mood/trust/memory **only after the complete reply succeeds**, and interrupts an in-flight background inference.
-- **Background activity:** `POST /api/decide` is low priority and **never queues multiple stale requests**. A busy server returns HTTP 429 so the browser can defer the decision rather than falsely declaring the model offline.
+- **Background activity:** `POST /api/decide` and `POST /api/peer-exchange` share the same low-priority lane and **never queue multiple stale requests**. A busy server returns HTTP 429 so the browser can defer the work rather than falsely declaring the model offline.
 
 This is still **one loaded GGUF**, not a separate model instance per resident. Chat and decisions are serialized because `start.bat` uses `--parallel 1` for the 6 GB GPU. Priority cancellation reduces wait time but cannot guarantee instantaneous interruption inside llama.cpp. The model server's actual throughput depends on GPU drivers, VRAM pressure and context.
 
@@ -96,7 +95,7 @@ The app continues with explicitly marked offline routines if the model is not co
 node --test tests/*.test.mjs
 ```
 
-The test suite includes Rein's special-token scoring, HTTP end-to-end dialogue with a fake local model, foreground cancellation and concurrency controls, static scene caching, held-key movement, and stable NPC goals. CI also runs the Windows installer checks. Real-GGUF speed and visual polish still need evaluation on your own hardware.
+The test suite includes Rein's special-token scoring, HTTP end-to-end peer and player dialogue with a fake local model, foreground cancellation, stale-result rejection, bounded multi-step intentions, save validation, static scene caching and held-key movement. CI also runs the Windows installer checks. Real-GGUF speed and visual polish still need evaluation on your own hardware.
 
 ## How to evaluate
 

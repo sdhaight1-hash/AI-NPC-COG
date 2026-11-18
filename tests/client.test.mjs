@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-function makeBrowser() {
+function makeBrowser(options={}) {
   const events = new Map();
-  const saved = new Map();
+  const saved = options.saved || new Map();
   const counters = { staticRects: 0, screenImages: 0 };
   const fakeContext = type => new Proxy({
     measureText: str => ({ width: String(str).length * 8 }),
@@ -50,13 +50,13 @@ function makeBrowser() {
     localStorage:{getItem:key=>saved.get(key)||null,setItem(key,val){saved.set(key,val);},removeItem(key){saved.delete(key);}},
     requestAnimationFrame(){},setInterval(){},
     performance:{now:()=>0},
-    fetch:async()=>({ok:true,json:async()=>({connected:false})})
+    fetch:options.fetch || (async()=>({ok:true,json:async()=>({connected:false})}))
   };
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   vm.runInNewContext(art+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage};',context);
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
 
@@ -251,4 +251,235 @@ test('repeated practice makes a gathering specialist measurably better',()=>{
  assert.equal(browser.setAction(npc,'collect_wood','rein',null),true);
  assert.equal(npc.inventory.wood,3,'Learned gathering must yield more than base two units');
  assert.equal(node.stock,before-3,'Extra yield must still deplete the shared resource');
+});
+
+
+test('Rein always receives at most ten legal action choices, even with planning',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs.find(n=>n.id==='mara');
+ const options=browser.backgroundOptions(npc);
+ assert.ok(options.length<=10);
+ assert.equal(options.at(-1).key,'none');
+ assert.ok(options.some(x=>x.key==='stock_food'));
+ assert.ok(options.some(x=>x.key==='make_campfire'));
+ assert.ok(!options.some(x=>x.key==='work'),'No occupational scheduling');
+});
+
+test('an agent can pursue a self-chosen goal through separate real resource actions',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const npc=browser.state.npcs.find(n=>n.id==='mara');
+ assert.equal(browser.setAction(npc,'make_campfire','rein',{make_campfire:1}),true);
+ assert.equal(npc.plan.key,'make_campfire');
+ assert.equal(npc.plan.steps,0);
+ browser.advancePlan(npc);
+ assert.equal(npc.task.key,'collect_wood');
+ const wood=browser.state.world.nodes.find(node=>node.id===npc.task.ref);
+ npc.x=wood.x;npc.y=wood.y;npc.path=[];npc.travel=0;
+ browser.completeActivity(npc);
+ assert.equal(npc.inventory.wood,2);
+ assert.equal(npc.plan.steps,1);
+ browser.state.clock+=2;
+ browser.advancePlan(npc);
+ assert.equal(npc.task.key,'collect_stone');
+ const stone=browser.state.world.nodes.find(node=>node.id===npc.task.ref);
+ npc.x=stone.x;npc.y=stone.y;npc.path=[];npc.travel=0;
+ browser.completeActivity(npc);
+ assert.equal(npc.inventory.stone,2,'Stone gathering creates actual items');
+ browser.state.clock+=2;
+ browser.advancePlan(npc);
+ assert.equal(npc.plan.key,'make_campfire');
+ assert.equal(browser.state.world.structures.length,1);
+ assert.equal(npc.inventory.wood,0);
+ assert.equal(npc.inventory.stone,1);
+ browser.state.clock+=2;
+ browser.advancePlan(npc);
+ assert.equal(npc.plan,null,'Plan completes when the actual structure exists');
+ assert.ok(npc.memories.some(m=>m.text.includes('Completed')));
+});
+
+test('socializing without Rein never manufactures speech or relationship gains',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ browser.state.connected=false;
+ const a=browser.state.npcs.find(n=>n.id==='mara');
+ const b=browser.state.npcs.find(n=>n.id==='jonas');
+ b.x=a.x+1;b.y=a.y;
+ assert.equal(browser.setAction(a,'socialize','offline routine',null),true);
+ browser.step(0.05);
+ assert.equal(a.peerLog.length,0);
+ assert.equal(b.peerLog.length,0);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(b.relationships[a.id],undefined);
+});
+
+test('a complete model-generated NPC exchange commits to both agents exactly once',async()=>{
+ let calls=0;
+ const browser=makeBrowser({fetch:async(path)=>{
+  if(path==='/api/peer-exchange'){
+   calls++;
+   return {ok:true,json:async()=>({
+    first:'I found berries beside the path.',second:'Thanks, I will look there.',
+    durationMs:110,source:'rein'
+   })};
+  }
+  return {ok:true,json:async()=>({connected:true})};
+ }});
+ browser.state.connected=true;
+ browser.state.auto=false;
+ const a=browser.state.npcs.find(n=>n.id==='mara');
+ const b=browser.state.npcs.find(n=>n.id==='jonas');
+ b.x=a.x+1;b.y=a.y;
+ const before=a.needs.social;
+ assert.equal(browser.setAction(a,'socialize','rein',null),true);
+ await browser.peerExchange(a,b);
+ assert.equal(calls,1,'Exactly one shared-model exchange request');
+ assert.equal(a.peerLog.length,1);
+ assert.equal(b.peerLog.length,1);
+ assert.equal(a.peerLog[0].first,'Mara: I found berries beside the path.');
+ assert.equal(a.peerLog[0].second,'Jonas: Thanks, I will look there.');
+ assert.equal(a.relationships[b.id],undefined,'A conversation does not automatically grant trust');
+ assert.equal(b.relationships[a.id],undefined);
+ assert.ok(a.needs.social<before);
+ assert.equal(a.task,null);
+ browser.save();
+ const saved=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+ assert.equal(saved.npcs.find(n=>n.id==='jonas').peerLog.length,1);
+ assert.equal(saved.npcs.find(n=>n.id==='mara').lastPeerAt,saved.clock);
+});
+
+test('failed dialogue leaves relationships and memories unchanged',async()=>{
+ const browser=makeBrowser({fetch:async(path)=>{
+  if(path==='/api/peer-exchange')return {
+   ok:false,status:502,json:async()=>({error:'model aborted'})
+  };
+  return {ok:true,json:async()=>({connected:true})};
+ }});
+ browser.state.connected=true;browser.state.auto=false;
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ assert.equal(browser.setAction(a,'socialize','rein',null),true);
+ const before=a.needs.social;
+ await browser.peerExchange(a,b);
+ assert.equal(a.peerLog.length,0);
+ assert.equal(b.peerLog.length,0);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(a.needs.social,before);
+ assert.equal(a.task,null);
+});
+
+test('ongoing plans and verified exchanges survive a browser restart',()=>{
+ const before=makeBrowser();
+ const npc=before.state.npcs[0];
+ assert.equal(before.setAction(npc,'make_campfire','rein',null),true);
+ npc.plan.steps=2;
+ npc.peerLog=[{at:'Day 1 08:10',with:'jonas',
+  first:'Mara: I saw the lake.',second:'Jonas: It is quiet there.'}];
+ npc.lastPeerAt=before.state.clock;
+ before.save();
+ const after=makeBrowser({saved:before.saved});
+ const copy=after.state.npcs[0];
+ assert.equal(copy.plan.key,'make_campfire');
+ assert.equal(copy.plan.steps,2);
+ assert.equal(copy.peerLog.length,1);
+ assert.equal(copy.lastPeerAt,before.state.clock);
+ assert.ok(after.backgroundOptions(copy).length<=10);
+});
+
+test('invalid restored goals are rejected without breaking the world',()=>{
+ const before=makeBrowser();
+ before.save();
+ const data=JSON.parse(before.saved.get('ai-npc-cog-v1'));
+ data.npcs[0].plan={key:'become_superuser',steps:-1};
+ data.npcs[0].peerLog=[{with:'anonymous',first:'x',second:'y',at:'today'}];
+ before.saved.set('ai-npc-cog-v1',JSON.stringify(data));
+ const after=makeBrowser({saved:before.saved});
+ assert.equal(after.state.npcs[0].plan,null);
+ assert.equal(after.state.npcs[0].peerLog.length,0);
+});
+
+test('material cooperation changes relationships while social dialogue alone does not',()=>{
+ const browser=makeBrowser();
+ const a=browser.state.npcs.find(n=>n.id==='mara');
+ const b=browser.state.npcs.find(n=>n.id==='jonas');
+ b.x=a.x+1;b.y=a.y;b.needs.hunger=65;
+ assert.equal(browser.setAction(a,'share_food','rein',null),true);
+ assert.equal(a.relationships[b.id],52);
+ assert.equal(b.relationships[a.id],52);
+ assert.equal(a.inventory.food,0);
+ assert.equal(b.inventory.food,2);
+});
+
+test('NPC planning prompt does not reveal another character’s internal hunger level',()=>{
+ const browser=makeBrowser();
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ b.needs.hunger=97;
+ const options=browser.backgroundOptions(a);
+ assert.ok(options.some(x=>x.key==='share_food'),
+   'Agent may offer food voluntarily without privileged knowledge of recipient needs');
+});
+test('in-flight peer responses do not mutate world state after player preemption',async()=>{
+ let finish;
+ const waiting=new Promise(resolve=>{finish=resolve;});
+ const browser=makeBrowser({fetch:async(path)=>
+  path==='/api/peer-exchange'?waiting:
+  {ok:true,json:async()=>({connected:true})}
+ });
+ browser.state.connected=true;browser.state.auto=false;
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ assert.equal(browser.setAction(a,'socialize','rein',null),true);
+ const pending=browser.peerExchange(a,b);
+ assert.equal(browser.state.backgroundBusy,true);
+ browser.state.conversationBusy=true;
+ finish({ok:true,json:async()=>({first:'I found some wood.',second:'That is useful.',durationMs:100})});
+ await pending;
+ assert.equal(a.peerLog.length,0);
+ assert.equal(b.peerLog.length,0);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(a.task.key,'socialize','Uncommitted task remains available for retry');
+ assert.equal(a.peerPending,false);
+ assert.equal(b.peerPending,false);
+ assert.equal(browser.state.backgroundBusy,false);
+});
+
+test('a multi-step intention rests when tired and does not spam repeated decisions',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const npc=browser.state.npcs[0];
+ assert.equal(browser.setAction(npc,'make_campfire','rein',null),true);
+ npc.energy=9;
+ browser.advancePlan(npc);
+ assert.equal(npc.action,'rest');
+ assert.equal(npc.plan.key,'make_campfire');
+ browser.advancePlan(npc);
+ assert.equal(npc.action,'rest');
+ assert.equal(npc.plan.steps,0);
+ npc.energy=91;
+ browser.step(.1);
+ assert.equal(npc.plan.key,'make_campfire','The intention survives a rest period');
+ assert.ok(npc.action==='collect_wood'||npc.action==='none');
+});
+
+test('a peer conversation cannot commit if the other resident walks away',async()=>{
+ let finish;
+ const waiting=new Promise(resolve=>{finish=resolve;});
+ const browser=makeBrowser({fetch:async(path)=>
+   path==='/api/peer-exchange'?waiting:
+     {ok:true,json:async()=>({connected:true})}
+ });
+ browser.state.connected=true;browser.state.auto=false;
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ assert.equal(browser.setAction(a,'socialize','rein',null),true);
+ const pending=browser.peerExchange(a,b);
+ b.x=2;b.y=2;
+ finish({ok:true,json:async()=>({first:'Hello.',second:'Hello back.',durationMs:100})});
+ await pending;
+ assert.equal(a.peerLog.length,0);
+ assert.equal(b.peerLog.length,0);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(a.task.key,'socialize','A stale exchange cannot complete the task');
+ assert.equal(a.peerPending,false);
 });

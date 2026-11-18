@@ -17,7 +17,7 @@
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     share_food:'cooperation',socialize:'socializing',build_fire:'building',explore:'exploring'};
   function newWorld() {
-    return { version:1, nodes:RESOURCE_SEEDS.map(([id,kind,x,y,max])=>({
+    return { version:1, now:0, nodes:RESOURCE_SEEDS.map(([id,kind,x,y,max])=>({
       id,kind,x,y,max,stock:max
     })), structures:[] };
   }
@@ -28,6 +28,9 @@
     n.skills = { foraging:0,gathering:0,cooperation:0,socializing:0,building:0,exploring:0 };
     n.visited = [];
     n.task = null;
+    n.plan = null;
+    n.peerLog = [];
+    n.lastPeerAt = -100000;
     return n;
   }
   function focus(n) {
@@ -73,14 +76,23 @@
     if(n.inventory.food>0&&n.needs.hunger>=10)
       add('eat','Eat one carried food to reduce hunger ('+Math.round(n.needs.hunger)+'/100)');
     if(n.energy<88)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
-    const recipient=nearestResident(n,residents,other=>other.needs?.hunger>=40);
+    const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0)
-      add('share_food','Give one food to nearby hungry '+recipient.name,recipient,recipient.id);
+      add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
     const other=nearestResident(n,residents);
-    if(other)add('socialize','Seek out '+other.name+' to spend time together',other,other.id);
+    if(other && world.now-(n.lastPeerAt ?? -100000)>=45)
+      add('socialize','Seek out '+other.name+' and initiate a real conversation',other,other.id);
     if(n.inventory.wood>=2&&n.inventory.stone>=1&&n.energy>=18&&
        !world.structures.some(site=>site.type==='campfire'&&distance(n,site)<5))
       add('build_fire','Build a shared campfire using 2 wood and 1 stone');
+    if(!n.plan && n.energy>=12 && n.inventory.food<2 &&
+       findNode(n,world,'food',canReach))
+      add('stock_food','Commit to obtaining a small food reserve, gathering what is needed');
+    if(!n.plan && n.energy>=18 &&
+       !world.structures.some(site=>site.type==='campfire'&&distance(n,site)<5) &&
+       (n.inventory.wood>=2||findNode(n,world,'wood',canReach)) &&
+       (n.inventory.stone>=1||findNode(n,world,'stone',canReach)))
+      add('make_campfire','Commit to building a communal campfire, collecting any missing materials');
     const destination=exploreTarget(n,canReach);
     if(destination&&n.energy>=10)
       add('explore','Explore an unfamiliar reachable area ('+distance(n,destination)+' tiles)',destination);
@@ -90,6 +102,9 @@
   function complete(n,world,residents) {
     const task=n.task;
     if(!task)return {ok:false,message:'No task'};
+    // An NPC conversation never earns friendship from proximity alone.
+    if(task.key==='socialize' && task.approved!==true)
+      return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
     if(['forage','collect_wood','collect_stone'].includes(task.key)){
@@ -120,8 +135,15 @@
         other.needs.social=clamp(other.needs.social-16);
         message='Spent time with '+other.name;
       }
-      n.relationships[other.id]=clamp((n.relationships[other.id]??50)+2);
-      other.relationships[n.id]=clamp((other.relationships[n.id]??50)+2);
+      // Talk alone is not proof of friendship. Cooperative material acts
+      // earn trust; dialogue changes needs and memory, not automatic affection.
+      if(task.key==='share_food'){
+        n.relationships[other.id]=clamp((n.relationships[other.id]??50)+2);
+        other.relationships[n.id]=clamp((other.relationships[n.id]??50)+2);
+      }else{
+        n.lastPeerAt=world.now;
+        other.lastPeerAt=world.now;
+      }
     }else if(task.key==='build_fire'){
       if(n.inventory.wood<2||n.inventory.stone<1||n.energy<18||
         world.structures.some(site=>site.type==='campfire'&&distance(n,site)<5))
@@ -137,6 +159,30 @@
     }else return {ok:false,message:'Unknown task'};
     if(skillNames[task.key])n.skills[skillNames[task.key]]=(n.skills[skillNames[task.key]]||0)+1;
     return {ok:true,message};
+  }
+  // Rein selects the intention. World rules execute each prerequisite one step
+  // at a time, without inventing items or requiring more model calls.
+  function nextPlanAction(n,world,residents,canReach){
+    if(!n.plan)return {status:'done'};
+    let key;
+    if(n.plan.key==='stock_food'){
+      if(n.inventory.food>=2)return {status:'done'};
+      key='forage';
+    }else if(n.plan.key==='make_campfire'){
+      if(world.structures.some(site=>site.type==='campfire'&&distance(n,site)<5))
+        return {status:'done'};
+      if(n.inventory.wood<2)key='collect_wood';
+      else if(n.inventory.stone<1)key='collect_stone';
+      else key='build_fire';
+    }else return {status:'blocked',reason:'Unrecognized intention'};
+    if(n.energy<20)key='rest';
+    const option=available(n,world,residents,canReach).find(a=>a.key===key);
+    return option?{status:'action',option}:{status:'blocked',reason:'Required resource or location unavailable'};
+  }
+  function validatePlan(saved){
+    if(!saved || !['stock_food','make_campfire'].includes(saved.key) ||
+       !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>8)return null;
+    return {key:saved.key,steps:saved.steps};
   }
   function stepNeeds(n,world,dt) {
     n.needs.hunger=clamp(n.needs.hunger+dt*.065);
@@ -180,5 +226,5 @@
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<40&&s.y>=0&&s.y<26
     ).slice(0,50).map((v,i)=>({id:'fire_'+(i+1),type:'campfire',x:v.x,y:v.y}));
   }
-  root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,stepNeeds,regenerate,fallback,restoreWorld};
+  root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,nextPlanAction,validatePlan,stepNeeds,regenerate,fallback,restoreWorld};
 })(globalThis);

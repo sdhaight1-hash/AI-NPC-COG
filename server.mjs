@@ -154,7 +154,7 @@ export async function speak(input, signal) {
   messages.push({ role: 'user', content: safeText(input.message, 700) });
   const raw = await callModel('/v1/chat/completions', {
     messages, chat_template_kwargs: { enable_thinking: false },
-    temperature: 0.75, top_p: 0.85, max_tokens: 120,
+    temperature: 0.75, top_p: 0.85, max_tokens: input.short ? 56 : 120,
     logit_bias: { '248058': -100 }
   }, signal, 60000);
   const reply = raw?.choices?.[0]?.message;
@@ -163,6 +163,30 @@ export async function speak(input, signal) {
     .replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\|[^>]+?\|>/g, '').trim().slice(0, 800);
   if (!line) throw new Error('Model did not return dialogue');
   return { reply: line, source: 'rein' };
+}
+
+// A two-turn NPC-to-NPC exchange is one disposable background job. Both
+// utterances must succeed before the client commits either to world memory.
+export async function peerExchange(input, signal) {
+  const a=input?.speaker, b=input?.listener;
+  if(!a || !b || typeof a.name!=='string'||typeof b.name!=='string' ||
+     !a.persona || !b.persona || a.name===b.name)
+    throw Object.assign(new Error('Two different participants with personas are required'),{status:400});
+  const scene=safeText(input.scene,1000);
+  const first=await speak({
+    persona:a.persona,scene,action:'start a voluntary conversation',
+    short:true,history:[],
+    message:'You are speaking to '+safeText(b.name,60)+'. Begin a brief, natural '+
+      'conversation about your present situation, needs, or recent experiences. '+
+      'Speak only as yourself in one sentence.'
+  },signal);
+  const second=await speak({
+    persona:b.persona,scene,action:'respond in character to a nearby resident',
+    short:true,history:[],
+    message:safeText(a.name,60)+' has just said: '+first.reply+
+      '\nReply naturally as yourself, in one sentence. Do not invent world actions.'
+  },signal);
+  return {first:first.reply,second:second.reply,source:'rein'};
 }
 
 const STATIC = {
@@ -201,12 +225,14 @@ export function startServer(port = PORT) {
           endpoint: MODEL_URL.origin, inference: lane.stats()
         });
       }
-      if (req.method === 'POST' && (route === '/api/decide' || route === '/api/speak' || route === '/api/interact')) {
+      if (req.method === 'POST' && (route === '/api/decide' || route === '/api/speak' || route === '/api/interact' || route === '/api/peer-exchange')) {
         const input = await readJson(req);
         const started = performance.now();
         let result;
         if (route === '/api/decide') {
           result = await lane.run('background', signal => decide(input, signal));
+        } else if (route === '/api/peer-exchange') {
+          result = await lane.run('background', signal => peerExchange(input, signal));
         } else if (route === '/api/speak') {
           result = await lane.run('foreground', signal => speak(input, signal));
         } else {

@@ -91,6 +91,35 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   assert.equal(calls[3].payload.messages.at(-1).content, 'Could you help me find the library?');
   assert.match(calls[3].payload.messages[0].content, /helpful/);
 
+  const peers = await fetch(origin + '/api/peer-exchange', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      speaker: { name: 'Mara', persona: 'Mara is a curious wanderer.' },
+      listener: { name: 'Jonas', persona: 'Jonas prefers quiet conversations.' },
+      scene: 'Two residents meet by a berry bush.'
+    })
+  });
+  assert.equal(peers.status,200);
+  const conversation = await peers.json();
+  assert.equal(conversation.first,'Hello, traveler!');
+  assert.equal(conversation.second,'Hello, traveler!');
+  assert.equal(conversation.source,'rein');
+  assert.equal(typeof conversation.durationMs,'number');
+  assert.equal(calls[4].path,'/v1/chat/completions');
+  assert.equal(calls[5].path,'/v1/chat/completions');
+  assert.equal(calls[4].payload.max_tokens,56);
+  assert.equal(calls[5].payload.max_tokens,56);
+  assert.match(calls[4].payload.messages[0].content,/Mara is a curious wanderer/);
+  assert.match(calls[5].payload.messages[0].content,/Jonas prefers quiet conversations/);
+  assert.match(calls[5].payload.messages.at(-1).content,/Hello, traveler!/);
+  const invalidPeer = await fetch(origin + '/api/peer-exchange', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      speaker:{name:'Mara',persona:'Mara'}, listener:{name:'Mara',persona:'Mara'}
+    })
+  });
+  assert.equal(invalidPeer.status,400,'An agent cannot converse with itself');
+
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
   assert.match(await html.text(), /Hearthbrook · Emergent World/);

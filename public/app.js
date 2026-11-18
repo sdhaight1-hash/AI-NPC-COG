@@ -116,8 +116,7 @@ function availableActivities(npc){
 }
 function sceneFor(npc){
  const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
-  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away, hunger '+Math.round(n.needs.hunger)+
-    ', social need '+Math.round(n.needs.social)+')').join(', ')||'Nobody nearby';
+  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
  const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
  const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=18)
   .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
@@ -129,29 +128,136 @@ function sceneFor(npc){
   Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
   '. Earned experience: '+Object.entries(npc.skills).map(([k,v])=>k+' '+v).join(', ')+
   ' (practice increases gathering yield). Current intention: '+npc.goal+
+  (npc.plan?' [longer-term intention '+npc.plan.key+', '+npc.plan.steps+' completed steps]':'')+
   '. Other residents within earshot: '+around+
   '. Observed usable resources: '+nearby+'. Personal memories: '+memories+
   '. Nobody has been assigned a profession, destination or routine. You choose one available action; '+
   'the environment validates it and supplies consequences.';
 }
 function backgroundOptions(npc){
- return availableActivities(npc).map(({key,when})=>({key,when}));
+ // Rein supports A-J only; the world may expose more legal actions.
+ // Preserve urgent survival choices and self-chosen multi-step intentions.
+ const rank=['eat','rest','stock_food','make_campfire','share_food','socialize',
+  'explore','forage','collect_wood','collect_stone','build_fire'];
+ const options=availableActivities(npc).filter(o=>o.key!=='none')
+  .sort((a,b)=>rank.indexOf(a.key)-rank.indexOf(b.key)).slice(0,9);
+ options.push({key:'none',when:'Wait and observe without changing current circumstances'});
+ return options.map(({key,when})=>({key,when}));
 }
 function fallbackBackground(npc){
  return AgentWorld.fallback(npc,backgroundOptions(npc));
 }
 function completeActivity(npc){
  if(!npc.task)return;
+ if(npc.task.key==='socialize'){
+  if(npc.peerPending || state.backgroundBusy || state.conversationBusy || state.paused ||
+     state.clock<(npc.peerRetryAt||0))return;
+  if(!state.connected){
+   record(npc.name+': peer conversation requires Rein; no simulated dialogue','routine');
+   npc.task=null;npc.action='none';npc.thoughtAt=state.clock+12;
+   return;
+  }
+  const peer=state.npcs.find(other=>other.id===npc.task.ref);
+  if(!peer || manhattan(npc,peer)>2){
+   npc.task=null;npc.action='none';npc.thoughtAt=state.clock+3;
+   record(npc.name+': could not start conversation; participant moved away','warning');
+   return;
+  }
+  void peerExchange(npc,peer);
+  return;
+ }
+ const previous=npc.task;
  const outcome=AgentWorld.complete(npc,state.world,state.npcs);
  if(outcome.ok){
   remember(npc,outcome.message);
   record(npc.name+': '+outcome.message,'social');
-  npc.goal='Considering what to do next';
-  npc.thoughtAt=state.clock+1;
+  if(npc.plan){
+   npc.plan.steps++;
+   npc.goal='Working toward '+npc.plan.key.replaceAll('_',' ')+
+     ' ('+npc.plan.steps+' steps completed)';
+   npc.nextPlanAt=state.clock+1;
+   if(npc.plan.steps>=8)finishPlan(npc,'Stopped after eight steps','warning');
+  }else{
+   npc.goal='Considering what to do next';
+   npc.thoughtAt=state.clock+2;
+  }
  }else{
   record(npc.name+': '+outcome.message+' [world rejected]','warning');
+  if(npc.plan)finishPlan(npc,'Plan blocked: '+outcome.message,'warning');
   npc.goal='Reconsidering after a failed attempt';
-  npc.thoughtAt=state.clock+1;
+  npc.thoughtAt=state.clock+4;
+ }
+ npc.action='none';
+}
+function finishPlan(npc,reason,type='social'){
+ if(!npc.plan)return;
+ const name=npc.plan.key.replaceAll('_',' ');
+ remember(npc,'Intention '+name+': '+reason);
+ record(npc.name+' '+name+': '+reason,type);
+ npc.plan=null;
+ npc.action='none';npc.task=null;
+ npc.goal='Considering a new intention';
+ npc.thoughtAt=state.clock+4;
+}
+function advancePlan(npc){
+ if(!npc.plan||npc.task||npc.peerPending||npc.action==='rest'||
+    state.clock<(npc.nextPlanAt||0))return;
+ if(npc.plan.steps>=8)return finishPlan(npc,'Reached the eight-step safety limit','warning');
+ const next=AgentWorld.nextPlanAction(npc,state.world,state.npcs,
+  point=>reachableFrom(npc,point));
+ if(next.status==='done')return finishPlan(npc,'Completed');
+ if(next.status==='blocked')return finishPlan(npc,next.reason,'warning');
+ if(!setAction(npc,next.option.key,'plan',null))
+  finishPlan(npc,'Sub-action no longer available','warning');
+}
+async function peerExchange(npc,other){
+ if(npc.peerPending||other.peerPending||state.backgroundBusy||state.conversationBusy)return;
+ if(!npc.task||npc.task.key!=='socialize'||npc.task.ref!==other.id)return;
+ npc.peerPending=true;other.peerPending=true;state.backgroundBusy=true;
+ record(npc.name+' approached '+other.name+' — Rein generating two dialogue turns','routine');
+ const wasPaused=state.paused;
+ try{
+  const response=await jsonPost('/api/peer-exchange',{
+   speaker:{name:npc.name,persona:npc.personality},
+   listener:{name:other.name,persona:other.personality},
+   scene:sceneFor(npc)+'\n'+other.name+': '+sceneFor(other).slice(0,480)
+  });
+  // Validate the current world again. Never commit stale inference.
+  if(state.paused||wasPaused||state.conversationBusy || !npc.task ||
+     npc.task.key!=='socialize'||npc.task.ref!==other.id||
+     manhattan(npc,other)>2)return;
+  if(typeof response.first!=='string'||typeof response.second!=='string'||
+     !response.first.trim()||!response.second.trim())throw new Error('Empty exchange');
+  npc.task.approved=true;
+  const result=AgentWorld.complete(npc,state.world,state.npcs);
+  if(!result.ok)throw new Error(result.message);
+  const one=response.first.slice(0,240),two=response.second.slice(0,240);
+  const exchange={at:'Day '+state.day+' '+timeString(),
+   with:other.id,first:npc.name+': '+one,second:other.name+': '+two};
+  npc.peerLog.push(exchange);npc.peerLog=npc.peerLog.slice(-10);
+  other.peerLog.push({...exchange,with:npc.id});other.peerLog=other.peerLog.slice(-10);
+  remember(npc,'Spoke with '+other.name+': "'+one.slice(0,75)+
+    '" — '+other.name+' replied "'+two.slice(0,55)+'"');
+  remember(other,npc.name+' said "'+one.slice(0,75)+
+    '". I replied "'+two.slice(0,75)+'"');
+  record(npc.name+': "'+one.slice(0,80)+'"','ai');
+  record(other.name+': "'+two.slice(0,80)+'" [peer exchange '+response.durationMs+'ms]','ai');
+  npc.action='none';
+  npc.goal='Thinking about the conversation with '+other.name;
+  npc.thoughtAt=state.clock+4;
+  other.thoughtAt=Math.max(other.thoughtAt,state.clock+4);
+  updateInspector();
+ }catch(error){
+  if(error.status!==429)record(npc.name+' ↔ '+other.name+': '+error.message,'warning');
+  npc.peerFailures=(npc.peerFailures||0)+1;
+  npc.peerRetryAt=state.clock+8;
+  if(npc.peerFailures>=2 || error.status!==429){
+   if(npc.task?.key==='socialize'&&npc.task.ref===other.id)npc.task=null;
+   npc.action='none';npc.thoughtAt=state.clock+8;
+  }
+ }finally{
+  npc.peerPending=false;other.peerPending=false;state.backgroundBusy=false;
+  state.lastDecisionMs=performance.now();
  }
 }
 function setAction(npc,action,source,scores){
@@ -159,6 +265,16 @@ function setAction(npc,action,source,scores){
  if(!candidate){
   record(npc.name+': unavailable action rejected: '+action,'warning');
   return false;
+ }
+ if(['stock_food','make_campfire'].includes(action)){
+  if(npc.plan)return false;
+  npc.plan={key:action,steps:0};
+  npc.nextPlanAt=state.clock;
+  npc.action='none';npc.source=source;npc.scores=scores;
+  npc.goal='Planning to '+action.replaceAll('_',' ');
+  record(npc.name+' chose a multi-step intention: '+action.replaceAll('_',' ')+
+   ' ['+source+']',source==='rein'?'ai':'routine');
+  return true;
  }
  if(action==='none'){
   npc.action='none';npc.source=source;npc.scores=scores;npc.task=null;
@@ -176,8 +292,9 @@ function setAction(npc,action,source,scores){
   }
   npc.action=action;npc.source=source;npc.scores=scores;
   npc.task={key:action,ref:candidate.ref||null};
+  if(action==='socialize')npc.peerFailures=0;
   npc.goal=action.replaceAll('_',' ')+' (self-chosen)';
-  if(!npc.path.length)completeActivity(npc);
+  if(!npc.path.length && action!=='socialize')completeActivity(npc);
  }
  const score=scores&&Number.isFinite(scores[action])?' ('+Math.round(scores[action]*100)+'%)':'';
  record(npc.name+' chose '+action.replaceAll('_',' ')+score+' ['+source+']',
@@ -438,6 +555,9 @@ function updateInspector(){
   $(prefix+'Meter').style.width=clamp(value)+'%';
  }
  $('npcGoal').textContent=npc.goal;
+ $('npcPlan').textContent=npc.plan
+  ?npc.plan.key.replaceAll('_',' ')+' · '+npc.plan.steps+' steps'
+  :'No ongoing plan';
  $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
  $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
  $('inventoryVal').textContent='Food '+npc.inventory.food+' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone;
@@ -460,6 +580,18 @@ function updateInspector(){
   const msg=document.createElement('span');msg.className='empty';msg.textContent='No memories recorded.';memories.append(msg);
  }else for(const m of npc.memories.slice(-5).reverse()){
   const entry=document.createElement('div');entry.className='memory';entry.textContent=m.time+' — '+m.text;memories.append(entry);
+ }
+ const peerArea=$('peerLog');peerArea.replaceChildren();
+ if(!npc.peerLog?.length){
+  const empty=document.createElement('span');empty.className='empty';
+  empty.textContent='No completed AI conversations with other residents.';
+  peerArea.append(empty);
+ }else{
+  for(const exchange of npc.peerLog.slice(-3).reverse()){
+   const entry=document.createElement('div');entry.className='memory';
+   entry.textContent=exchange.at+' · '+exchange.first+' / '+exchange.second;
+   peerArea.append(entry);
+  }
  }
 }
 function renderChat(){
@@ -487,7 +619,8 @@ function save(){
     source:n.source,action:n.action,scores:n.scores,facing:n.facing,
     memories:n.memories,chat:n.chat.filter(item=>item.source!=='pending'),
     relationships:n.relationships,path:n.path,needs:n.needs,inventory:n.inventory,
-    skills:n.skills,visited:n.visited,task:n.task
+    skills:n.skills,visited:n.visited,task:n.task,
+    plan:n.plan,peerLog:n.peerLog,lastPeerAt:n.lastPeerAt
    }))
   };
   localStorage.setItem(STORE,JSON.stringify(pack));
@@ -540,10 +673,21 @@ function restore(){
        (prev.task.ref===null||typeof prev.task.ref==='string'))
     npc.task={key:prev.task.key,ref:prev.task.ref};
    else if(!data.world){npc.path=[];npc.action='none';}
+   npc.plan=AgentWorld.validatePlan(prev.plan);
+   if(Array.isArray(prev.peerLog))npc.peerLog=prev.peerLog
+    .filter(x=>x&&typeof x.first==='string'&&typeof x.second==='string'&&
+      typeof x.at==='string'&&typeof x.with==='string'&&
+      state.npcs.some(other=>other.id===x.with))
+    .slice(-10).map(x=>({at:x.at.slice(0,60),with:x.with,
+      first:x.first.slice(0,260),second:x.second.slice(0,260)}));
+   if(Number.isFinite(prev.lastPeerAt))npc.lastPeerAt=Math.min(state.clock,prev.lastPeerAt);
+   // A saved NPC encounter may restart, but it must earn model approval again.
+   if(npc.task?.key==='socialize')delete npc.task.approved;
    npc.thoughtAt=state.clock+4+state.npcs.indexOf(npc)*3;
   }
  }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
 }
+state.world.now=state.clock;
 const heldKeys=new Set();
 function step(dt){
  if(state.paused)return;
@@ -558,21 +702,26 @@ function step(dt){
  state.clock+=elapsed;
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
  updateMovement(state.player,dt,5.2);
+ state.world.now=state.clock;
  AgentWorld.regenerate(state.world,elapsed);
  for(const npc of state.npcs){
-  updateMovement(npc,dt,2.0);
+  if(!npc.peerPending)updateMovement(npc,dt,2.0);
   const recovered=AgentWorld.stepNeeds(npc,state.world,elapsed);
   if(recovered){
    remember(npc,'Recovered energy after resting');
    npc.thoughtAt=state.clock+2;
   }
-  if(npc.task&&!npc.path.length)completeActivity(npc);
+  if(!npc.peerPending&&!state.conversationBusy){
+   if(npc.task&&!npc.path.length)completeActivity(npc);
+   else if(npc.plan&&!npc.task&&!npc.path.length)advancePlan(npc);
+  }
  }
  // No automatic relationship gain from simply standing nearby.
  // Characters must choose to socialize, share or help to affect each other.
  if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&
     performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
-  const due=state.npcs.filter(n=>!n.task&&n.action!=='rest'&&state.clock>=n.thoughtAt)
+  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.peerPending&&
+    n.action!=='rest'&&state.clock>=n.thoughtAt)
     .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
  }
