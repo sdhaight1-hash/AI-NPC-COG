@@ -70,6 +70,27 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   assert.equal(calls[1].payload.logit_bias['248058'], -100);
   assert.equal(calls[1].payload.chat_template_kwargs.enable_thinking, false);
 
+  const interactResponse = await fetch(origin + '/api/interact', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      persona: 'A cautious baker', scene: 'Morning at the cafe',
+      history: [{role:'assistant',content:'Welcome!'}],
+      question: 'How should the baker respond to the latest request?',
+      options: [{ key:'helpful',when:'Provide assistance' }, {key:'refuse',when:'Decline' }],
+      message:'Could you help me find the library?'
+    })
+  });
+  assert.equal(interactResponse.status, 200);
+  const interaction = await interactResponse.json();
+  assert.equal(interaction.action, 'helpful');
+  assert.equal(interaction.reply, 'Hello, traveler!');
+  assert.equal(typeof interaction.durationMs, 'number');
+  assert.equal(calls[2].path, '/completion');
+  assert.match(calls[2].payload.prompt, /Could you help me find the library\?/);
+  assert.equal(calls[3].path, '/v1/chat/completions');
+  assert.equal(calls[3].payload.messages.at(-1).content, 'Could you help me find the library?');
+  assert.match(calls[3].payload.messages[0].content, /helpful/);
+
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
   assert.match(await html.text(), /Hearthbrook Village/);
