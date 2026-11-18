@@ -214,6 +214,7 @@ async function peerExchange(npc,other){
  if(npc.peerPending||other.peerPending||state.backgroundBusy||state.conversationBusy)return;
  if(!npc.task||npc.task.key!=='socialize'||npc.task.ref!==other.id)return;
  npc.peerPending=true;other.peerPending=true;state.backgroundBusy=true;
+ record(npc.name+' approached '+other.name+' — Rein generating two dialogue turns','routine');
  const wasPaused=state.paused;
  try{
   const response=await jsonPost('/api/peer-exchange',{
