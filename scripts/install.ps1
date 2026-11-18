@@ -95,48 +95,7 @@ try {
             @{ Asset=$release.Cudart; File=$cudaZip }
         )) {
             $digest = [string]$pair.Asset.digest
-            if ($digest -match '^sha256:([a-fA-F0-9]{64})
-        }
-
-        $serverStage = Join-Path $staging 'server-extracted'
-        $cudaStage = Join-Path $staging 'cuda-extracted'
-        Expand-Archive -LiteralPath $serverZip -DestinationPath $serverStage -Force
-        Expand-Archive -LiteralPath $cudaZip -DestinationPath $cudaStage -Force
-        $found = Get-ChildItem -Path $serverStage -Recurse -File -Filter 'llama-server.exe' |
-            Select-Object -First 1
-        if (-not $found) { throw 'llama-server.exe not found in official archive.' }
-        New-Item -ItemType Directory -Path $llamaFolder -Force | Out-Null
-        Copy-Item -Path (Join-Path $found.Directory.FullName '*') -Destination $llamaFolder -Recurse -Force
-
-        # CUDA runtime ships separately; copy all DLLs next to llama-server.exe.
-        $dlls = @(Get-ChildItem -Path $cudaStage -Recurse -File -Filter '*.dll')
-        if ($dlls.Count -eq 0) { throw 'CUDA runtime archive contains no DLLs.' }
-        foreach ($dll in $dlls) {
-            Copy-Item -LiteralPath $dll.FullName -Destination $llamaFolder -Force
-        }
-        Set-Content -LiteralPath (Join-Path $llamaFolder 'version.txt') -Value $release.Tag
-        Write-Host "llama.cpp server and CUDA DLLs installed ($($release.Tag))." -ForegroundColor Green
-    }
-
-    if (-not (Test-Path -LiteralPath $model -PathType Leaf)) {
-        Write-Warning "Model not found at '$model'. Put the already-downloaded GGUF in the Model folder before launching."
-    } else {
-        Write-Host 'Found Rein-NPC-4B-Q4_K_M.gguf in Model folder.' -ForegroundColor Green
-    }
-    Write-Host ''
-    Write-Host 'Setup successful. No administrator rights required.' -ForegroundColor Green
-    exit 0
-} catch {
-    Write-Host ''
-    Write-Host ('INSTALL ERROR: ' + $_.Exception.Message) -ForegroundColor Red
-    Write-Host 'Your model was not changed. Double-click install.bat again to retry.' -ForegroundColor Yellow
-    exit 1
-} finally {
-    if (Test-Path -LiteralPath $staging) {
-        Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
-    }
-}
-) {
+            if ($digest -match '^sha256:([a-fA-F0-9]{64})$') {
                 $expectedDigest = $Matches[1]
             } else {
                 throw "Release $($release.Tag) did not provide a valid SHA-256 digest."
