@@ -5,6 +5,7 @@ import vm from 'node:vm';
 
 function makeBrowser() {
   const events = new Map();
+  const saved = new Map();
   const counters = { staticRects: 0, screenImages: 0 };
   const fakeContext = type => new Proxy({
     measureText: str => ({ width: String(str).length * 8 }),
@@ -46,14 +47,14 @@ function makeBrowser() {
   };
   const context = {
     document:doc,window:win,console,
-    localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+    localStorage:{getItem:key=>saved.get(key)||null,setItem(key,val){saved.set(key,val);},removeItem(key){saved.delete(key);}},
     requestAnimationFrame(){},setInterval(){},
     performance:{now:()=>0},
     fetch:async()=>({ok:true,json:async()=>({connected:false})})
   };
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(source + '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind};',context);
-  return { ...context.__expose, counters, events };
+  vm.runInNewContext(source + '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save};',context);
+  return { ...context.__expose, counters, events, saved };
 }
 
 test('cached static map is painted once, while dynamic frames reuse it',()=>{
@@ -84,4 +85,27 @@ test('none action preserves the prior NPC goal',()=>{
   browser.setAction(npc,'none','offline routine',null);
   browser.setAction(npc,'none','offline routine',null);
   assert.equal(npc.goal,'Visiting the square');
+});
+
+test('an unfinished chat request is never written to persistent state',()=>{
+  const browser=makeBrowser();
+  browser.state.npcs[0].chat.push(
+    {role:'player',content:'unfinished request',source:'pending'},
+    {role:'npc',content:'previous completed response',source:'rein'}
+  );
+  browser.save();
+  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+  assert.equal(stored.npcs[0].chat.length,1);
+  assert.equal(stored.npcs[0].chat[0].content,'previous completed response');
+});
+
+test('NPC world rules exclude night shifts from available model options',()=>{
+  const browser=makeBrowser();
+  const npc=browser.state.npcs[0];
+  browser.state.clock=2*60;
+  const overnight=browser.backgroundOptions(npc).map(item=>item.key);
+  assert.ok(!overnight.includes('work'));
+  browser.state.clock=10*60;
+  const daytime=browser.backgroundOptions(npc).map(item=>item.key);
+  assert.ok(daytime.includes('work'));
 });
