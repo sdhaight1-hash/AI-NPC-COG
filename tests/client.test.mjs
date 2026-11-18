@@ -409,3 +409,37 @@ test('material cooperation changes relationships while social dialogue alone doe
  assert.equal(a.inventory.food,0);
  assert.equal(b.inventory.food,2);
 });
+
+test('NPC planning prompt does not reveal another character’s internal hunger level',()=>{
+ const browser=makeBrowser();
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ b.needs.hunger=97;
+ const options=browser.backgroundOptions(a);
+ assert.ok(options.some(x=>x.key==='share_food'),
+   'Agent may offer food voluntarily without privileged knowledge of recipient needs');
+});
+test('in-flight peer responses do not mutate world state after player preemption',async()=>{
+ let finish;
+ const waiting=new Promise(resolve=>{finish=resolve;});
+ const browser=makeBrowser({fetch:async(path)=>
+  path==='/api/peer-exchange'?waiting:
+  {ok:true,json:async()=>({connected:true})}
+ });
+ browser.state.connected=true;browser.state.auto=false;
+ const a=browser.state.npcs[0],b=browser.state.npcs[1];
+ b.x=a.x+1;b.y=a.y;
+ assert.equal(browser.setAction(a,'socialize','rein',null),true);
+ const pending=browser.peerExchange(a,b);
+ assert.equal(browser.state.backgroundBusy,true);
+ browser.state.conversationBusy=true;
+ finish({ok:true,json:async()=>({first:'I found some wood.',second:'That is useful.',durationMs:100})});
+ await pending;
+ assert.equal(a.peerLog.length,0);
+ assert.equal(b.peerLog.length,0);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(a.task.key,'socialize','Uncommitted task remains available for retry');
+ assert.equal(a.peerPending,false);
+ assert.equal(b.peerPending,false);
+ assert.equal(browser.state.backgroundBusy,false);
+});
