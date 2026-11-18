@@ -338,8 +338,8 @@ test('a complete model-generated NPC exchange commits to both agents exactly onc
  assert.equal(b.peerLog.length,1);
  assert.equal(a.peerLog[0].first,'Mara: I found berries beside the path.');
  assert.equal(a.peerLog[0].second,'Jonas: Thanks, I will look there.');
- assert.equal(a.relationships[b.id],52);
- assert.equal(b.relationships[a.id],52);
+ assert.equal(a.relationships[b.id],undefined,'A conversation does not automatically grant trust');
+ assert.equal(b.relationships[a.id],undefined);
  assert.ok(a.needs.social<before);
  assert.equal(a.task,null);
  browser.save();
@@ -396,4 +396,16 @@ test('invalid restored goals are rejected without breaking the world',()=>{
  const after=makeBrowser({saved:before.saved});
  assert.equal(after.state.npcs[0].plan,null);
  assert.equal(after.state.npcs[0].peerLog.length,0);
+});
+
+test('material cooperation changes relationships while social dialogue alone does not',()=>{
+ const browser=makeBrowser();
+ const a=browser.state.npcs.find(n=>n.id==='mara');
+ const b=browser.state.npcs.find(n=>n.id==='jonas');
+ b.x=a.x+1;b.y=a.y;b.needs.hunger=65;
+ assert.equal(browser.setAction(a,'share_food','rein',null),true);
+ assert.equal(a.relationships[b.id],52);
+ assert.equal(b.relationships[a.id],52);
+ assert.equal(a.inventory.food,0);
+ assert.equal(b.inventory.food,2);
 });
