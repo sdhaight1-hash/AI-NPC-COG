@@ -19,15 +19,15 @@ function makeBrowser() {
     get(target, key) { return target[key] ?? (() => {}); },
     set(target, key, value) { target[key] = value; return true; }
   });
-  const mapCtx=fakeContext('screen'), staticCtx=fakeContext('static');
+  const mapCtx=fakeContext('screen'), staticCtx=fakeContext('static'), spriteCtx=fakeContext('sprite');
   const canvas={
-    width: 1120,height:728,
+    width: 640,height:416,
     getContext:()=>mapCtx,
     addEventListener(name,fn){ events.set('canvas:'+name,fn); }
   };
   const elements = new Map([['world', canvas]]);
   const createElement = tag => {
-    if(tag==='canvas')return {width:0,height:0,getContext:()=>staticCtx};
+    if(tag==='canvas')return {width:0,height:0,getContext(){return this.width===16?spriteCtx:staticCtx;}};
     return {className:'',style:{},textContent:'',disabled:false,
       append(){},replaceChildren(){},addEventListener(){},
       classList:{toggle(){}},setAttribute(){},scrollTop:0};
@@ -52,8 +52,10 @@ function makeBrowser() {
     performance:{now:()=>0},
     fetch:async()=>({ok:true,json:async()=>({connected:false})})
   };
+  const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(source + '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath};',context);
+  vm.runInNewContext(art+'\n'+source +
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera};',context);
   return { ...context.__expose, counters, events, saved };
 }
 
@@ -118,4 +120,38 @@ test('saved NPC movement routes are contiguous and never cross buildings',()=>{
   assert.equal(browser.validSavedPath([{x:27,y:12},{x:28,y:12},{x:29,y:12}],npc),true);
   const mara=browser.state.npcs.find(n=>n.id==='mara');
   assert.equal(browser.validSavedPath([{x:19,y:7}],mara),false,'reject a building tile');
+});
+
+test('zoom changes viewport mapping but not player world coordinates',()=>{
+  const browser=makeBrowser();
+  const original={x:browser.state.player.x,y:browser.state.player.y};
+  const rect={left:0,top:0,width:640,height:416};
+  const point={x:(original.x+.5)*16,y:(original.y+.5)*16};
+  assert.equal(browser.clientToTile(point.x,point.y,rect).x,original.x);
+  browser.setZoom(2);
+  const centered=browser.clientToTile(320,208,rect);
+  assert.equal(centered.x,original.x);
+  assert.equal(centered.y,original.y);
+  browser.setZoom(3);
+  assert.equal(browser.state.player.x,original.x);
+  assert.equal(browser.state.player.y,original.y);
+  assert.equal(browser.state.zoom,3);
+  browser.setZoom(99);
+  assert.equal(browser.state.zoom,3,'Zoom clamps to the renderer limit');
+});
+
+test('pixel-art scene is self-contained, deterministic and supports sprite directions',()=>{
+  const browser=makeBrowser();
+  const sprites=browser.state.npcs;
+  assert.equal(sprites.length,6);
+  const [npc]=sprites;
+  const route=browser.pathfind(npc,{x:12,y:11});
+  assert.ok(route.length>0,'Original world paths remain functional');
+  assert.ok(browser.counters.staticRects>300,'Procedural terrain uses detailed pixel art');
+  browser.drawWorld();
+  npc.facing='left';
+  browser.drawWorld();
+  npc.facing='up';
+  browser.drawWorld();
+  assert.ok(browser.counters.screenImages>=3,'All directions remain drawable');
 });
