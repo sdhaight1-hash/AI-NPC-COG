@@ -76,9 +76,9 @@
     if(n.inventory.food>0&&n.needs.hunger>=10)
       add('eat','Eat one carried food to reduce hunger ('+Math.round(n.needs.hunger)+'/100)');
     if(n.energy<88)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
-    const recipient=nearestResident(n,residents,other=>other.needs?.hunger>=40);
+    const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0)
-      add('share_food','Give one food to nearby hungry '+recipient.name,recipient,recipient.id);
+      add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
     const other=nearestResident(n,residents);
     if(other && world.now-(n.lastPeerAt ?? -100000)>=45)
       add('socialize','Seek out '+other.name+' and initiate a real conversation',other,other.id);
