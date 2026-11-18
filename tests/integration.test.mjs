@@ -93,7 +93,7 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
 
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /Hearthbrook Village/);
+  assert.match(await html.text(), /Hearthbrook · Emergent World/);
   const emergence = await fetch(origin + '/emergence.js');
   assert.equal(emergence.status,200);
   assert.match(await emergence.text(), /root\.AgentWorld=/);
