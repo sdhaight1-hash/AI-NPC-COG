@@ -44,16 +44,20 @@
       .sort((a,b)=>distance(a,n)-distance(b,n))[0]||null;
   }
   function exploreTarget(n,canReach) {
-    // Deterministic but character-dependent novelty. No assigned destination or patrol.
-    let best=null,score=-Infinity;
+    // Evaluate a small ring of vantage points, not hundreds of BFS paths per decision.
+    // All inhabitants use the same directions; past visits change where they choose.
+    const directions=[[7,0],[-7,0],[0,7],[0,-7],[6,6],[-6,6],[6,-6],[-6,-6],
+      [12,3],[-12,3],[3,12],[-3,-12],[9,-4],[-9,4]];
     const seen=new Set(n.visited||[]);
     let seed=0;for(const c of n.id)seed=seed*31+c.charCodeAt(0)|0;
-    for(let y=1;y<25;y+=2)for(let x=1;x<39;x+=2){
-      const d=distance(n,{x,y});if(d<4||d>17||!canReach({x,y}))continue;
-      const id=x+':'+y,unseen=seen.has(id)?-100:100;
-      const hash=((x*73+y*151+seed*19)>>>0)%29;
-      const value=unseen+hash-d*0.4;
-      if(value>score){score=value;best={x,y};}
+    let best=null,score=-Infinity;
+    for(const [dx,dy] of directions){
+      const point={x:n.x+dx,y:n.y+dy};
+      if(point.x<0||point.x>=40||point.y<0||point.y>=26||!canReach(point))continue;
+      const id=point.x+':'+point.y;
+      const novelty=seen.has(id)?-100:100;
+      const tie=((point.x*73+point.y*151+seed*19)>>>0)%29;
+      if(novelty+tie>score){score=novelty+tie;best=point;}
     }
     return best;
   }
