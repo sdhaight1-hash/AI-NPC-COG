@@ -201,7 +201,8 @@ function finishPlan(npc,reason,type='social'){
  npc.thoughtAt=state.clock+4;
 }
 function advancePlan(npc){
- if(!npc.plan||npc.task||npc.peerPending||state.clock<(npc.nextPlanAt||0))return;
+ if(!npc.plan||npc.task||npc.peerPending||npc.action==='rest'||
+    state.clock<(npc.nextPlanAt||0))return;
  if(npc.plan.steps>=8)return finishPlan(npc,'Reached the eight-step safety limit','warning');
  const next=AgentWorld.nextPlanAction(npc,state.world,state.npcs,
   point=>reachableFrom(npc,point));
