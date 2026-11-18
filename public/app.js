@@ -127,7 +127,9 @@ function sceneFor(npc){
   Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
   '/100 (high is lonely), curiosity '+Math.round(npc.needs.curiosity)+'/100. Inventory: '+
   Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
-  '. Current intention: '+npc.goal+'. Other residents within earshot: '+around+
+  '. Earned experience: '+Object.entries(npc.skills).map(([k,v])=>k+' '+v).join(', ')+
+  ' (practice increases gathering yield). Current intention: '+npc.goal+
+  '. Other residents within earshot: '+around+
   '. Observed usable resources: '+nearby+'. Personal memories: '+memories+
   '. Nobody has been assigned a profession, destination or routine. You choose one available action; '+
   'the environment validates it and supplies consequences.';
@@ -439,6 +441,8 @@ function updateInspector(){
  $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
  $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
  $('inventoryVal').textContent='Food '+npc.inventory.food+' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone;
+ $('experienceVal').textContent=Object.entries(npc.skills).filter(([,v])=>v>0)
+   .map(([k,v])=>k+' '+v).join(' · ')||'None yet';
  $('socialVal').textContent=Math.round(npc.needs.social)+'/100';
  $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
  $('talkDistance').textContent=manhattan(state.player,npc)+' tiles away';
