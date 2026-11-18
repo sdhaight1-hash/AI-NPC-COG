@@ -209,7 +209,12 @@ export function startServer(port = PORT) {
           result = await lane.run('foreground', signal => speak(input, signal));
         } else {
           result = await lane.run('foreground', async signal => {
-            const decision = await decide(input, signal);
+            // Rein must see the player's latest utterance during decision scoring,
+            // not only during generation of the follow-up dialogue.
+            const history = Array.isArray(input.history) ? input.history : [];
+            const decision = await decide({
+              ...input, history: [...history, { role: 'user', content: input.message }]
+            }, signal);
             const speech = await speak({ ...input, action: decision.action }, signal);
             return { ...decision, reply: speech.reply };
           });
