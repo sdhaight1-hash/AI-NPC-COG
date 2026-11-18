@@ -195,3 +195,27 @@ test('inference options change with actual resources and skills follow actions, 
   assert.ok(!depleted.includes('forage'));
   assert.equal(npc.skills.foraging,0);
 });
+
+test('proximity alone does not manufacture a friendship',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const mara=browser.state.npcs.find(n=>n.id==='mara');
+ const jonas=browser.state.npcs.find(n=>n.id==='jonas');
+ jonas.x=mara.x;jonas.y=mara.y;
+ for(let i=0;i<20;i++)browser.step(0.05);
+ assert.equal(mara.relationships[jonas.id],undefined);
+ assert.equal(jonas.relationships[mara.id],undefined);
+});
+
+test('earned skills only reflect completed actions, never their starting personality',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs.find(n=>n.id==='asha');
+ assert.ok(Object.values(npc.skills).every(v=>v===0));
+ const forest=browser.state.world.nodes.find(n=>n.id==='tree_3');
+ npc.x=forest.x;npc.y=forest.y;
+ const stock=forest.stock;
+ assert.equal(browser.setAction(npc,'collect_wood','rein',null),true);
+ assert.equal(forest.stock,stock-2);
+ assert.equal(npc.skills.gathering,1);
+ assert.equal(npc.skills.building,0);
+});
