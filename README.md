@@ -43,6 +43,31 @@ When the model is disconnected the sandbox continues with **clearly labeled dete
 
 This is a prototype for *behavioral testing*, not a finished persistent-persona architecture: it has short episodic memory, simple relationship scores, social choices and goal selection, but not vector retrieval, reflective summarization, interiors, job inventories or economies.
 
+## Performance and architecture (RTX 2060 / 6 GB target)
+
+The browser runs the **2D simulation continuously**, while the local Node bridge serializes access to `llama-server`. There are two request priorities:
+
+- **Foreground conversation:** `POST /api/interact` combines Rein's trained decision pass and its dialogue pass in a *single priority job*. It includes the player's latest message in both stages, commits NPC mood/trust/memory **only after the complete reply succeeds**, and interrupts an in-flight background inference.
+- **Background activity:** `POST /api/decide` is low priority and **never queues multiple stale requests**. A busy server returns HTTP 429 so the browser can defer the decision rather than falsely declaring the model offline.
+
+This is still **one loaded GGUF**, not a separate model instance per resident. Chat and decisions are serialized because `start.bat` uses `--parallel 1` for the 6 GB GPU. Priority cancellation reduces wait time but cannot guarantee instantaneous interruption inside llama.cpp. The model server's actual throughput depends on GPU drivers, VRAM pressure and context.
+
+The village now caches the unmoving map, renders dynamic characters at up to 30 FPS, and separates conversation and background busy state. Held WASD movement no longer clears its own path; walkable paths remain validated by the game. NPCs are prevented from receiving impossible actions such as night-time work; repeated idle decisions don't corrupt goals or restart routes.
+
+When connected, background thinking begins at roughly one decision every 12 seconds or after the previous one has finished, whichever is later. Actual model latency is reported in the event timeline in milliseconds. The **Rein connected** indicator may remain online through short busy periods when health checks are delayed.
+
+**For diagnosing slowness:** look at the two server windows after launching `start.bat`. If the browser says *offline*, inspect the model console for loading, GPU/driver, or out-of-memory errors. If dialogue works but takes many seconds, compare the timeline's reported decision/dialogue latency; GUI drawing and GPU inference are separate. Closing ComfyUI and other GPU-heavy programs can reduce competition for your 6 GB VRAM. Reduce `-ngl 99` to a smaller layer count in `start.bat` **only if GPU allocation fails**—CPU offload usually makes inference slower.
+
+The app continues with explicitly marked offline routines if the model is not connected. This is not equivalent to AI-driven behavior.
+
+### Verification
+
+```bat
+node --test tests/*.test.mjs
+```
+
+The test suite includes Rein's special-token scoring, HTTP end-to-end dialogue with a fake local model, foreground cancellation and concurrency controls, static scene caching, held-key movement, and stable NPC goals. CI also runs the Windows installer checks. Real-GGUF speed and visual polish still need evaluation on your own hardware.
+
 ## How to evaluate
 
 Look at the event log's action probabilities and compare similar scenarios with different personalities, moods or relationship scores. Try asking one character for help, insulting them, and revisiting them after changing their mood. Ask a question outside their knowledge and see whether the response stays grounded. Restart and verify memories persist. Inspect Chrome DevTools if the model has an error: the UI distinguishes server failures from valid model decisions.
