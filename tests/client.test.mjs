@@ -53,9 +53,10 @@ function makeBrowser() {
     fetch:async()=>({ok:true,json:async()=>({connected:false})})
   };
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
+  const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(art+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera};',context);
+  vm.runInNewContext(art+'\n'+rules+'\n'+source +
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity};',context);
   return { ...context.__expose, counters, events, saved };
 }
 
@@ -102,25 +103,25 @@ test('an unfinished chat request is never written to persistent state',()=>{
   assert.equal(stored.npcs[0].chat[0].content,'previous completed response');
 });
 
-test('NPC world rules exclude night shifts from available model options',()=>{
+test('no agent has a predefined occupation, employer or workplace',()=>{
   const browser=makeBrowser();
-  const npc=browser.state.npcs[0];
-  browser.state.clock=2*60;
-  const overnight=browser.backgroundOptions(npc).map(item=>item.key);
-  assert.ok(!overnight.includes('work'));
-  browser.state.clock=10*60;
-  const daytime=browser.backgroundOptions(npc).map(item=>item.key);
-  assert.ok(daytime.includes('work'));
+  for(const npc of browser.state.npcs){
+    assert.equal(npc.role,undefined);
+    assert.equal(npc.work,undefined);
+    assert.equal(npc.home,undefined);
+    assert.ok(!browser.backgroundOptions(npc).some(item=>item.key==='work'));
+    assert.ok(Object.values(npc.skills).every(value=>value===0));
+  }
 });
 
 test('saved NPC movement routes are contiguous and never cross buildings',()=>{
   const browser=makeBrowser();
   const npc=browser.state.npcs.find(n=>n.id==='nico');
-  assert.equal(browser.validSavedPath([{x:26,y:11},{x:26,y:10}],npc),true);
-  assert.equal(browser.validSavedPath([{x:26,y:9}],npc),false,'reject teleporting routes');
-  assert.equal(browser.validSavedPath([{x:27,y:12},{x:28,y:12},{x:29,y:12}],npc),true);
-  const mara=browser.state.npcs.find(n=>n.id==='mara');
-  assert.equal(browser.validSavedPath([{x:19,y:7}],mara),false,'reject a building tile');
+  assert.equal(browser.validSavedPath([{x:8,y:11},{x:8,y:10}],npc),true);
+  assert.equal(browser.validSavedPath([{x:8,y:9}],npc),false,'reject teleporting routes');
+  assert.equal(browser.validSavedPath([{x:9,y:12},{x:10,y:12}],npc),true);
+  assert.equal(browser.validSavedPath([{x:8,y:11},{x:8,y:10},{x:8,y:9},{x:8,y:8},{x:8,y:7}],npc),
+    false,'reject a building tile');
 });
 
 test('zoom changes viewport mapping but not player world coordinates',()=>{
@@ -155,4 +156,42 @@ test('pixel-art scene is self-contained, deterministic and supports sprite direc
   npc.facing='up';
   browser.drawWorld();
   assert.ok(browser.counters.screenImages>=3,'All directions remain drawable');
+});
+
+test('agents can gather finite food, eat it, and build an object from earned materials',()=>{
+  const browser=makeBrowser();
+  const npc=browser.state.npcs.find(n=>n.id==='rowan');
+  const node=browser.state.world.nodes.find(n=>n.id==='berry_1');
+  const previous=node.stock;
+  npc.x=node.x;npc.y=node.y;
+  const before=npc.inventory.food;
+  assert.equal(browser.setAction(npc,'forage','rein',{forage:1}),true);
+  assert.equal(npc.inventory.food,before+2);
+  assert.equal(node.stock,previous-2);
+  const hunger=npc.needs.hunger;
+  assert.equal(browser.setAction(npc,'eat','rein',{eat:1}),true);
+  assert.ok(npc.needs.hunger<hunger,'Eating must reduce actual hunger');
+  npc.inventory.wood=2;npc.inventory.stone=1;
+  const count=browser.state.world.structures.length;
+  assert.equal(browser.setAction(npc,'build_fire','rein',{build_fire:1}),true);
+  assert.equal(browser.state.world.structures.length,count+1);
+  assert.equal(npc.inventory.wood,0);
+  assert.equal(npc.inventory.stone,0);
+  browser.save();
+  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+  assert.equal(stored.world.structures.length,count+1);
+  assert.equal(stored.npcs.find(n=>n.id==='rowan').inventory.wood,0);
+});
+
+test('inference options change with actual resources and skills follow actions, not assigned jobs',()=>{
+  const browser=makeBrowser();
+  const npc=browser.state.npcs.find(n=>n.id==='jonas');
+  const berry=browser.state.world.nodes.find(n=>n.kind==='food'&&n.stock>0);
+  const options=browser.backgroundOptions(npc).map(v=>v.key);
+  assert.ok(options.includes('forage'));
+  assert.ok(!options.includes('build_fire'),'Building requires acquired materials');
+  for(const node of browser.state.world.nodes)if(node.kind==='food')node.stock=0;
+  const depleted=browser.backgroundOptions(npc).map(v=>v.key);
+  assert.ok(!depleted.includes('forage'));
+  assert.equal(npc.skills.foraging,0);
 });
