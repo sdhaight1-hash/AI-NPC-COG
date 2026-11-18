@@ -13,6 +13,7 @@ jobs:
           node-version: '22'
       - run: node --check server.mjs
       - run: node --check public/app.js
+      - run: node --check public/pixel-art.js
       - run: node --test tests/*.test.mjs
   windows-installer:
     runs-on: windows-latest
