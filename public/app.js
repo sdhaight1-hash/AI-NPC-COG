@@ -139,7 +139,7 @@ function backgroundOptions(npc){
  // Rein supports A-J only; the world may expose more legal actions.
  // Preserve urgent survival choices and self-chosen multi-step intentions.
  const rank=['eat','rest','stock_food','make_campfire','share_food','socialize',
-  'forage','collect_wood','collect_stone','build_fire','explore'];
+  'explore','forage','collect_wood','collect_stone','build_fire'];
  const options=availableActivities(npc).filter(o=>o.key!=='none')
   .sort((a,b)=>rank.indexOf(a.key)-rank.indexOf(b.key)).slice(0,9);
  options.push({key:'none',when:'Wait and observe without changing current circumstances'});
