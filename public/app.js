@@ -247,7 +247,7 @@ async function sendMessage(event){
  npc.path=[];npc.travel=0;
  const prior=npc.chat.slice(-8).filter(item=>item.role!=='system')
   .map(({role,content})=>({role:role==='player'?'user':'assistant',content}));
- addConversation(npc,'player',message,'player');
+ addConversation(npc,'player',message,'pending');
  record('You spoke to '+npc.name+': '+message.slice(0,75),'social');
  state.conversationBusy=true;$('sendBtn').disabled=true;
  $('chatHint').textContent='Prioritizing your conversation…';
@@ -277,6 +277,8 @@ async function sendMessage(event){
    reply=phrases[action];
   }
   // Commit state only after a complete, validated response from both Rein calls.
+  const pending=npc.chat.findLast(item=>item.role==='player'&&item.source==='pending');
+  if(pending)pending.source='player';
   npc.action=action;npc.source=source;npc.scores=scores;
   if(action==='warm'||action==='helpful')npc.trust=clamp(npc.trust+2);
   if(action==='refuse'||action==='avoid')npc.trust=clamp(npc.trust-2);
@@ -289,7 +291,7 @@ async function sendMessage(event){
  }catch(error){
   record(npc.name+': conversation failed — '+error.message,'warning');
   // A failed request must not poison NPC memory or grant relationship changes.
-  const index=npc.chat.findLastIndex(item=>item.role==='player'&&item.content===message);
+  const index=npc.chat.findLastIndex(item=>item.role==='player'&&item.source==='pending');
   if(index>=0)npc.chat.splice(index,1);
   addConversation(npc,'system','No model reply was completed. Your message was not applied; please retry.','error');
   input.value=message;
@@ -459,7 +461,8 @@ function save(){
  try{
   const pack={clock:state.clock,day:state.day,player:{x:state.player.x,y:state.player.y},npcs:state.npcs.map(n=>({
    id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
-   source:n.source,action:n.action,scores:n.scores,memories:n.memories,chat:n.chat,relationships:n.relationships
+   source:n.source,action:n.action,scores:n.scores,memories:n.memories,
+   chat:n.chat.filter(item=>item.source!=='pending'),relationships:n.relationships
   }))};
   localStorage.setItem(STORE,JSON.stringify(pack));
  }catch{ /* Private mode / storage denied: keep playing without persistence. */ }
