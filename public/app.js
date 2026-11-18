@@ -22,19 +22,27 @@ locations.bench={x:12,y:14};
 const trees=[[1,2],[12,3],[26,4],[38,4],[2,9],[12,9],[26,9],[38,10],[1,16],[12,18],[27,18],[38,16],[2,23],[13,23],[26,24],[38,24],[3,13],[36,24]];
 
 const initialNPCs = [
- { id:'mara', name:'Mara', role:'Café owner', home:'cottage', work:'cafe', x:19,y:8, mood:79, energy:84, trust:56, color:'#e9aa85', personality:'Mara, 32, runs the Hearth Café. Warm, observant, protective of her friends, quietly stubborn. Dislikes gossip and values honesty.' },
- { id:'jonas', name:'Jonas', role:'Mechanic', home:'cottage', work:'forge', x:7,y:21, mood:55, energy:80, trust:41, color:'#9bc3cc', personality:'Jonas, 40, repairs equipment at the Workshop. Dry humor, pragmatic, guarded with strangers, deeply loyal once trust is earned.' },
- { id:'asha', name:'Asha', role:'Librarian', home:'cottage', work:'library', x:20,y:22, mood:72, energy:73, trust:63, color:'#bc9add', personality:'Asha, 28, keeps the village library. Curious, patient, precise about facts, a little shy in groups, loves local history.' },
- { id:'rowan', name:'Rowan', role:'Nurse', home:'cottage', work:'clinic', x:33,y:8, mood:65, energy:71, trust:62, color:'#a1d6aa', personality:'Rowan, 35, is the village nurse. Calm under pressure, empathic but blunt, avoids exaggeration, respects boundaries.' },
- { id:'lina', name:'Lina', role:'Market trader', home:'cottage', work:'market', x:33,y:22, mood:83, energy:90, trust:48, color:'#d9cb79', personality:'Lina, 24, runs a produce stall at the market. Spirited, business-minded, outgoing, competitive and fond of teasing friends.' },
- { id:'nico', name:'Nico', role:'Courier', home:'cottage', work:'market', x:26,y:12, mood:68, energy:76, trust:51, color:'#e693ad', personality:'Nico, 21, delivers mail through Hearthbrook. Restless, cheerful, socially awkward when surprised and always looking for adventure.' }
-].map((n,i) => ({...n, goal:'Starting the day', action:'none', source:'routine', scores:null,
-  memories:[], chat:[], relationships:{}, path:[], travel:0, thoughtAt:8*60+10+i*7, lastSeen:0}));
+ { id:'mara', name:'Mara', x:21,y:11, mood:79, energy:84, trust:56, color:'#e9aa85',
+   personality:'Mara, 32. Warm, observant, protective of friends, quietly stubborn. Values honesty and dislikes gossip.' },
+ { id:'jonas', name:'Jonas', x:12,y:11, mood:55, energy:80, trust:41, color:'#9bc3cc',
+   personality:'Jonas, 40. Dry humor, pragmatic, guarded with strangers, loyal once trust is earned.' },
+ { id:'asha', name:'Asha', x:30,y:12, mood:72, energy:73, trust:63, color:'#bc9add',
+   personality:'Asha, 28. Curious, patient, precise about facts, sometimes shy, loves learning and exploring.' },
+ { id:'rowan', name:'Rowan', x:15,y:13, mood:65, energy:71, trust:62, color:'#a1d6aa',
+   personality:'Rowan, 35. Calm under pressure, empathic but blunt, cautious, respects boundaries.' },
+ { id:'lina', name:'Lina', x:26,y:14, mood:83, energy:90, trust:48, color:'#d9cb79',
+   personality:'Lina, 24. Spirited, resourceful, outgoing, competitive, fond of teasing friends.' },
+ { id:'nico', name:'Nico', x:8,y:12, mood:68, energy:76, trust:51, color:'#e693ad',
+   personality:'Nico, 21. Restless, cheerful, socially awkward when surprised, loves discovering new places.' }
+].map((n,i) => AgentWorld.newAgent({...n,
+  goal:'Learning about this place',action:'none',source:'simulation',scores:null,
+  memories:[],chat:[],relationships:{},path:[],travel:0,
+  thoughtAt:8*60+10+i*5,lastSeen:0},i));
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
   auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0,
   zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
-  npcs:initialNPCs, events:[], nextUI:0, nextSave:0, lastSocial:0};
+  npcs:initialNPCs, world:AgentWorld.newWorld(), events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
 const manhattan=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
@@ -99,73 +107,84 @@ function approach(actor,target){
  }
  return best ? moveTo(actor,best) : false;
 }
+function reachableFrom(npc,point){
+ return !isBlocked(point.x,point.y)&&
+  (manhattan(npc,point)===0||pathfind(npc,point).length>0);
+}
+function availableActivities(npc){
+ return AgentWorld.available(npc,state.world,state.npcs,point=>reachableFrom(npc,point));
+}
 function sceneFor(npc){
- const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=7)
-  .map(n=>n.name+' ('+n.role+', '+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
- const memories=npc.memories.slice(-5).map(m=>m.time+': '+m.text).join('; ')||'No notable prior events';
- return 'Hearthbrook, day '+state.day+' at '+timeString()+'. '+npc.name+
-  ' is at tile ('+npc.x+','+npc.y+'), currently '+npc.goal+'. Mood '+Math.round(npc.mood)+
-  '/100, energy '+Math.round(npc.energy)+'/100; trust in player '+Math.round(npc.trust)+
-  '/100. Nearby residents: '+around+'. Recent real memories: '+memories+
-  '. Known locations: home cottage, '+npc.work+' workplace, cafe, square and market. '+
-  'Actions must be plausible and physically possible in this world.';
+ const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
+  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away, hunger '+Math.round(n.needs.hunger)+
+    ', social need '+Math.round(n.needs.social)+')').join(', ')||'Nobody nearby';
+ const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
+ const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=18)
+  .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
+ return 'Small settlement, day '+state.day+' at '+timeString()+'. '+
+  npc.name+' is at ('+npc.x+','+npc.y+'). Personality: '+npc.personality+
+  ' Physical needs: hunger '+Math.round(npc.needs.hunger)+'/100 (high is hungry), energy '+
+  Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
+  '/100 (high is lonely), curiosity '+Math.round(npc.needs.curiosity)+'/100. Inventory: '+
+  Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
+  '. Current intention: '+npc.goal+'. Other residents within earshot: '+around+
+  '. Observed usable resources: '+nearby+'. Personal memories: '+memories+
+  '. Nobody has been assigned a profession, destination or routine. You choose one available action; '+
+  'the environment validates it and supplies consequences.';
 }
 function backgroundOptions(npc){
- const hour=(state.clock%1440)/60;
- const options=[];
- // Filter obviously implausible options before asking Rein to choose.
- // The model ranks available actions; it does not overrule world constraints.
- if(hour>=7&&hour<19)
-  options.push({key:'work',when:'Perform '+npc.role+' duties at the workplace during working hours'});
- if(hour>=6&&hour<23)
-  options.push({key:'cafe',when:'Visit the cafe for food, relaxation or company'});
- options.push({key:'square',when:'Spend time in the village square or outdoors'});
- options.push({key:'home',when:'Return home for quiet, safety or sleep'});
- options.push({key:'rest',when:'Rest if tired and conserve energy'});
- if(nearest(npc,6)) options.push({key:'socialize',when:'Speak briefly with a nearby resident to maintain a relationship'});
- options.push({key:'none',when:'Continue present activity without changing plans'});
- return options;
+ return availableActivities(npc).map(({key,when})=>({key,when}));
 }
 function fallbackBackground(npc){
- const hour=(state.clock%1440)/60;
- if(npc.energy<30)return 'rest';
- if(hour>=8&&hour<17) return npc.work==='cafe'&&npc.mood<40?'square':'work';
- if(hour>=17&&hour<20)return 'cafe';
- return 'home';
+ return AgentWorld.fallback(npc,backgroundOptions(npc));
+}
+function completeActivity(npc){
+ if(!npc.task)return;
+ const outcome=AgentWorld.complete(npc,state.world,state.npcs);
+ if(outcome.ok){
+  remember(npc,outcome.message);
+  record(npc.name+': '+outcome.message,'social');
+  npc.goal='Considering what to do next';
+  npc.thoughtAt=state.clock+1;
+ }else{
+  record(npc.name+': '+outcome.message+' [world rejected]','warning');
+  npc.goal='Reconsidering after a failed attempt';
+  npc.thoughtAt=state.clock+1;
+ }
 }
 function setAction(npc,action,source,scores){
- const other=nearest(npc,6);
- const targets={work:npc.work,cafe:'cafe',square:'square',home:npc.home,rest:npc.home,
-   socialize:other?null:undefined};
- if(!['work','cafe','square','home','rest','socialize','none'].includes(action)) {
-  record(npc.name+': rejected unknown action '+action,'warning');return;
+ const candidate=availableActivities(npc).find(option=>option.key===action);
+ if(!candidate){
+  record(npc.name+': unavailable action rejected: '+action,'warning');
+  return false;
  }
- let result=true;
- if(action==='socialize') {
-  if(!other)result=false;
-  else result=approach(npc,other);
-  if(result&&other){
-   npc.goal='Catch up with '+other.name;
-   npc.socialTarget=other.id;
-  }
- }else if(action==='none') {
-  // A continuation is not a new destination or an ever-growing goal string.
-  result=true;
+ if(action==='none'){
+  npc.action='none';npc.source=source;npc.scores=scores;npc.task=null;
+  npc.goal='Observing the world';
+ }else if(action==='rest'){
+  npc.action='rest';npc.source=source;npc.scores=scores;npc.task=null;
+  npc.path=[];npc.travel=0;npc.goal='Resting and recovering';
  }else{
-  const target=locations[targets[action]];
-  result=!!target&&(npc.action===action&&npc.path.length>0?true:moveTo(npc,target));
-  if(result)npc.socialTarget=null;
-  if(result)npc.goal=action==='work'?'Working at '+npc.work:
-    action==='cafe'?'Visiting the café':action==='square'?'Visiting the square':
-    action==='home'?'Going home':'Resting at home';
+  const target=candidate.target;
+  if(target&&manhattan(npc,target)>1&&
+     (action==='share_food'||action==='socialize'
+       ?!approach(npc,target):!moveTo(npc,target))){
+    record(npc.name+': could not reach chosen action','warning');
+    return false;
+  }
+  npc.action=action;npc.source=source;npc.scores=scores;
+  npc.task={key:action,ref:candidate.ref||null};
+  npc.goal=action.replaceAll('_',' ')+' (self-chosen)';
+  if(!npc.path.length)completeActivity(npc);
  }
- if(!result){record(npc.name+': action not reachable; world rejected it','warning');return;}
- npc.action=action;npc.source=source;npc.scores=scores;
  const score=scores&&Number.isFinite(scores[action])?' ('+Math.round(scores[action]*100)+'%)':'';
- record(npc.name+' → '+action.replace('_',' ') +score+' ['+source+']',source==='rein'?'ai':'routine');
- if(source==='rein')remember(npc,'Chose '+action+' while '+sceneFor(npc).slice(0,80));
+ record(npc.name+' chose '+action.replaceAll('_',' ')+score+' ['+source+']',
+  source==='rein'?'ai':'routine');
+ if(source==='rein')remember(npc,'Chose '+action+' based on current needs and local opportunities');
  updateInspector();
+ return true;
 }
+
 async function jsonPost(path,body){
  const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
  const data=await response.json();
@@ -193,7 +212,7 @@ async function deliberate(npc){
   if(state.connected){
    const data=await jsonPost('/api/decide',{
     persona:npc.personality,scene:sceneFor(npc),
-    history:[],question:'Which available action is most appropriate for this resident’s current needs and circumstances?',options
+    history:[],question:'What do you choose to do next for your own reasons, with your current needs, possessions, nearby people and resources?',options
    });
    if(!state.paused&&!state.conversationBusy&&options.some(o=>o.key===data.action)){
     setAction(npc,data.action,'rein',data.scores);
@@ -212,7 +231,7 @@ async function deliberate(npc){
    void checkModel();
   }
  }finally{
-  npc.thoughtAt=state.clock+(state.connected?55:60);
+  npc.thoughtAt=state.clock+(state.connected?32:30);
   state.lastDecisionMs=performance.now();
   state.backgroundBusy=false;
  }
@@ -293,8 +312,8 @@ async function sendMessage(event){
   record(npc.name+' response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+
    ' ['+source+']'+(source==='rein'?' '+durationMs+'ms':''),source==='rein'?'ai':'social');
   if(action==='avoid'){
-   npc.socialTarget=null;
-   moveTo(npc,locations[npc.home]);
+   npc.task=null;
+   moveTo(npc,locations.square);
   }
   npc.mood=clamp(npc.mood+(action==='warm'?2:action==='refuse'?-2:0));
  }catch(error){
