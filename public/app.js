@@ -267,9 +267,11 @@ async function sendMessage(event){
  const message=input.value.trim();
  if(!npc||!message||state.conversationBusy)return;
  if(manhattan(state.player,npc)>4){$('chatHint').textContent='Move within 4 tiles to talk to '+npc.name+'.';return;}
- // Persist the target identity. UI selection may change while inference runs.
+ // Pause the previous plan rather than silently abandoning a gathering journey.
+ // Selection may change while the shared model is generating a reply.
+ const interrupted={task:npc.task,path:npc.path.slice(),action:npc.action,goal:npc.goal};
  input.value='';
- npc.path=[];npc.travel=0;
+ npc.path=[];npc.travel=0;npc.task=null;
  const prior=npc.chat.slice(-8).filter(item=>item.role!=='system')
   .map(({role,content})=>({role:role==='player'?'user':'assistant',content}));
  addConversation(npc,'player',message,'pending');
@@ -325,6 +327,16 @@ async function sendMessage(event){
   input.value=message;
   void checkModel();
  }finally{
+  if(interrupted.action==='rest'&&npc.action!=='avoid'){
+   npc.action='rest';npc.goal=interrupted.goal;
+  }
+  if(interrupted.task&&npc.action!=='avoid'){
+   npc.task=interrupted.task;
+   npc.path=interrupted.path;
+   npc.travel=0;
+   npc.action=interrupted.action;
+   npc.goal=interrupted.goal;
+  }
   state.conversationBusy=false;$('sendBtn').disabled=false;
   $('chatHint').textContent='Interactions are prioritized over background decisions.';
   state.lastDecisionMs=performance.now();
