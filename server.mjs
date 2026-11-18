@@ -169,6 +169,7 @@ const STATIC = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/pixel-art.js': ['public/pixel-art.js', 'text/javascript; charset=utf-8'],
+  '/emergence.js': ['public/emergence.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8']
 };
 function json(res, status, payload) {
