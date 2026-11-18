@@ -9,7 +9,6 @@ $nodeFolder = Join-Path $runtime 'node'
 $nodeExe = Join-Path $nodeFolder 'node.exe'
 $model = Join-Path $root 'Model\Rein-NPC-4B-Q4_K_M.gguf'
 $staging = Join-Path $runtime ('stage-' + [guid]::NewGuid().ToString('N'))
-. (Join-Path $PSScriptRoot 'release-selection.ps1')
 
 function Download-Verified {
     param([string]$Url, [string]$Destination, [string]$Sha256)
@@ -82,25 +81,27 @@ try {
     if (Test-Path -LiteralPath (Join-Path $llamaFolder 'llama-server.exe') -PathType Leaf) {
         Write-Host 'Local llama.cpp server already installed; keeping existing files.' -ForegroundColor Green
     } else {
-        Write-Host 'Finding the newest official CUDA 12.4 Windows build...' -ForegroundColor Yellow
-        $headers = @{ 'User-Agent'='AI-NPC-COG-installer'; 'Accept'='application/vnd.github+json' }
-        $releases = @(Invoke-RestMethod -Uri 'https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=20' -Headers $headers)
-        $release = Select-LlamaCudaRelease $releases
-        Write-Host "Using llama.cpp $($release.Tag) from ggml-org/llama.cpp" -ForegroundColor Cyan
-
+        # Use an immutable, verified upstream release: rolling 'latest' APIs are
+        # not reliable inputs to Windows PowerShell 5.1 release selection.
+        $releaseTag = 'b12521'
+        Write-Host "Installing verified llama.cpp $releaseTag (CUDA 12.4 x64)..." -ForegroundColor Yellow
         $serverZip = Join-Path $staging 'llama-server.zip'
         $cudaZip = Join-Path $staging 'cuda-runtime.zip'
-        foreach ($pair in @(
-            @{ Asset=$release.Server; File=$serverZip },
-            @{ Asset=$release.Cudart; File=$cudaZip }
-        )) {
-            $digest = [string]$pair.Asset.digest
-            if ($digest -match '^sha256:([a-fA-F0-9]{64})$') {
-                $expectedDigest = $Matches[1]
-            } else {
-                throw "Release $($release.Tag) did not provide a valid SHA-256 digest."
+        $releaseBase = "https://github.com/ggml-org/llama.cpp/releases/download/$releaseTag/"
+        $archives = @(
+            @{
+                Name = 'llama-b12521-bin-win-cuda-12.4-x64.zip'
+                Target = $serverZip
+                Sha256 = '9ce11d38104c119d039120c219ad521be765e681ac19145e39bd45fe08ead816'
+            },
+            @{
+                Name = 'cudart-llama-bin-win-cuda-12.4-x64.zip'
+                Target = $cudaZip
+                Sha256 = '8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6'
             }
-            Download-Verified $pair.Asset.browser_download_url $pair.File $expectedDigest
+        )
+        foreach ($archive in $archives) {
+            Download-Verified ($releaseBase + $archive.Name) $archive.Target $archive.Sha256
         }
 
         $serverStage = Join-Path $staging 'server-extracted'
@@ -119,8 +120,8 @@ try {
         foreach ($dll in $dlls) {
             Copy-Item -LiteralPath $dll.FullName -Destination $llamaFolder -Force
         }
-        Set-Content -LiteralPath (Join-Path $llamaFolder 'version.txt') -Value $release.Tag
-        Write-Host "llama.cpp server and CUDA DLLs installed ($($release.Tag))." -ForegroundColor Green
+        Set-Content -LiteralPath (Join-Path $llamaFolder 'version.txt') -Value $releaseTag
+        Write-Host "llama.cpp server and CUDA DLLs installed ($releaseTag)." -ForegroundColor Green
     }
 
     if (-not (Test-Path -LiteralPath $model -PathType Leaf)) {
