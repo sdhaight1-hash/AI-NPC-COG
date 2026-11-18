@@ -33,7 +33,7 @@ const initialNPCs = [
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
   auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0,
-  zoom:2, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
+  zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
   npcs:initialNPCs, events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
@@ -562,6 +562,8 @@ window.addEventListener('keydown',event=>{
  const active=document.activeElement?.tagName;
  if(active==='INPUT'||active==='TEXTAREA')return;
  const key=event.key.toLowerCase();
+ if(key==='+'||key==='='){event.preventDefault();setZoom(state.zoom+1);return;}
+ if(key==='-'||key==='_'){event.preventDefault();setZoom(state.zoom-1);return;}
  if(key==='e'){
   const npc=selectedNpc();if(npc&&manhattan(state.player,npc)<=4)$('messageInput').focus();
   return;
