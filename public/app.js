@@ -160,7 +160,7 @@ function setAction(npc,action,source,scores){
  }
  if(action==='none'){
   npc.action='none';npc.source=source;npc.scores=scores;npc.task=null;
-  npc.goal='Observing the world';
+  if(!npc.goal)npc.goal='Observing the world';
  }else if(action==='rest'){
   npc.action='rest';npc.source=source;npc.scores=scores;npc.task=null;
   npc.path=[];npc.travel=0;npc.goal='Resting and recovering';
@@ -383,6 +383,7 @@ function drawWorld(){
  ctx.scale(state.zoom,state.zoom);
  ctx.translate(-state.camera.x,-state.camera.y);
  ctx.drawImage(staticCanvas,0,0);
+ VillageArt.drawWorldObjects(ctx,state.world);
  const actors=state.npcs.map(n=>({actor:n,player:false}));
  actors.push({actor:state.player,player:true});
  actors.sort((a,b)=>position(a.actor).y-position(b.actor).y);
@@ -416,12 +417,17 @@ function renderResidents(){
 function updateInspector(){
  const npc=selectedNpc();if(!npc)return;
  $('npcPortrait').textContent=npc.name[0];$('npcPortrait').style.background=npc.color+'44';
- $('npcName').textContent=npc.name;$('npcMeta').textContent=npc.role+' · '+npc.personality.split('.')[1]?.trim();
+ $('npcName').textContent=npc.name;
+ $('npcMeta').textContent=AgentWorld.focus(npc);
  for(const [prefix,value] of [['mood',npc.mood],['energy',npc.energy],['trust',npc.trust]]){
   $(prefix+'Val').textContent=Math.round(value)+'/100';
   $(prefix+'Meter').style.width=clamp(value)+'%';
  }
  $('npcGoal').textContent=npc.goal;
+ $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
+ $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
+ $('inventoryVal').textContent='Food '+npc.inventory.food+' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone;
+ $('socialVal').textContent=Math.round(npc.needs.social)+'/100';
  $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
  $('talkDistance').textContent=manhattan(state.player,npc)+' tiles away';
  const scores=$('npcDecisions');scores.replaceChildren();
@@ -457,14 +463,19 @@ function renderChat(){
 }
 function save(){
  try{
-  const pack={clock:state.clock,day:state.day,player:{x:state.player.x,y:state.player.y},npcs:state.npcs.map(n=>({
-   id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
-   source:n.source,action:n.action,scores:n.scores,facing:n.facing,memories:n.memories,
-   chat:n.chat.filter(item=>item.source!=='pending'),relationships:n.relationships,
-   path:n.path,socialTarget:n.socialTarget||null
-  }))};
+  const pack={clock:state.clock,day:state.day,
+   player:{x:state.player.x,y:state.player.y},
+   world:state.world,
+   npcs:state.npcs.map(n=>({
+    id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
+    source:n.source,action:n.action,scores:n.scores,facing:n.facing,
+    memories:n.memories,chat:n.chat.filter(item=>item.source!=='pending'),
+    relationships:n.relationships,path:n.path,needs:n.needs,inventory:n.inventory,
+    skills:n.skills,visited:n.visited,task:n.task
+   }))
+  };
   localStorage.setItem(STORE,JSON.stringify(pack));
- }catch{ /* Private mode / storage denied: keep playing without persistence. */ }
+ }catch{ /* Storage disabled or quota exceeded; the live simulation continues. */ }
 }
 function validSavedPath(path, start){
  if(!Array.isArray(path)||path.length>W*H)return false;
@@ -481,6 +492,7 @@ function restore(){
   const data=JSON.parse(localStorage.getItem(STORE)||'null');if(!data)return;
   if(Number.isFinite(data.clock)&&data.clock>=0)state.clock=data.clock;
   if(Number.isFinite(data.day))state.day=clamp(data.day,1,9999);
+  AgentWorld.restoreWorld(state.world,data.world);
   if(data.player&&!isBlocked(data.player.x,data.player.y)){
    state.player.x=Math.round(data.player.x);state.player.y=Math.round(data.player.y);
   }
@@ -488,18 +500,33 @@ function restore(){
    const prev=data.npcs?.find(n=>n.id===npc.id);if(!prev)continue;
    if(!isBlocked(prev.x,prev.y)){npc.x=prev.x;npc.y=prev.y;}
    for(const k of ['mood','energy','trust'])if(Number.isFinite(prev[k]))npc[k]=clamp(prev[k]);
-   for(const k of ['goal','source','action'])if(typeof prev[k]==='string')npc[k]=prev[k].slice(0,130);
+   if(typeof prev.goal==='string')npc.goal=prev.goal.slice(0,130);
+   if(AgentWorld.KEYS.includes(prev.action))npc.action=prev.action;
+   else {npc.action='none';npc.goal='Learning about this place';}
+   if(typeof prev.source==='string')npc.source=prev.source.slice(0,40);
    if(['up','down','left','right'].includes(prev.facing))npc.facing=prev.facing;
    if(prev.scores&&typeof prev.scores==='object')npc.scores=prev.scores;
    if(Array.isArray(prev.memories))npc.memories=prev.memories.slice(-16);
-   if(Array.isArray(prev.chat))npc.chat=prev.chat.slice(-22);
+   if(Array.isArray(prev.chat))npc.chat=prev.chat.filter(item=>item.source!=='pending').slice(-22);
    if(prev.relationships&&typeof prev.relationships==='object')npc.relationships=prev.relationships;
    if(validSavedPath(prev.path,npc))npc.path=prev.path.map(tile=>({x:tile.x,y:tile.y}));
-   if(typeof prev.socialTarget==='string'&&state.npcs.some(other=>other.id===prev.socialTarget))
-    npc.socialTarget=prev.socialTarget;
-   npc.thoughtAt=state.clock+10+state.npcs.indexOf(npc)*3;
+   for(const key of ['hunger','social','curiosity'])
+    if(Number.isFinite(prev.needs?.[key]))npc.needs[key]=clamp(prev.needs[key]);
+   for(const key of ['food','wood','stone'])
+    if(Number.isInteger(prev.inventory?.[key])&&prev.inventory[key]>=0)
+     npc.inventory[key]=Math.min(prev.inventory[key],1000);
+   for(const key of Object.keys(npc.skills))
+    if(Number.isInteger(prev.skills?.[key])&&prev.skills[key]>=0)
+     npc.skills[key]=Math.min(prev.skills[key],100000);
+   if(Array.isArray(prev.visited))npc.visited=prev.visited.filter(x=>typeof x==='string').slice(-32);
+   // Old job-based save files have no task. Do not resurrect their scripted routes.
+   if(prev.task&&AgentWorld.KEYS.includes(prev.task.key)&&
+       (prev.task.ref===null||typeof prev.task.ref==='string'))
+    npc.task={key:prev.task.key,ref:prev.task.ref};
+   else if(!data.world){npc.path=[];npc.action='none';}
+   npc.thoughtAt=state.clock+4+state.npcs.indexOf(npc)*3;
   }
- }catch{ /* Ignore stale or corrupt browser state. */ }
+ }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
 }
 const heldKeys=new Set();
 function step(dt){
@@ -510,40 +537,27 @@ function step(dt){
    a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]}[key];
   if(delta)moveTo(state.player,{x:state.player.x+delta[0],y:state.player.y+delta[1]});
  }
+ const elapsed=dt*state.speed;
  const beforeDay=Math.floor(state.clock/1440);
- state.clock+=dt*state.speed;
+ state.clock+=elapsed;
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
  updateMovement(state.player,dt,5.2);
+ AgentWorld.regenerate(state.world,elapsed);
  for(const npc of state.npcs){
   updateMovement(npc,dt,2.0);
-  npc.energy=clamp(npc.energy-dt*state.speed*0.04);
-  if(npc.action==='rest'&&manhattan(npc,locations[npc.home])<=1)
-   npc.energy=clamp(npc.energy+dt*state.speed*0.36);
-  if(npc.socialTarget&&!npc.path.length){
-   const other=state.npcs.find(n=>n.id===npc.socialTarget);
-   npc.socialTarget=null;
-   if(other&&manhattan(npc,other)<=2){
-    npc.relationships[other.id]=clamp((npc.relationships[other.id]??50)+1);
-    other.relationships[npc.id]=clamp((other.relationships[npc.id]??50)+1);
-    remember(npc,'Met '+other.name+' after seeking them out');
-    record(npc.name+' met '+other.name+' [simulation event]','social');
-   }
+  const recovered=AgentWorld.stepNeeds(npc,state.world,elapsed);
+  if(recovered){
+   remember(npc,'Recovered energy after resting');
+   npc.thoughtAt=state.clock+2;
   }
+  if(npc.task&&!npc.path.length)completeActivity(npc);
  }
- if(state.clock-state.lastSocial>16){
-  state.lastSocial=state.clock;
-  for(let i=0;i<state.npcs.length;i++)for(let j=i+1;j<state.npcs.length;j++){
-   const a=state.npcs[i],b=state.npcs[j];
-   if(manhattan(a,b)<=2&&rand(i+Math.floor(state.clock/16),j)>.54){
-    a.relationships[b.id]=clamp((a.relationships[b.id]??50)+1);
-    b.relationships[a.id]=clamp((b.relationships[a.id]??50)+1);
-    remember(a,'Briefly encountered '+b.name+' near '+a.goal.toLowerCase());
-    record(a.name+' and '+b.name+' crossed paths [simulation event]','social');
-   }
-  }
- }
- if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
-  const due=state.npcs.filter(n=>state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
+ // No automatic relationship gain from simply standing nearby.
+ // Characters must choose to socialize, share or help to affect each other.
+ if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&
+    performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
+  const due=state.npcs.filter(n=>!n.task&&n.action!=='rest'&&state.clock>=n.thoughtAt)
+    .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
  }
 }
