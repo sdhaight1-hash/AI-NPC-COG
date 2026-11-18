@@ -60,26 +60,82 @@ export function scoreLetters(result, options) {
   return { action: options[index].key, confidence: scores[options[index].key], scores };
 }
 
-async function callModel(endpoint, body, timeoutMs = 65000) {
+export class BusyError extends Error {
+  constructor(message = 'Model busy; background action deferred') {
+    super(message);
+    this.status = 429;
+  }
+}
+
+// Exactly one inference lane for llama-server --parallel 1. Foreground conversations
+// preempt disposable background work, and idle background requests never build a backlog.
+export function createInferenceLane() {
+  let tail = Promise.resolve();
+  let active = null;
+  let foregroundWaiting = 0;
+  let backgroundQueued = false;
+  return {
+    run(kind, work) {
+      if (kind === 'background') {
+        if (active || backgroundQueued || foregroundWaiting) {
+          return Promise.reject(new BusyError());
+        }
+        backgroundQueued = true;
+      } else if (kind === 'foreground') {
+        if (foregroundWaiting >= 2) {
+          return Promise.reject(new BusyError('Too many pending conversations'));
+        }
+        foregroundWaiting++;
+        if (active?.kind === 'background') {
+          active.controller.abort(new BusyError('Background inference yielded to player'));
+        }
+      } else {
+        throw new Error('Unknown inference priority');
+      }
+      const job = tail.then(async () => {
+        if (kind === 'background') {
+          backgroundQueued = false;
+          if (foregroundWaiting) throw new BusyError();
+        } else {
+          foregroundWaiting--;
+        }
+        const controller = new AbortController();
+        active = { kind, controller };
+        try {
+          return await work(controller.signal);
+        } finally {
+          active = null;
+        }
+      });
+      tail = job.then(() => {}, () => {});
+      return job;
+    },
+    stats() {
+      return { active: active?.kind ?? null, foregroundWaiting, backgroundQueued };
+    }
+  };
+}
+
+async function callModel(endpoint, body, signal, timeoutMs = 45000) {
   const response = await fetch(new URL(endpoint, MODEL_URL), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs)
+    signal: AbortSignal.any([AbortSignal.timeout(timeoutMs), signal ?? new AbortController().signal])
   });
   if (!response.ok) throw new Error('llama-server returned HTTP ' + response.status);
   return response.json();
 }
 
-export async function decide(input) {
+export async function decide(input, signal) {
   const prompt = buildDecisionPrompt(input);
   const raw = await callModel('/completion', {
     prompt, n_predict: 1, n_probs: 60, temperature: 0, cache_prompt: true
-  });
+  }, signal, 24000);
   return { ...scoreLetters(raw, input.options), source: 'rein' };
 }
 
-export async function speak(input) {
+export async function speak(input, signal) {
   const history = Array.isArray(input.history) ? input.history.slice(-8) : [];
   const messages = [{
     role: 'system',
@@ -98,9 +154,9 @@ export async function speak(input) {
   messages.push({ role: 'user', content: safeText(input.message, 700) });
   const raw = await callModel('/v1/chat/completions', {
     messages, chat_template_kwargs: { enable_thinking: false },
-    temperature: 0.75, top_p: 0.85, max_tokens: 150,
+    temperature: 0.75, top_p: 0.85, max_tokens: 120,
     logit_bias: { '248058': -100 }
-  });
+  }, signal, 60000);
   const reply = raw?.choices?.[0]?.message;
   if (reply?.tool_calls?.length) throw new Error('Unexpected tool call; no world action executed');
   const line = String(reply?.content ?? '')
@@ -128,21 +184,37 @@ async function readJson(req) {
   catch { throw new Error('Expected JSON request body'); }
 }
 export function startServer(port = PORT) {
+  const lane = createInferenceLane();
+  let lastHealthyAt = 0;
   const server = createServer(async (req, res) => {
     try {
       const route = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'GET' && route === '/api/health') {
         try {
           const response = await fetch(new URL('/health', MODEL_URL), { signal: AbortSignal.timeout(1800) });
-          return json(res, 200, { connected: response.ok, endpoint: MODEL_URL.origin });
-        } catch {
-          return json(res, 200, { connected: false, endpoint: MODEL_URL.origin });
-        }
+          if (response.ok) lastHealthyAt = Date.now();
+        } catch { /* Busy inference may delay /health; preserve recently confirmed status. */ }
+        return json(res, 200, {
+          connected: Date.now() - lastHealthyAt < 90000,
+          endpoint: MODEL_URL.origin, inference: lane.stats()
+        });
       }
-      if (req.method === 'POST' && (route === '/api/decide' || route === '/api/speak')) {
+      if (req.method === 'POST' && (route === '/api/decide' || route === '/api/speak' || route === '/api/interact')) {
         const input = await readJson(req);
-        const result = route === '/api/decide' ? await decide(input) : await speak(input);
-        return json(res, 200, result);
+        const started = performance.now();
+        let result;
+        if (route === '/api/decide') {
+          result = await lane.run('background', signal => decide(input, signal));
+        } else if (route === '/api/speak') {
+          result = await lane.run('foreground', signal => speak(input, signal));
+        } else {
+          result = await lane.run('foreground', async signal => {
+            const decision = await decide(input, signal);
+            const speech = await speak({ ...input, action: decision.action }, signal);
+            return { ...decision, reply: speech.reply };
+          });
+        }
+        return json(res, 200, { ...result, durationMs: Math.round(performance.now() - started) });
       }
       if (req.method === 'GET' && STATIC[route]) {
         const [name, type] = STATIC[route];
@@ -152,7 +224,7 @@ export function startServer(port = PORT) {
       }
       json(res, 404, { error: 'Not found' });
     } catch (error) {
-      json(res, 502, { error: error.message || 'Model unavailable' });
+      json(res, error.status || 502, { error: error.message || 'Model unavailable' });
     }
   });
   server.listen(port, '127.0.0.1', () => {
