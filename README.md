@@ -36,6 +36,22 @@ Hearthbrook now uses an **original 16×16 pixel-art rendering layer** inspired b
 
 **Camera:** Click `−` or `+` beside Camera, or use the minus/plus keys when the chat field isn't focused. 1× shows the complete village; 2× and 3× zoom follow the player. Click-to-move and NPC selection continue to work at all zoom levels.
 
+## Emergent inhabitants — no assigned occupations
+
+Hearthbrook is a compact **2D autonomy experiment**, inspired by the world-first design of [VoxelMind](https://voxel-mind.com/). There are six inhabitants, **zero predetermined jobs**, and one loaded local Rein-NPC GGUF shared between all of them. Their personalities are starting dispositions, not occupational descriptions. The simulation never directs a character to go to work at a set time.
+
+### Decision loop
+
+1. Each inhabitant has hunger, energy, social need, curiosity, inventory, personal memories and earned experience. Each can perceive only relevant nearby people and resource nodes, not the entire hidden state of the map.
+2. The environment creates a **bounded list of currently possible actions**: forage food, collect wood or stone, eat, recover, share food, socialize, explore or build a shared campfire when materials are available. Rein scores the options. There is no job slot, job schedule or fixed character-to-building mapping.
+3. World rules validate and execute the chosen action. Characters have to walk to resources. Gathering depletes them, eating consumes food, sharing transfers an actual item, and construction spends wood and stone and leaves a persistent, visible campfire. Sources slowly regenerate.
+4. Successful actions improve earned skill counters. The inspector describes the most common observed behavior only after it has happened multiple times; this is not a permanent class or job assignment. Memories preserve the consequences.
+5. Idle inhabitants take turns using the **same model server**, while player conversation preempts background decisions. Offline fallback is marked as deterministic survival behavior, **not AI-driven emergence**.
+
+The existing buildings are starting scenery and communal places, not employers or assigned homes. This is a **first testable slice**, not full VoxelMind feature parity. There are no farms, governments, advanced crafts, independently generated multi-step plans, or LLM-generated inhabitant-to-inhabitant dialogue yet. NPC-to-NPC interactions currently have deterministic social consequences but no invented scripted quotes. Meaningful civilization development requires extending the world action set and long-term memory.
+
+**Existing save migration:** Old trust, dialogue and memories are retained if a legacy browser save exists, but obsolete job actions and their routes are discarded. If you want every inhabitant to start without history from the previous job-based prototype, click **Reset** in the simulation. Reset clears local browser state.
+
 ## Controls
 
 - Click a villager to inspect their mood, goal, memories and relationships.
