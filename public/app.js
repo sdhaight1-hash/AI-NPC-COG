@@ -554,6 +554,9 @@ function updateInspector(){
   $(prefix+'Meter').style.width=clamp(value)+'%';
  }
  $('npcGoal').textContent=npc.goal;
+ $('npcPlan').textContent=npc.plan
+  ?npc.plan.key.replaceAll('_',' ')+' · '+npc.plan.steps+' steps'
+  :'No ongoing plan';
  $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
  $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
  $('inventoryVal').textContent='Food '+npc.inventory.food+' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone;
@@ -576,6 +579,18 @@ function updateInspector(){
   const msg=document.createElement('span');msg.className='empty';msg.textContent='No memories recorded.';memories.append(msg);
  }else for(const m of npc.memories.slice(-5).reverse()){
   const entry=document.createElement('div');entry.className='memory';entry.textContent=m.time+' — '+m.text;memories.append(entry);
+ }
+ const peerArea=$('peerLog');peerArea.replaceChildren();
+ if(!npc.peerLog?.length){
+  const empty=document.createElement('span');empty.className='empty';
+  empty.textContent='No completed AI conversations with other residents.';
+  peerArea.append(empty);
+ }else{
+  for(const exchange of npc.peerLog.slice(-3).reverse()){
+   const entry=document.createElement('div');entry.className='memory';
+   entry.textContent=exchange.at+' · '+exchange.first+' / '+exchange.second;
+   peerArea.append(entry);
+  }
  }
 }
 function renderChat(){
@@ -603,7 +618,8 @@ function save(){
     source:n.source,action:n.action,scores:n.scores,facing:n.facing,
     memories:n.memories,chat:n.chat.filter(item=>item.source!=='pending'),
     relationships:n.relationships,path:n.path,needs:n.needs,inventory:n.inventory,
-    skills:n.skills,visited:n.visited,task:n.task
+    skills:n.skills,visited:n.visited,task:n.task,
+    plan:n.plan,peerLog:n.peerLog,lastPeerAt:n.lastPeerAt
    }))
   };
   localStorage.setItem(STORE,JSON.stringify(pack));
@@ -656,10 +672,21 @@ function restore(){
        (prev.task.ref===null||typeof prev.task.ref==='string'))
     npc.task={key:prev.task.key,ref:prev.task.ref};
    else if(!data.world){npc.path=[];npc.action='none';}
+   npc.plan=AgentWorld.validatePlan(prev.plan);
+   if(Array.isArray(prev.peerLog))npc.peerLog=prev.peerLog
+    .filter(x=>x&&typeof x.first==='string'&&typeof x.second==='string'&&
+      typeof x.at==='string'&&typeof x.with==='string'&&
+      state.npcs.some(other=>other.id===x.with))
+    .slice(-10).map(x=>({at:x.at.slice(0,60),with:x.with,
+      first:x.first.slice(0,260),second:x.second.slice(0,260)}));
+   if(Number.isFinite(prev.lastPeerAt))npc.lastPeerAt=Math.min(state.clock,prev.lastPeerAt);
+   // A saved NPC encounter may restart, but it must earn model approval again.
+   if(npc.task?.key==='socialize')delete npc.task.approved;
    npc.thoughtAt=state.clock+4+state.npcs.indexOf(npc)*3;
   }
  }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
 }
+state.world.now=state.clock;
 const heldKeys=new Set();
 function step(dt){
  if(state.paused)return;
@@ -674,21 +701,26 @@ function step(dt){
  state.clock+=elapsed;
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
  updateMovement(state.player,dt,5.2);
+ state.world.now=state.clock;
  AgentWorld.regenerate(state.world,elapsed);
  for(const npc of state.npcs){
-  updateMovement(npc,dt,2.0);
+  if(!npc.peerPending)updateMovement(npc,dt,2.0);
   const recovered=AgentWorld.stepNeeds(npc,state.world,elapsed);
   if(recovered){
    remember(npc,'Recovered energy after resting');
    npc.thoughtAt=state.clock+2;
   }
-  if(npc.task&&!npc.path.length)completeActivity(npc);
+  if(!npc.peerPending&&!state.conversationBusy){
+   if(npc.task&&!npc.path.length)completeActivity(npc);
+   else if(npc.plan&&!npc.task&&!npc.path.length)advancePlan(npc);
+  }
  }
  // No automatic relationship gain from simply standing nearby.
  // Characters must choose to socialize, share or help to affect each other.
  if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&
     performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
-  const due=state.npcs.filter(n=>!n.task&&n.action!=='rest'&&state.clock>=n.thoughtAt)
+  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.peerPending&&
+    n.action!=='rest'&&state.clock>=n.thoughtAt)
     .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
  }
