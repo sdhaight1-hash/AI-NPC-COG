@@ -233,7 +233,7 @@ test('a player conversation pauses and resumes an NPC resource plan',async()=>{
  npc.goal='Collecting wood';
  browser.state.player.x=npc.x;browser.state.player.y=npc.y;
  browser.state.selected=npc.id;
- browser.elements.get('messageInput').value='Hello there';
+ browser.elements.set('messageInput',{value:'Hello there'});
  await browser.sendMessage({preventDefault(){}});
  assert.equal(npc.task.key,'collect_wood','Conversation must not erase active plans');
  assert.equal(npc.path.length,path.length);
