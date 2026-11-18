@@ -1,0 +1,5 @@
+*.gguf
+node_modules/
+.DS_Store
+*.log
+data/

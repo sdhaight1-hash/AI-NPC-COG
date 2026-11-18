@@ -1,0 +1,16 @@
+name: Smoke tests
+on:
+  push:
+    branches: ['feat/2d-rein-npc-sandbox', 'main']
+  pull_request:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check server.mjs
+      - run: node --check public/app.js
+      - run: node --test tests/*.test.mjs
