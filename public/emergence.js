@@ -172,7 +172,7 @@
       else if(n.inventory.stone<1)key='collect_stone';
       else key='build_fire';
     }else return {status:'blocked',reason:'Unrecognized intention'};
-    if(n.energy<12)return {status:'blocked',reason:'Too exhausted to continue'};
+    if(n.energy<20)key='rest';
     const option=available(n,world,residents,canReach).find(a=>a.key===key);
     return option?{status:'action',option}:{status:'blocked',reason:'Required resource or location unavailable'};
   }
