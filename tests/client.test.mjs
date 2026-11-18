@@ -53,7 +53,7 @@ function makeBrowser() {
     fetch:async()=>({ok:true,json:async()=>({connected:false})})
   };
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(source + '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save};',context);
+  vm.runInNewContext(source + '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath};',context);
   return { ...context.__expose, counters, events, saved };
 }
 
@@ -108,4 +108,14 @@ test('NPC world rules exclude night shifts from available model options',()=>{
   browser.state.clock=10*60;
   const daytime=browser.backgroundOptions(npc).map(item=>item.key);
   assert.ok(daytime.includes('work'));
+});
+
+test('saved NPC movement routes are contiguous and never cross buildings',()=>{
+  const browser=makeBrowser();
+  const npc=browser.state.npcs.find(n=>n.id==='nico');
+  assert.equal(browser.validSavedPath([{x:26,y:11},{x:26,y:10}],npc),true);
+  assert.equal(browser.validSavedPath([{x:26,y:9}],npc),false,'reject teleporting routes');
+  assert.equal(browser.validSavedPath([{x:27,y:12},{x:28,y:12},{x:29,y:12}],npc),true);
+  const mara=browser.state.npcs.find(n=>n.id==='mara');
+  assert.equal(browser.validSavedPath([{x:19,y:7}],mara),false,'reject a building tile');
 });
