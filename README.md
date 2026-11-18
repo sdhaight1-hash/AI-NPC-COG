@@ -45,7 +45,7 @@ Hearthbrook is a compact **2D autonomy experiment**, inspired by the world-first
 1. Each inhabitant has hunger, energy, social need, curiosity, inventory, personal memories and earned experience. Each can perceive only relevant nearby people and resource nodes, not the entire hidden state of the map.
 2. The environment creates a **bounded list of currently possible actions**: forage food, collect wood or stone, eat, recover, share food, socialize, explore or build a shared campfire when materials are available. Rein scores the options. There is no job slot, job schedule or fixed character-to-building mapping.
 3. World rules validate and execute the chosen action. Characters have to walk to resources. Gathering depletes them, eating consumes food, sharing transfers an actual item, and construction spends wood and stone and leaves a persistent, visible campfire. Sources slowly regenerate.
-4. Successful actions improve earned skill counters. The inspector describes the most common observed behavior only after it has happened multiple times; this is not a permanent class or job assignment. Memories preserve the consequences.
+4. Successful actions improve earned skills; practiced gatherers eventually collect more per trip while still depleting finite sources. The inspector describes the most common observed behavior only after it has happened multiple times; this is not a permanent class or job assignment. Memories preserve the consequences.
 5. Idle inhabitants take turns using the **same model server**, while player conversation preempts background decisions. Offline fallback is marked as deterministic survival behavior, **not AI-driven emergence**.
 
 The existing buildings are starting scenery and communal places, not employers or assigned homes. This is a **first testable slice**, not full VoxelMind feature parity. There are no farms, governments, advanced crafts, independently generated multi-step plans, or LLM-generated inhabitant-to-inhabitant dialogue yet. NPC-to-NPC interactions currently have deterministic social consequences but no invented scripted quotes. Meaningful civilization development requires extending the world action set and long-term memory.
@@ -69,9 +69,9 @@ When the model health indicator says **Rein connected**:
 - Player speech triggers a separate social-response decision, followed by an ordinary Rein chat-completion request.
 - The backend uses llama.cpp's raw /completion for one-token option probabilities, calibrated with Rein's documented 0.812 temperature, and /v1/chat/completions for speech.
 
-When the model is disconnected the sandbox continues with **clearly labeled deterministic routines and fallback dialogue**. Offline behavior is not presented as AI intelligence. The world remains authoritative: decisions cannot teleport people, cross blocked tiles or invent inventory. Movement, time, proximity, mood changes, and schedules are deterministic; NPC inference is event-driven and serialized to avoid GPU overload.
+When the model is disconnected the sandbox continues with **clearly labeled deterministic routines and fallback dialogue**. Offline behavior is not presented as AI intelligence. The world remains authoritative: decisions cannot teleport people, cross blocked tiles or invent inventory. Movement, time, physical needs, resource regeneration and action outcomes are deterministic; NPC choices are event-driven and serialized to avoid GPU overload.
 
-This is a prototype for *behavioral testing*, not a finished persistent-persona architecture: it has short episodic memory, simple relationship scores, social choices and goal selection, but not vector retrieval, reflective summarization, interiors, job inventories or economies.
+This is a prototype for *behavioral testing*, not a finished persistent-persona architecture: it has short episodic memory, individual needs, real inventory transfers, earned gathering experience and simple relationship scores, but not vector retrieval, reflective summarization, interiors or a full economy.
 
 ## Performance and architecture (RTX 2060 / 6 GB target)
 
@@ -82,7 +82,7 @@ The browser runs the **2D simulation continuously**, while the local Node bridge
 
 This is still **one loaded GGUF**, not a separate model instance per resident. Chat and decisions are serialized because `start.bat` uses `--parallel 1` for the 6 GB GPU. Priority cancellation reduces wait time but cannot guarantee instantaneous interruption inside llama.cpp. The model server's actual throughput depends on GPU drivers, VRAM pressure and context.
 
-The village now caches the unmoving map, renders dynamic characters at up to 30 FPS, and separates conversation and background busy state. Held WASD movement no longer clears its own path; walkable paths remain validated by the game. NPCs are prevented from receiving impossible actions such as night-time work; repeated idle decisions don't corrupt goals or restart routes.
+The village now caches the unmoving map, renders dynamic characters at up to 30 FPS, and separates conversation and background busy state. Held WASD movement no longer clears its own path; walkable paths remain validated by the game. NPCs are offered only contextually possible resource and social actions; repeated idle decisions don't corrupt goals or restart routes.
 
 When connected, background thinking begins at roughly one decision every 12 seconds or after the previous one has finished, whichever is later. Actual model latency is reported in the event timeline in milliseconds. The **Rein connected** indicator may remain online through short busy periods when health checks are delayed.
 
