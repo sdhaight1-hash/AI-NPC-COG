@@ -286,7 +286,10 @@ async function sendMessage(event){
   remember(npc,'Player said: '+message.slice(0,85)+'; I replied: '+reply.slice(0,80));
   record(npc.name+' response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+
    ' ['+source+']'+(source==='rein'?' '+durationMs+'ms':''),source==='rein'?'ai':'social');
-  if(action==='avoid')moveTo(npc,locations[npc.home]);
+  if(action==='avoid'){
+   npc.socialTarget=null;
+   moveTo(npc,locations[npc.home]);
+  }
   npc.mood=clamp(npc.mood+(action==='warm'?2:action==='refuse'?-2:0));
  }catch(error){
   record(npc.name+': conversation failed — '+error.message,'warning');
@@ -462,10 +465,21 @@ function save(){
   const pack={clock:state.clock,day:state.day,player:{x:state.player.x,y:state.player.y},npcs:state.npcs.map(n=>({
    id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
    source:n.source,action:n.action,scores:n.scores,memories:n.memories,
-   chat:n.chat.filter(item=>item.source!=='pending'),relationships:n.relationships
+   chat:n.chat.filter(item=>item.source!=='pending'),relationships:n.relationships,
+   path:n.path,socialTarget:n.socialTarget||null
   }))};
   localStorage.setItem(STORE,JSON.stringify(pack));
  }catch{ /* Private mode / storage denied: keep playing without persistence. */ }
+}
+function validSavedPath(path, start){
+ if(!Array.isArray(path)||path.length>W*H)return false;
+ let previous=start;
+ for(const tile of path){
+  if(!tile||!Number.isInteger(tile.x)||!Number.isInteger(tile.y)||
+    manhattan(previous,tile)!==1||isBlocked(tile.x,tile.y))return false;
+  previous=tile;
+ }
+ return true;
 }
 function restore(){
  try{
@@ -484,6 +498,9 @@ function restore(){
    if(Array.isArray(prev.memories))npc.memories=prev.memories.slice(-16);
    if(Array.isArray(prev.chat))npc.chat=prev.chat.slice(-22);
    if(prev.relationships&&typeof prev.relationships==='object')npc.relationships=prev.relationships;
+   if(validSavedPath(prev.path,npc))npc.path=prev.path.map(tile=>({x:tile.x,y:tile.y}));
+   if(typeof prev.socialTarget==='string'&&state.npcs.some(other=>other.id===prev.socialTarget))
+    npc.socialTarget=prev.socialTarget;
    npc.thoughtAt=state.clock+10+state.npcs.indexOf(npc)*3;
   }
  }catch{ /* Ignore stale or corrupt browser state. */ }
