@@ -8,12 +8,12 @@ const W = 40, H = 26;
 const STORE = 'ai-npc-cog-v1';
 
 const buildings = [
-  { id:'cottage', name:'Oak Cottage', x:4, y:3, w:7, h:5, door:{x:7,y:8}, roof:'#97674c' },
-  { id:'cafe', name:'Hearth Café', x:15, y:3, w:8, h:5, door:{x:19,y:8}, roof:'#bd775d' },
-  { id:'clinic', name:'Clinic', x:29, y:3, w:8, h:5, door:{x:33,y:8}, roof:'#7e93a4' },
-  { id:'forge', name:'Workshop', x:4, y:16, w:7, h:5, door:{x:7,y:21}, roof:'#78665a' },
-  { id:'library', name:'Library', x:16, y:17, w:8, h:5, door:{x:20,y:22}, roof:'#6a7c9f' },
-  { id:'market', name:'Market', x:29, y:17, w:8, h:5, door:{x:33,y:22}, roof:'#b58c5a' }
+  { id:'cottage', name:'Longhouse', x:4, y:3, w:7, h:5, door:{x:7,y:8}, roof:'#97674c' },
+  { id:'cafe', name:'Common House', x:15, y:3, w:8, h:5, door:{x:19,y:8}, roof:'#bd775d' },
+  { id:'clinic', name:'Storehouse', x:29, y:3, w:8, h:5, door:{x:33,y:8}, roof:'#7e93a4' },
+  { id:'forge', name:'Old Shed', x:4, y:16, w:7, h:5, door:{x:7,y:21}, roof:'#78665a' },
+  { id:'library', name:'Meeting Hall', x:16, y:17, w:8, h:5, door:{x:20,y:22}, roof:'#6a7c9f' },
+  { id:'market', name:'Covered Stalls', x:29, y:17, w:8, h:5, door:{x:33,y:22}, roof:'#b58c5a' }
 ];
 const locations = Object.fromEntries(buildings.map(b => [b.id, b.door]));
 locations.square={x:26,y:12};
