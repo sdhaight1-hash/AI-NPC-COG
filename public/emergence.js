@@ -95,7 +95,9 @@
     if(['forage','collect_wood','collect_stone'].includes(task.key)){
       const node=world.nodes.find(v=>v.id===task.ref);
       if(!node||node.stock<1||distance(n,node)>1)return {ok:false,message:'Resource no longer available'};
-      const collected=Math.min(2,node.stock);
+      // Repeated practice gradually improves output; expertise is earned, never assigned.
+      const expertise=n.skills[skillNames[task.key]]||0;
+      const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3)));
       node.stock-=collected;
       n.inventory[node.kind]+=collected;
       n.energy=clamp(n.energy-3*collected);
