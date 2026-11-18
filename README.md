@@ -2,21 +2,25 @@
 
 An experimental, local-first 2D village for testing autonomous NPC behavior with **Rein-NPC-4B-Q4_K_M.gguf**. The 2D renderer and simulation keep moving even during local model inference. Every decision is observable, labeled, and constrained by the world engine.
 
-## Quick start (Windows / PowerShell)
+## Quick start (Windows — one click)
 
-Requires Node.js 20+ and a recent CUDA-capable llama.cpp build that understands Rein's 64 added special tokens.
+**No manual llama.cpp installation and no model download required.**
 
-1. Start **your already-downloaded** model (replace the example path with the actual path on your computer):
+1. Place your existing model in this path inside the repository (you already have this file):
 
-       llama-server.exe -m "C:\path\to\Rein-NPC-4B-Q4_K_M.gguf" --host 127.0.0.1 --port 8080 -ngl 99 -c 8192 --parallel 1
+       Model\Rein-NPC-4B-Q4_K_M.gguf
 
-2. In a second terminal in the repository folder:
+2. **Double-click install.bat**. It checks for Node.js 20+, installs portable Node.js 22 LTS only if needed, and downloads the official Windows CUDA 12.4 llama.cpp server plus CUDA runtime DLLs. Both downloads are SHA-256 verified. It installs everything beneath the private _runtime folder and launches the program when successful.
 
-       node server.mjs
+3. The first run opens two console windows (model server and web server) and launches your browser at **http://127.0.0.1:5173**. Wait for the model to finish loading before expecting Rein-driven decisions.
 
-3. Open http://127.0.0.1:5173
+For later sessions, **double-click start.bat**. You do not need to run the installer again. Leave the two server console windows open while using the simulation; close them to stop it.
 
-No npm install, Python environment, cloud API, or GGUF re-download is required. The model file stays where you downloaded it. If GPU allocation fails on your RTX 2060 6 GB, reduce context to 4096, close other GPU programs, or try -ngl 25 and adjust upward.
+The script uses **your existing local GGUF**, changes no system PATH or security settings permanently, needs no administrator rights, and does not install Python or use cloud inference. Windows PowerShell is used for downloading and verifying the official release ZIPs. The combined llama.cpp/CUDA downloads can be several hundred megabytes, so the first install needs an internet connection and free disk space.
+
+If llama-server.exe reports out-of-memory on an RTX 2060 6GB, close other GPU applications and reduce the -ngl 99 setting to -ngl 25 in start.bat to offload some layers to RAM. If you already have Node.js, the installer reuses it. If interrupted, rerun install.bat; completed components are kept.
+
+**Troubleshooting:** If Windows blocks the download, verify the archive is from the official [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/releases) project. If the model server immediately exits with a CUDA DLL error, check that your NVIDIA graphics driver supports CUDA 12.4. Inspect the model server console for exact errors; the village UI will label offline fallback routines whenever Rein is not connected.
 
 ## Controls
 
