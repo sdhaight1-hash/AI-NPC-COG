@@ -23,6 +23,37 @@
       nodes:island.resources,construction:root.Construction?.fresh(),
       structures:[],items:[],itemSeq:1};
   }
+  // Transitional physical-load view over the existing numeric inventory.
+  // This computes measurements; it does not introduce a competing item store.
+  // The volumes are armful bulk estimates, NOT free storage pockets or vessels.
+  const ITEM_LOAD=Object.freeze({
+    food:{kg:.25,liters:.4},water:{kg:.4,liters:.4},
+    wood:{kg:2.5,liters:5},stone:{kg:2.2,liters:.85},
+    fiber:{kg:.2,liters:1.5},hatchet:{kg:1.5,liters:1.5},
+    cord:{kg:.3,liters:.4},blade:{kg:.45,liters:.3},
+    plank:{kg:.9,liters:2},crate:{kg:5,liters:17}
+  });
+  const MAX_CARRY_KG=32,MAX_CARRY_L=45;
+  function carrying(n){
+    let mass=0,bulk=0;
+    for(const [kind,count] of Object.entries(n.inventory||{})){
+      const def=ITEM_LOAD[kind];
+      if(!def||!Number.isInteger(count)||count<0)
+        return {valid:false,massKg:null,volumeL:null,
+          maxMassKg:MAX_CARRY_KG,maxVolumeL:MAX_CARRY_L};
+      mass+=count*def.kg;bulk+=count*def.liters;
+    }
+    return {valid:true,massKg:Number(mass.toFixed(3)),
+      volumeL:Number(bulk.toFixed(3)),
+      maxMassKg:MAX_CARRY_KG,maxVolumeL:MAX_CARRY_L};
+  }
+  function roomFor(n,kind){
+    const def=ITEM_LOAD[kind],load=carrying(n);
+    if(!def||!load.valid)return 0;
+    return Math.max(0,Math.min(1000-(n.inventory[kind]||0),
+      Math.floor((MAX_CARRY_KG-load.massKg+1e-9)/def.kg),
+      Math.floor((MAX_CARRY_L-load.volumeL+1e-9)/def.liters)));
+  }
   function newAgent(n, index=0) {
     n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
       social:35+(index*7)%32, curiosity:40+(index*11)%36 };
@@ -600,6 +631,6 @@
         Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
     }));
   }
-  root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,nextPlanAction,
+  root.AgentWorld={KEYS,newWorld,newAgent,carrying,roomFor,focus,available,complete,nextPlanAction,
     validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
 })(globalThis);
