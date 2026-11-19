@@ -247,6 +247,8 @@ async function deliberate(n){
     question:'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
    });
    activity(n).decisions++;
+   WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
+    data.source==='hivemind'?'hivemind':'rein');
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
       options.some(o=>o.key===data.action)){
     const selected=setAction(n,data.action,
@@ -254,6 +256,8 @@ async function deliberate(n){
     if(selected&&data.action==='none')autonomousPurpose(n);
    }else{
     activity(n).rejected++;
+    WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
+     'model','REJECTED','Stale, paused or invalid model option');
     activityNote(n,'Discarded stale, paused or invalid model selection');
    }
   }else if(!state.paused)setAction(n,fallbackBackground(n),'offline routine');
@@ -468,6 +472,15 @@ function updateInspector(){
  $('npcActivityFailures').textContent=(a.rejected+a.failed+a.blocked)+
   ' rejected/failed/blocked · '+a.errors+' model errors';
  $('npcActivityLast').textContent=a.last;
+ const receipts=(state.receipts||[]).filter(r=>r.actorId===n.id&&
+  (r.status==='COMPLETED'||r.status==='FAILED')).slice(-6).reverse();
+ $('npcWorldReceipts').textContent=receipts.map(r=>{
+  const impacts=(r.delta?.inventory||[]).map(d=>d.key+' '+(d.delta>0?'+':'')+d.delta);
+  const stocks=(r.delta?.nodeStock||[]).map(d=>d.key+' '+(d.delta>0?'+':'')+d.delta);
+  return r.id+' '+r.action+' '+r.status+
+   (r.reason?' ('+r.reason+')':'')+
+   (impacts.length||stocks.length?' ['+[...impacts,...stocks].join(', ')+']':'');
+ }).join('\n')||'No completed physical effects yet';
  $('npcCrafting').textContent=n.workpiece?
   Crafting.RECIPES[n.workpiece.recipe].name+' · '+(n.workpiece.stage+1)+'/'+
   Crafting.RECIPES[n.workpiece.recipe].stages.length:'No workpiece';
