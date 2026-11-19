@@ -124,6 +124,13 @@ test('cited hearsay leads to physical travel, finite gathering, then firsthand v
  });
  assert.ok(point);
  listener.x=point.x;listener.y=point.y;listener.path=[];listener.travel=null;
+ // The speaker must leave the destination clear: NPC collisions are real.
+ const away=Array.from({length:s.world.width*s.world.height},(_,i)=>({
+  x:i%s.world.width,y:Math.floor(i/s.world.width),z:0})).find(p=>
+   c.Frontier.distance(s.world,p,spring)>20&&
+   c.Frontier.traversable(s.world,p.x,p.y,0));
+ assert.ok(away);
+ n.x=away.x;n.y=away.y;n.path=[];n.travel=null;
  s.clock=23*60;s.world.now=s.clock;
  assert.equal(c.Perception.canSee(s,listener,spring),false);
  const option=c.WorldRuntime.available(s,listener).find(x=>
