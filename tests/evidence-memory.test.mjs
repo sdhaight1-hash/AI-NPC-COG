@@ -143,3 +143,33 @@ test('working memory is a view of actual task progress, not a made-up activity',
  assert.equal(E.working(a).remainingMinutes,11);
  assert.equal(E.state(a).episodes.length,0);
 });
+
+test('physical evidence receipts are single-use and cannot be replayed later',()=>{
+ const {E,sim,a,world}=setup();
+ const receipt=committed(sim,a,'inspect','spring_1','evt_500');
+ const original=E.fromReceipt(sim,a,receipt);
+ assert.ok(original);
+ assert.equal(E.record(sim,a,{type:'inspection',text:'new stock',
+  ref:'spring_1',receiptId:receipt.id}),null,
+  'Direct recording cannot duplicate a receipt already committed');
+ assert.equal(E.state(a).facts.length,1);
+ sim.clock+=10;world.nodes[0].stock=0;
+ assert.equal(E.record(sim,a,{type:'inspection',text:'now empty',
+  ref:'spring_1',receiptId:receipt.id}),null,
+  'An old receipt cannot certify an observation at a later clock');
+ assert.equal(E.state(a).facts[0].value,'7');
+ const other=committed(sim,a,'inspect','spring_1','evt_501');
+ const observed=E.record(sim,a,{type:'inspection',text:'observe again',
+  ref:'spring_1',receiptId:other.id});
+ assert.ok(observed);
+ assert.equal(E.state(a).facts[1].value,'0');
+});
+test('an unused old receipt cannot certify a later changed world state',()=>{
+ const {E,sim,a,world}=setup();
+ const receipt=committed(sim,a,'inspect','spring_1','evt_600');
+ sim.clock+=20;world.nodes[0].stock=0;
+ assert.equal(E.record(sim,a,{type:'inspection',text:'stale',
+  ref:'spring_1',receiptId:receipt.id}),null);
+ assert.equal(E.state(a).episodes.length,0);
+ assert.equal(E.state(a).facts.length,0);
+});
