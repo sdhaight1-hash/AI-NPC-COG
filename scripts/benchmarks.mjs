@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 for(const name of ['frontier','biology','crafting','cognition','agency',
- 'emergence','civilization','receipts','activities','reservations','projects','world-runtime','simulation','persistence'])
+ 'emergence','civilization','receipts','activities','reservations','projects','perception','world-runtime','simulation','persistence'])
  await import('../public/'+name+'.js');
 const {Simulation,WorldRuntime,Biology,WorldReceipts}=globalThis;
 const hash=state=>createHash('sha256').update(Simulation.canonical(state)).digest('hex');
