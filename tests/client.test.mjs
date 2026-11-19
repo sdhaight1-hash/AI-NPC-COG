@@ -58,7 +58,7 @@ function makeBrowser(options={}) {
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   vm.runInNewContext(art+'\n'+physics+'\n'+frontier+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions};',context);
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions,reachability};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
 
@@ -600,4 +600,19 @@ test('migration preserves legacy relationships but starts new discovery independ
  assert.equal(next.state.npcs[0].relationships.jonas,77);
  assert.equal(next.state.npcs[0].memories[0].text,'Remembering a promise');
  assert.ok(next.state.world.discovered[12*80+21]);
+});
+
+test('connected-region flood fill agrees with pathfinder and rejects submerged cells',()=>{
+ const browser=makeBrowser();
+ const n=browser.state.npcs[0],reachable=browser.reachability(n);
+ const targets=[{x:41,y:22},{x:42,y:23},{x:19,y:7},{x:38,y:21}];
+ for(const target of targets){
+  const blocked=browser.state.world.terrain[target.y*80+target.x]==='water'||
+   (target.x>=15&&target.x<23&&target.y>=3&&target.y<8)||
+   (target.x-38)**2+(target.y-21)**2<=4;
+  if(blocked)assert.equal(reachable(target),false,'No flood passage through obstacles');
+  else assert.equal(reachable(target),browser.pathfind(n,target).length>0);
+ }
+ assert.equal(reachable({x:-1,y:3}),false);
+ assert.equal(reachable({x:999,y:999}),false);
 });
