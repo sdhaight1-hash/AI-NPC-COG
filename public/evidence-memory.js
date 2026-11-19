@@ -120,7 +120,7 @@
   m.lastDay=day;
   return count;
  }
- function restore(n,saved,clock){
+ function restore(n,saved,clock,legacyMemories=null){
   const result=empty();
   if(saved&&typeof saved==='object'){
    const entries=Array.isArray(saved.episodes)?saved.episodes.slice(-MAX_EPISODES):[];
@@ -160,6 +160,22 @@
      certainty:'inferred'}));
    result.lastDay=Number.isSafeInteger(saved.lastDay)?
     Math.max(0,Math.min(Math.floor(clock/1440),saved.lastDay)):0;
+  }
+  // Legacy v3 memories have no verified receipt provenance. Keep their
+  // recollections useful but mark them reported; never derive factual claims.
+  if(!saved&&Array.isArray(legacyMemories)){
+   for(const m of legacyMemories.slice(-MAX_EPISODES)){
+    if(!m||typeof m.text!=='string'||!Number.isFinite(m.at)||
+     m.at<0||m.at>clock)continue;
+    result.episodes.push({id:'ev_'+(++result.sequence),type:'personal',
+     text:m.text.slice(0,180),at:m.at,
+     ref:typeof m.ref==='string'?m.ref.slice(0,100):null,
+     receiptId:null,certainty:'reported',
+     salience:Math.max(1,Math.min(5,Number(m.salience)||1)),
+     location:{x:Number.isInteger(m.x)?m.x:n.x,
+      y:Number.isInteger(m.y)?m.y:n.y,z:n.z||0}});
+   }
+   result.episodes=result.episodes.slice(-MAX_EPISODES);
   }
   n.evidenceMemory=result;
   return result;
