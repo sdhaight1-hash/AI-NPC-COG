@@ -118,8 +118,27 @@ function reachableFrom(npc,point){
  return !isBlocked(point.x,point.y)&&
   (manhattan(npc,point)===0||pathfind(npc,point).length>0);
 }
+function reachability(npc){
+ // One breadth-first flood per cognition event. Avoid dozens of separate
+ // pathfind calls over the larger island when comparing resource affordances.
+ const visited=new Uint8Array(W*H);
+ const queue=[{x:npc.x,y:npc.y}];
+ if(isBlocked(npc.x,npc.y))return ()=>false;
+ visited[npc.y*W+npc.x]=1;
+ for(let i=0;i<queue.length;i++){
+  const point=queue[i];
+  for(const [dx,dy] of [[0,-1],[1,0],[0,1],[-1,0]]){
+   const x=point.x+dx,y=point.y+dy,k=y*W+x;
+   if(x<0||y<0||x>=W||y>=H||visited[k]||isBlocked(x,y))continue;
+   visited[k]=1;queue.push({x,y});
+  }
+ }
+ return point=>Number.isInteger(point.x)&&Number.isInteger(point.y)&&
+  point.x>=0&&point.y>=0&&point.x<W&&point.y<H&&
+  visited[point.y*W+point.x]===1;
+}
 function availableActivities(npc){
- return AgentWorld.available(npc,state.world,state.npcs,point=>reachableFrom(npc,point));
+ return AgentWorld.available(npc,state.world,state.npcs,reachability(npc));
 }
 function sceneFor(npc){
  const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
@@ -234,7 +253,7 @@ function advancePlan(npc){
     state.clock<(npc.nextPlanAt||0))return;
  if(npc.plan.steps>=8)return finishPlan(npc,'Reached the eight-step safety limit','warning');
  const next=AgentWorld.nextPlanAction(npc,state.world,state.npcs,
-  point=>reachableFrom(npc,point));
+  reachability(npc));
  if(next.status==='done')return finishPlan(npc,'Completed');
  if(next.status==='blocked')return finishPlan(npc,next.reason,'warning');
  if(!setAction(npc,next.option.key,'plan',null))
