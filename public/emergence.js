@@ -448,7 +448,7 @@
   function validatePlan(saved){
     if(!saved || !['stock_food','stock_water','stock_wood','stock_stone','stock_fiber',
       'make_campfire','make_shelter','craft_project'].includes(saved.key) ||
-       !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>8)return null;
+       !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>24)return null;
     return saved.key==='craft_project'?
       {key:saved.key,recipe:root.Crafting.getRecipe(saved.recipe)?saved.recipe:null,steps:saved.steps}:
       {key:saved.key,steps:saved.steps};
