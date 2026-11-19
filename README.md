@@ -22,6 +22,22 @@ If llama-server.exe reports out-of-memory on an RTX 2060 6GB, close other GPU ap
 
 **Troubleshooting:** If Windows blocks the download, verify the archive is from the official [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/releases) project. If the model server immediately exits with a CUDA DLL error, check that your NVIDIA graphics driver supports CUDA 12.4. Inspect the model server console for exact errors; the village UI will label offline fallback routines whenever Rein is not connected.
 
+## World overhaul v1 — seeded island survival
+
+The experimental world is now a **deterministic 80×52 tile island**, with the legacy 40×26 starting settlement retained as a safe arrival clearing. Outside it, a seeded terrain generator creates **meadow, forest, marsh, rocky upland, beaches, and water**. Terrain is not arbitrary wallpaper: deep water blocks movement; resources are distributed by habitat; walking to a source uses the same pathfinding and physical collision as other NPC behavior.
+
+**Exploration and atmosphere.** The player initially knows only a small area. Moving reveals wilderness through permanent fog-of-war; a 160×104 minimap shows explored terrain and visible residents. Island seed, day, weather and temperature are visible in the UI. Weather varies deterministically by day; rain or storms increase fatigue unless a nearby shelter protects a character. The original art and optional Kenney CC0 tiles are still supported.
+
+**Survival and crafting.** All six AI characters and the player use the **same authoritative finite resource nodes**. Food, wood, stone, plant fiber and freshwater can be collected from appropriate sites. Food and water are consumed; hunger and thirst rise over time. Repeated work increases experience; crafted stone hatchets increase wood-gathering output. Characters can use wood and fiber to build a shelter that persists and improves recovery during harsh conditions. Resources regenerate at bounded rates rather than appearing from nothing.
+
+**Player participation.** Hold WASD/arrows or click to navigate, then use the **Survival / Exploration** buttons to collect resources, drink, eat, craft a hatchet, build shelter, or rest. Buttons disable when the action is unavailable or its required materials are missing. The AI residents have access to the same world rules, and can choose a longer-term \`make_shelter\` goal that retrieves missing materials across multiple trips. Their decisions still use the **one loaded Rein-NPC-4B model**.
+
+**Seeds and persistence.** **New island** generates a fresh random seed and clears the current simulation after confirmation. Reset also clears local progress. New saves use \`ai-npc-cog-v2\`, while the former \`ai-npc-cog-v1\` save is left untouched and may be read once for dialogue, skills and relationships on upgrade. The deterministic terrain and changed resource stocks, structures, discovered map and player supplies are persisted in the new save.
+
+**Wayward reference and ownership.** This milestone uses the *systems design* of [Wayward](https://store.steampowered.com/app/379210/Wayward/) as inspiration for survival and procedural exploration. **No Wayward source code, world data, dialogue, or artwork has been copied.** It is an original implementation centered on shared-model agents.
+
+**Scope:** this is an extensible survival world *foundation*, not a complete Wayward reproduction. There is no infinite archipelago, farming, animal ecosystem, combat, injury or death system, equipment durability, advanced technology chain, multiplayer, or server-authoritative simulation yet. These need explicit world-rule, AI affordance and persistence designs before implementation. The starting settlement remains static for compatibility in this milestone.
+
 ## Graphics — pixel-art village
 
 Hearthbrook now uses an **original 16×16 pixel-art rendering layer** inspired by classic top-down RPG tilesets, including [Anokolisa's Pixel Crawler free pack](https://anokolisa.itch.io/free-pixel-art-asset-pack-topdown-tileset-rpg-16x16-sprites).
@@ -29,7 +45,7 @@ Hearthbrook now uses an **original 16×16 pixel-art rendering layer** inspired b
 - Hand-authored procedural pixel tiles for grass, stone and dirt roads, flowerbeds, water, shrubs, trees, fences, lamps, well and market props.
 - Six visually distinct NPC sprites plus the player, with four facing directions and four-phase walking animations.
 - Buildings differentiated by roofing, windows, signs, doors, awnings, and other decorations.
-- A **nearest-neighbor/pixel-perfect Canvas renderer** at a 640×416 logical resolution, with 1×/2×/3× camera zoom. The camera follows the player when zoomed in. The original 40×26 grid, pathfinding, interaction ranges, and save-state format are preserved.
+- A **nearest-neighbor/pixel-perfect Canvas renderer** at a 640×416 logical resolution, with 1×/2×/3× camera zoom. The camera follows the player when zoomed in. The original starting area's layout and paths are preserved within the **expanded 80×52 world**. Interaction ranges and tile-based navigation remain compatible; save-state storage has been versioned.
 - Static scenery is cached. Dynamic lighting, water ripples, drifting particles and campfire smoke are rendered over the scene without changing resource or AI state.
 - The optional **Kenney Tiny Town CC0 16×16 atlas** is downloaded automatically once to `public/assets` on Windows startup. If installation fails or you are offline, the original procedural village continues to render. Use **Art: CC0 Tiny Town / Art: Original** in the toolbar to compare either treatment.
 
@@ -67,6 +83,9 @@ The existing buildings are starting scenery and communal places, not employers o
 - Click a villager to inspect their mood, goal, memories and relationships.
 - Hold WASD or the arrow keys for continuous acceleration and friction. Diagonal movement is normalized; collision with solid tiles and residents prevents walking through them.
 - Click open ground for physically smooth, tile-navigated travel. The player can slide along obstacles while moving manually.
+- Explore outward to uncover fog-of-war. The map includes an explored-terrain minimap.
+- Use Survival / Exploration controls near local resource sites to gather, eat, drink, craft and build.
+- The New island button creates a different seeded wilderness after confirmation.
 - Use **Physics: Debug on** to reveal walls, circular character collision bodies, and velocity vectors.
 - **Art: CC0 Tiny Town / Art: Original** switches locally installed tiles and procedural art instantly.
 - Approach an NPC within four tiles to talk; hit E or use Talk.
