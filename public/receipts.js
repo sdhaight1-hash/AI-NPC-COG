@@ -63,6 +63,7 @@
    clock:state.clock,actorId:input.actorId,commandId:input.commandId,
    action:input.action,targetId:input.targetId??null,
    status:input.status,reason:input.reason??null,
+   source:input.source??null,
    effectRevision:state.effectRevision||0,delta:input.delta||{}};
   state.receipts.push(receipt);
   if(state.receipts.length>MAX)state.receipts.splice(0,state.receipts.length-MAX);
@@ -70,6 +71,10 @@
  }
  function accept(state,n,action,commandId,ref=null){
   return append(state,{actorId:n.id,commandId,action,targetId:ref,status:'ACCEPTED'});
+ }
+ function decision(state,n,action,source,status='DECIDED',reason=null){
+  return append(state,{actorId:n.id,commandId:null,action,source,
+   status,reason});
  }
  function committed(state,commandId){
   return state.receipts?.find(r=>r.commandId===commandId&&
@@ -95,5 +100,5 @@
    delta});
   return {...outcome,receipt};
  }
- root.WorldReceipts={MAX,accept,execute,snapshot,change,committed};
+ root.WorldReceipts={MAX,accept,decision,execute,snapshot,change,committed};
 })(globalThis);
