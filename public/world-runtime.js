@@ -23,13 +23,17 @@
   const w=state.world;
   const a={x:wrap(start.x,w.width),y:wrap(start.y,w.height),z:start.z||0};
   const b={x:wrap(end.x,w.width),y:wrap(end.y,w.height),z:end.z||0};
-  if(blocked(state,b))return [];
+  // Moving residents are real obstacles. Dynamic occupancy is assessed at
+  // planning time and still rechecked by move() before each tile transition.
+  const occupied=new Set(state.npcs.filter(other=>
+   other!==start&&other.alive!==false).map(pointKey));
+  if(blocked(state,b)||occupied.has(pointKey(b)))return [];
   const queue=[a],back=new Map([[pointKey(a),null]]);
   for(let i=0;i<queue.length;i++){
    const p=queue[i];
    if(pointKey(p)===pointKey(b))break;
    for(const next of root.Frontier.neighbors(w,p)){
-    if(back.has(pointKey(next)))continue;
+    if(back.has(pointKey(next))||occupied.has(pointKey(next)))continue;
     back.set(pointKey(next),p);queue.push(next);
    }
   }
@@ -242,8 +246,10 @@
   }else{
    const target=option.target;
    if(target&&distance(state,n,target)>1){
-    const good=(action==='share_food'||action==='socialize')?
-     approach(state,n,target):moveTo(state,n,target);
+    // World interactions only need an adjacent free tile. Exploration alone
+    // requires entering its destination; an occupied spring must stay usable.
+    const good=action==='explore'?moveTo(state,n,target):
+     approach(state,n,target);
     if(!good){
      root.Reservations.releaseCommand(state,commandId,'ROUTE_REJECTED');
      stats(n).rejected++;note(n,'No reachable path for '+action);
