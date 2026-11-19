@@ -65,8 +65,18 @@
  function instinct(n,options){
   const keys=new Set(options.map(o=>o.key));
   const choose=(...actions)=>actions.find(k=>keys.has(k))||null;
-  if(n.needs.thirst>=85||n.bio?.hydrationBudgetMl<350)
-   return choose(n.inventory.water>0?'drink':'fill_water','fill_water','drink');
+  const hydration=n.bio?.hydrationBudgetMl??2400;
+  // Stock and drink early enough to survive travel, gathering and sleep.
+  // No water is created: every choice must still be a legal world affordance.
+  if(n.needs.thirst>=62||hydration<1200){
+   const water=choose(n.inventory.water>0?'drink':'fill_water','fill_water','drink');
+   if(water)return water;
+   if(n.energy>=18)return choose('explore'); // physically scout for unknown water
+  }
+  if(n.inventory.water<2&&hydration<1600){
+   const reserve=choose('fill_water');
+   if(reserve)return reserve;
+  }
   if(n.needs.hunger>=85||n.bio?.longTermKcal<150)
    return choose(n.inventory.food>0?'eat':'forage','forage','eat');
   if(n.energy<=18)return choose('rest');

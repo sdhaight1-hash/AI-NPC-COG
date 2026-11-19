@@ -375,15 +375,23 @@
  }
  function survival(state,n,hooks={}){
   if(n.peerPending||n.peerReservedFor)return false;
-  // Avoid a full flood-fill every simulated minute when no reflex is possible.
-  // These are exactly the thresholds used by Cognition.instinct.
-  if(n.needs.thirst<85&&n.bio?.hydrationBudgetMl>=350&&
-   n.needs.hunger<85&&n.bio?.longTermKcal>=150&&n.energy>18)return false;
-  const urgent=root.Cognition.instinct(n,available(state,n));
-  if(!urgent)return false;
   const critical=n.needs.thirst>=90||n.needs.hunger>=95||
    n.bio?.hydrationBudgetMl<200;
+  // Do not perform expensive affordance searches during ongoing physical work
+  // unless the body is in immediate danger.
   if((n.task||n.path.length||n.action==='rest')&&!critical)return false;
+  const hydration=n.bio?.hydrationBudgetMl??2400;
+  // An emergency-interrupted craft may resume once the immediate threat has
+  // been relieved. A 450 ml buffer outlasts ordinary bounded work stages.
+  if((n.suspendedActivities?.length||n.plan?.key==='craft_project')&&
+   hydration>=450&&
+   n.needs.thirst<85&&n.needs.hunger<90&&n.energy>18)return false;
+  const waterSafe=n.needs.thirst<62&&hydration>=1200&&
+   (n.inventory.water>=2||hydration>=1600);
+  if(waterSafe&&n.needs.hunger<85&&n.bio?.longTermKcal>=150&&
+   n.energy>18)return false;
+  const urgent=root.Cognition.instinct(n,available(state,n));
+  if(!urgent)return false;
   if(n.task?.key===urgent)return false;
   if(n.task||n.path.length||n.action==='rest'){
    root.Activities.interrupt(state,n,'CRITICAL_NEED');

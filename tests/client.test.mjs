@@ -556,3 +556,20 @@ test('watchable initial pace defaults to six-minute days and respects saved pref
  const invalid=new Map([['ai-npc-cog-speed','400000']]);
  assert.equal(makeBrowser({saved:invalid}).launchedSpeed,240);
 });
+
+test('early thirst response drinks only through a completed physical activity',()=>{
+ const b=makeBrowser();
+ const n=b.state.npcs[0];
+ n.needs.thirst=65;n.bio.hydrationBudgetMl=1050;
+ n.inventory.water=1;n.task=null;n.plan=null;n.path=[];n.action='none';
+ const before=n.bio.hydrationBudgetMl;
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.task?.key,'drink');
+ assert.equal(n.inventory.water,1,'Starting a drink must not consume liquid yet');
+ assert.equal(n.bio.hydrationBudgetMl,before,'Starting a drink must not mint hydration');
+ b.step(2);
+ assert.equal(n.inventory.water,0,'Physical completion consumes one water');
+ assert.ok(n.bio.hydrationBudgetMl>before,'Drinking must replenish hydration');
+ assert.ok(b.state.receipts.some(r=>r.action==='drink'&&r.status==='COMPLETED'&&
+  r.actorId===n.id),'Water effects require an authoritative completed receipt');
+});
