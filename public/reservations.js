@@ -47,7 +47,8 @@
    const quality=n.craftedItems?.find(x=>x.kind==='hatchet')?.quality||2;
    const axe=n.inventory.hatchet&&kind==='wood'?(quality>=4?2:1):0;
    const intended=Math.min(target.stock,2+Math.min(2,Math.floor(skills/3))+axe,
-    root.AgentWorld?.roomFor(n,kind)??1000);
+    root.AgentWorld?.roomFor(n,kind)??1000,
+    action==='fill_water'?(root.AgentWorld?.vesselRoom(n)??0):1000);
    return intended>0?[node(kind,intended)]:[];
   }
   const recipe=action.startsWith('craft_')?
