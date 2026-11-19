@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 function setup(){
  const c=vm.createContext({});
  const names=['frontier','biology','crafting','cognition','agency','emergence',
-  'civilization','receipts','activities','reservations','world-runtime',
+  'civilization','receipts','activities','reservations','projects','world-runtime',
   'simulation','persistence'];
  vm.runInContext(names.map(name=>readFileSync(
   new URL('../public/'+name+'.js',import.meta.url),'utf8')).join('\n'),c);
