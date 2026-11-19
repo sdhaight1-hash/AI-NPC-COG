@@ -284,3 +284,20 @@ test('fabricated, unspoken or unsupported source tags never become transmitted c
  E.restore(clone,forged,sim.clock);
  assert.equal(E.state(clone).claims.length,0,'Tampered save without spoken tag is rejected');
 });
+
+test('historical failed gather cannot be replayed after later depletion',()=>{
+ const {E,sim,a,b,world}=setup();
+ a.name='Asha';b.name='Mara';
+ const inspection=committed(sim,a,'inspect','spring_1','evt_910');
+ E.fromReceipt(sim,a,inspection);
+ sim.clock++;
+ const speech=committed(sim,a,'socialize',b.id,'evt_911');
+ E.fromDialogue(sim,a,b,speech,'Visit [source:spring_1]','Thanks');
+ assert.equal(E.state(b).claims[0].status,'unverified');
+ const failed=committed(sim,b,'fill_water','spring_1','evt_912');
+ failed.status='FAILED';
+ sim.clock+=10;
+ world.nodes[0].stock=0;
+ assert.equal(E.fromFailedReceipt(sim,b,failed),0);
+ assert.equal(E.state(b).claims[0].status,'unverified');
+});
