@@ -509,3 +509,37 @@ test('fast-forward browser frames keep time advancing with active offline agents
  assert.ok(b.frames.length>60);
  assert.equal(b.state.paused,false);
 });
+
+test('connected inference backlog does not freeze other residents for simulated hours',()=>{
+ const b=makeBrowser();
+ b.state.connected=true;b.state.backgroundBusy=true;
+ const pending=b.state.npcs[0];
+ b.state.modelDecisionActor=pending;
+ b.state.clock=500;b.state.world.now=500;
+ for(const n of b.state.npcs){
+  n.thoughtAt=490;n.needs.hunger=20;n.needs.thirst=20;
+  n.energy=85;n.task=null;n.plan=null;n.action='none';n.path=[];
+ }
+ b.scheduleIdleAgents();
+ assert.equal(pending.task,null,'Do not overrule the NPC awaiting a model response');
+ assert.equal(pending.plan,null);
+ for(const n of b.state.npcs.slice(1)){
+  assert.ok(n.task||n.plan||n.action==='rest'||n.project,
+   n.id+' must be allowed a legal autonomous action while inference is busy');
+  assert.ok(n.thoughtAt>500,'Fallback action must be rate-limited in game time');
+ }
+ assert.equal(b.state.backgroundBusy,true,'Fallback cannot steal the inference lane');
+});
+test('connected backlog never overrides a fresh model request before the grace period',()=>{
+ const b=makeBrowser();
+ b.state.connected=true;b.state.backgroundBusy=true;
+ b.state.modelDecisionActor=b.state.npcs[0];
+ b.state.clock=500;b.state.world.now=500;
+ for(const n of b.state.npcs){
+  n.thoughtAt=496;n.needs.hunger=20;n.needs.thirst=20;
+  n.energy=85;n.task=null;n.plan=null;n.action='none';n.path=[];
+ }
+ b.scheduleIdleAgents();
+ for(const n of b.state.npcs.slice(1))
+  assert.equal(n.task,null,'Recent model-eligible resident should retain the model lane');
+});
