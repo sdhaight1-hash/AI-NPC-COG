@@ -7,10 +7,10 @@
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water',
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
-    'experiment_wood_stone_fiber','inspect','drop_wood','pickup_item','explore','none'];
+    'experiment_wood_stone_fiber','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink:'survival',
-    craft_hatchet:'crafting',build_shelter:'building',inspect:'exploring',
+    craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
     socialize:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
@@ -59,6 +59,10 @@
           ' ('+object.stock+'/'+object.max+' units); habitat '+
           Frontier.terrainAt(world,object.x,object.y)};
     }
+    if(object.type==='cache')
+      return {id:object.id,name:'Material cache',kind:'cache',x:object.x,y:object.y,
+        condition:'constructed',description:'A simple storage cache with '+
+          (object.contents?.wood||0)+'/12 units of stored wood'};
     if(object.type==='campfire'||object.type==='shelter')
       return {id:object.id,name:object.type==='campfire'?'Campfire':'Shelter',
         kind:object.type,x:object.x,y:object.y,condition:'constructed',
@@ -156,6 +160,18 @@
        (n.inventory.wood>=4||findNode(n,world,'wood',canReach))&&
        (n.inventory.fiber>=3||findNode(n,world,'fiber',canReach)))
       add('make_shelter','Form an intention to collect materials and construct a shelter');
+    if(n.knowledge.recipes.includes('shelter')&&n.inventory.wood>=2&&
+      n.inventory.fiber>=1&&n.energy>=20&&
+      !world.structures.some(site=>site.type==='cache'&&distance(n,site)<3))
+      add('build_cache','Build a small wood-and-fiber storage cache using a known method');
+    const cache=world.structures.filter(site=>site.type==='cache'&&
+      distance(n,site)<=8&&canReach(site)).sort((a,b)=>distance(n,a)-distance(n,b))[0];
+    if(cache){
+      if(n.inventory.wood>0&&(cache.contents?.wood||0)<12)
+        add('store_wood','Store one carried wood in a nearby material cache',cache,cache.id);
+      if(n.inventory.wood<2&&(cache.contents?.wood||0)>0)
+        add('retrieve_wood','Take one stored wood from a nearby cache',cache,cache.id);
+    }
     const examine=inspectTarget(n,world,canReach);
     if(examine&&n.energy>=10)
       add('inspect','Examine '+describeObject(world,examine).name+
@@ -252,6 +268,32 @@
         return {ok:false,message:'Missing tool materials'};
       n.inventory.wood--;n.inventory.stone--;n.inventory.fiber--;
       n.inventory.hatchet=1;message='Crafted a stone hatchet for faster wood gathering';
+    }else if(task.key==='build_cache'){
+      if(!n.knowledge.recipes.includes('shelter')||n.inventory.wood<2||
+        n.inventory.fiber<1||n.energy<20||
+        world.structures.some(site=>site.type==='cache'&&distance(n,site)<3))
+        return {ok:false,message:'Cannot construct a cache here'};
+      n.inventory.wood-=2;n.inventory.fiber--;n.energy=clamp(n.energy-8);
+      const cache={id:'cache_'+(world.structures.length+1),type:'cache',
+        x:n.x,y:n.y,contents:{wood:0}};
+      world.structures.push(cache);
+      message='Constructed an empty material cache at '+n.x+','+n.y;
+    }else if(task.key==='store_wood'||task.key==='retrieve_wood'){
+      const cache=world.structures.find(site=>site.id===task.ref&&site.type==='cache');
+      if(!cache||distance(n,cache)>1)
+        return {ok:false,message:'Material cache not reachable'};
+      cache.contents ||= {wood:0};
+      if(task.key==='store_wood'){
+        if(n.inventory.wood<1||cache.contents.wood>=12)
+          return {ok:false,message:'No room or wood to store'};
+        n.inventory.wood--;cache.contents.wood++;
+        message='Stored one wood in cache ('+cache.contents.wood+'/12)';
+      }else{
+        if(cache.contents.wood<1||n.inventory.wood>=1000)
+          return {ok:false,message:'No stored wood available'};
+        cache.contents.wood--;n.inventory.wood++;
+        message='Retrieved one wood from cache ('+cache.contents.wood+'/12 left)';
+      }
     }else if(task.key==='build_shelter'){
       if(!n.knowledge.recipes.includes('shelter'))
         return {ok:false,message:'Shelter construction method is not known'};
@@ -430,10 +472,16 @@
         node.stock=old.stock;
       }
     }
-    target.structures=saved.structures.filter(s=>s&&['campfire','shelter'].includes(s.type)&&
+    target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache'].includes(s.type)&&
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
       s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'
-    ).slice(0,80).map((v,i)=>({id:v.type+'_'+(i+1),type:v.type,x:v.x,y:v.y}));
+    ).slice(0,80).map((v,i)=>({
+      id:typeof v.id==='string'&&/^(?:fire|campfire|shelter|cache)_[1-9]\d*$/.test(v.id)?
+        v.id:v.type+'_'+(i+1),
+      type:v.type,x:v.x,y:v.y,
+      ...(v.type==='cache'?{contents:{wood:Number.isInteger(v.contents?.wood)?
+        Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
+    }));
   }
   root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,nextPlanAction,
     validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
