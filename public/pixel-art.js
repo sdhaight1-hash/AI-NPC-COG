@@ -255,6 +255,20 @@
       rect(ctx,'#b89061',x*16+2,y*16+7,13,3);
       rect(ctx,'#d4b180',x*16+4,y*16+8,8,1);
     }
+    // Tiny bridges, washing line, garden pots and stacked supplies make the
+    // settlement feel inhabited without assigning residents particular jobs.
+    for(const [x,y] of [[6,9],[18,9],[32,9],[18,23],[34,23]]){
+      const X=x*16,Y=y*16;
+      rect(ctx,'#63523c',X+2,Y+9,12,3);
+      rect(ctx,'#b99565',X+3,Y+8,10,2);
+      rect(ctx,'#e2cf9b',X+5,Y+8,5,1);
+    }
+    for(let i=0;i<3;i++){
+      const X=(23+i)*16,Y=17*16;
+      rect(ctx,'#54442f',X+3,Y+9,11,5);
+      rect(ctx,'#a27a4f',X+4,Y+10,9,2);
+      if(i%2)flower(ctx,X+9,Y+8,i);
+    }
     // Market crates and colorful produce just outside the market building.
     for(const [x,y] of [[30,22],[35,22],[36,23]]){
       rect(ctx,'#59422d',x*16+3,y*16+7,13,9);
@@ -365,6 +379,33 @@
       ((x===7||x===19||x===33)&&y>=7&&y<=23);
     for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++)
       ground(ctx,x,y,road(x,y)?'path':'grass');
+    // Organic broken road shoulders keep the tilemap readable without square
+    // grass/path seams; the physics grid remains authoritative.
+    for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++){
+      const h=hash(x,y,21),X=x*16,Y=y*16;
+      if(road(x,y)){
+        ctx.fillStyle='#68834e';
+        if(!road(x,y-1))for(let i=0;i<3;i++)
+          ctx.fillRect(X+(h>>>(i*4))%14,Y+(i%2),2,1);
+        if(!road(x,y+1))for(let i=0;i<3;i++)
+          ctx.fillRect(X+(h>>>(i*4))%14,Y+14+i%2,2,1);
+        if(!road(x-1,y))ctx.fillRect(X,Y+((h>>>3)%11),2,4);
+        if(!road(x+1,y))ctx.fillRect(X+14,Y+((h>>>5)%11),2,4);
+        if(h%29===0){
+          rect(ctx,'#e1c39a',X+4,Y+6,7,2);
+          rect(ctx,'#927e64',X+8,Y+9,3,2);
+        }
+      }else if(h%47===0) {
+        flower(ctx,X+6,Y+8,(h>>>9)%4);
+      }
+    }
+    // Low stone borders and flowering herbs define the central square.
+    for(let x=24;x<=28;x++){
+      const X=x*16,Y=14*16;
+      rect(ctx,'#3e6048',X,Y+13,16,2);
+      rect(ctx,'#b7ae8c',X+1,Y+12,14,1);
+      if(x%2===0)flower(ctx,X+7,Y+10,x);
+    }
     pond(ctx);
     for(const [x,y] of trees)tree(ctx,x,y,hash(x,y)%8);
     for(const b of buildings)building(ctx,b);
