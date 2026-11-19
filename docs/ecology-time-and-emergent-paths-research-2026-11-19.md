@@ -107,3 +107,9 @@ Tracked in [#72](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/72) and [PR
 - **Important observed regression during development:** an initial code attempt stopped stone regrowing immediately. The existing seven-day viability benchmark then reported **one founder dead of dehydration** (expected zero). The mineral change was **reverted**, not the benchmark; this proves that scarcity changes the existing agents' behavior and that resource-class conservation needs a coordinated survival/planning intervention.
 - **Not implemented:** nonrenewable mineral classification, finite water mass cycles, tree species/biomass and soil budgets. Today's bounded stock refill remains a temporary gameplay rule, explicitly not long-term conservation.
 - **Next gate:** separate diagnostic mortality traces for depleted minerals and new water-seeking policies, then rerun multi-seed survival before reintroducing a physical mineral budget. Keep #72 and #63 open.
+
+## Follow-up physical test — nonrenewable mineral retry after direct water (2026-11-19)
+
+[PR #83](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/83) retries **only** the stone nonrenewability rule: after [#79](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/79) added lawful direct source drinking, `AgentWorld.regenerate` no longer recreates mined stone, and restore discards legacy fractional stone regrowth. New tests enforce depletion across very long tick and save/reload.
+
+**Gate remains strict:** the original earlier attempt failed the seven-day founder survival benchmark with dehydration. This change must pass exactly that benchmark and the 30-day world-integrity soak; no survival threshold reductions or forged stock are allowed. If it fails again, keep PR unmerged, use action receipts to diagnose resource prioritization, and correct actual survival behavior in a separate change. Water/biomass remains provisional and not conserved.
