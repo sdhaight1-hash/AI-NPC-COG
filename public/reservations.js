@@ -129,7 +129,8 @@
   return count;
  }
  function releaseActor(state,id,reason='ACTOR_DEAD'){
-  const commands=new Set(active(state).filter(x=>x.actorId===id).map(x=>x.commandId));
+  const commands=new Set(active(state).filter(x=>x.actorId===id||
+   (x.type==='npc'&&x.id===id)).map(x=>x.commandId));
   for(const command of commands)releaseCommand(state,command,reason);
   return commands.size;
  }

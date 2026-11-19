@@ -46,8 +46,6 @@
    if(recovered==='Recovered')ports.onRecovery?.(n);
    const death=Civilization.updateHealth(state,n,elapsed);
    if(death){
-    root.Reservations?.releaseActor(state,n.id);
-    root.Activities?.finish(state,n,false,'ACTOR_DEAD');
     deaths.push({id:n.id,cause:death});ports.onDeath?.(n,death);continue;
    }
    if(!n.peerPending){

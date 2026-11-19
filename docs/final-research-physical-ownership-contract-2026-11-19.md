@@ -184,3 +184,22 @@ This revealed a genuine cognition / world routing seam: after tool loss, the act
 - The new `flask` kind is counted in current mass/bulk constraints (0.6 kg / 1.2 L empty, plus separate contained water mass/bulk), with **no starting gear**. This is a real container-capacity gameplay constraint; **not yet** a globally canonical unique per-container water lot or hand-slot authority.
 
 **Still open under #26:** typed contained-water lots with custody and provenance; one flask may not be destroyed/stolen/dropped independently of its contents until a general item operation is added; historical numeric water needs deterministic lot migration; leakage/decay, suitable sealant methods, hand occupancy and encumbrance speed need later evidence and tests. No LLM call is needed to decide capacity or source debits.
+
+## Implementation checkpoint — G1.6 death custody (#93)
+
+Death moves the resident's carried counts, exact pantry species, crafted
+quality records and one unfinished workpiece to a placed container. Its ID
+derives from the deceased actor ID, and its canonical coordinates include z.
+The transition clears both the resident's own reservations and outstanding
+claims against their carried items. No workpiece ingredients are refunded.
+
+The observer can select the remains on the map. Residents receive presence
+and location through their usual sight and inspection checks. The visible
+record omits private memories and the contents. Remains belong to physical
+world state. Timed recovery and social ownership are downstream work.
+
+Version 3 saves restore validated remains when they match a death record.
+The validator checks identity, bounds, item counts, pantry species, crafted
+provenance fields and unfinished stage. Older saves without remains load
+with an empty layer. The restore has no recovery action that can move
+checkpoint contents to a living actor.

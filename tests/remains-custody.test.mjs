@@ -29,6 +29,11 @@ test('death physically transfers all counted goods, edible identities and crafte
  const claim=c.Reservations.claim(s,n.id,'cmd_1',
   [{type:'npc',id:n.id,kind:'wood',quantity:2}]);
  assert.equal(claim.ok,true);
+ const other=s.npcs[1];
+ const foreign=c.Reservations.claim(s,other.id,'cmd_2',
+  [{type:'npc',id:n.id,kind:'wood',quantity:1}]);
+ assert.equal(foreign.ok,true);
+ const otherInventory=snapshot(other.inventory);
  const original=snapshot(n.inventory),pantry=snapshot(n.bio.pantry);
  const created=c.Civilization.die(s,n,'dehydration');
  assert.equal(created,true);
@@ -44,7 +49,9 @@ test('death physically transfers all counted goods, edible identities and crafte
  assert.equal(corpse.craftedItems[0].kind,'flask');
  assert.equal(corpse.craftedItems[0].quality,3);
  assert.equal(corpse.deathAt,s.clock);
- assert.equal(c.Reservations.active(s).filter(x=>x.actorId===n.id).length,0);
+ assert.equal(c.Reservations.active(s).length,0);
+ assert.deepEqual(snapshot(other.inventory),otherInventory);
+ assert.ok(Object.values(n.inventory).every(v=>v===0));
  assert.equal(c.Civilization.die(s,n,'duplicate'),false);
  assert.equal(s.world.remains.length,1);
  assert.equal(s.dead.length,1);
@@ -79,6 +86,10 @@ test('a living witness sees ground remains without learning private contents or 
   'Visible physical presence does not expose contents to an omniscient prompt');
  const info=c.AgentWorld.describeObject(s.world,s.world.remains[0]);
  assert.equal(info.kind,'remains');
+ assert.equal(c.Perception.inspect(s,observer,info.id).kind,'remains');
+ observer.z+=1;
+ assert.equal(c.Perception.inspect(s,observer,info.id),null);
+ assert.ok(!c.Perception.snapshot(s,observer).objects.some(o=>o.id===info.id));
 });
 
 test('malformed persisted remains cannot mint contents or duplicate identity',()=>{
@@ -107,4 +118,17 @@ test('an unfinished craft remains physically unfinished, with no refunded raw ma
  assert.deepEqual(snapshot(remains.workpiece),task);
  assert.equal(c.Civilization.die(s,n,'again'),false);
  assert.equal(s.world.remains.length,1);
+});
+
+test('restore accepts at most one corpse per archived actor and rejects unbacked crafted goods',()=>{
+ const {c,state:s,actor:n}=runtime();stock(n,s.clock);
+ c.Civilization.die(s,n,'dehydration');
+ const saved=snapshot(c.Persistence.save(s)),original=saved.world.remains[0];
+ const wrong=snapshot(original);
+ wrong.inventory.flask++;
+ const unknown={...original,id:'remains_person_42',actorId:'person_42'};
+ saved.world.remains=[wrong,unknown,original,snapshot(original)];
+ const fresh=c.Simulation.initial(379210);
+ assert.equal(c.Persistence.restore(fresh,saved),true);
+ assert.deepEqual(snapshot(fresh.world.remains),[original]);
 });

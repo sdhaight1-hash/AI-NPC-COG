@@ -42,6 +42,7 @@ function restore(state,saved){
   // Saved world.now can be forged and is not a reliable clock.
   state.world.now=saved.clock;
   AgentWorld.restoreWorld(state.world,saved.world);
+  Civilization.restoreRemains(state.world,saved.world?.remains,saved.dead);
   Frontier.restore(state.world,saved.world);
   root.WorldRuntime.invalidateNavigation(state.world);
   state.clock=saved.clock;

@@ -43,7 +43,7 @@
   fiber:{hardness:0,flexibility:5},cord:{hardness:1,flexibility:5},
   blade:{hardness:5,flexibility:0},plank:{hardness:2,flexibility:3}
  });
- const KINDS=['cord','blade','hatchet','plank','crate','flask'];
+ const KINDS=Object.freeze(['cord','blade','hatchet','plank','crate','flask']);
  const hasInputs=(npc,recipe)=>Object.entries(recipe.inputs)
   .every(([kind,amount])=>(npc.inventory[kind]||0)>=amount);
  function stationNear(npc,world,type,range=8){
@@ -248,5 +248,5 @@
     materialQuality:p.materialQuality,station:typeof p.station==='string'?p.station:null,
     x:npc.x,y:npc.y,startedAt:p.startedAt}:null;
  }
- root.Crafting={RECIPES,MATERIALS,options,getRecipe,begin,advance,interact,restore};
+ root.Crafting={RECIPES,MATERIALS,KINDS,options,getRecipe,begin,advance,interact,restore};
 })(globalThis);
