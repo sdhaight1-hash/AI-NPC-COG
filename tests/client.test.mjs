@@ -531,3 +531,70 @@ test('physics diagnostic rendering can be enabled without changing world state',
  browser.drawWorld();
  assert.deepEqual({x:npc.x,y:npc.y},position);
 });
+
+test('the world expands into distinct explorable biomes and starts with discovery fog',()=>{
+ const browser=makeBrowser();
+ assert.equal(browser.state.world.width,80);
+ assert.equal(browser.state.world.height,52);
+ assert.equal(browser.state.world.terrain.length,4160);
+ assert.ok(browser.state.world.nodes.length>25);
+ assert.ok(browser.state.world.discovered[12*80+21]);
+ assert.ok(!browser.state.world.discovered[45*80+70]);
+ assert.ok(browser.pathfind(browser.state.player,{x:41,y:22}).length>0,
+   'Starting clearing must connect to the generated frontier');
+});
+test('an NPC can pursue and finish a shelter plan through material collection',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const npc=browser.state.npcs[0];
+ npc.x=41;npc.y=22;npc.body.x=41.5;npc.body.y=22.5;
+ npc.inventory.wood=0;npc.inventory.fiber=0;
+ assert.equal(browser.setAction(npc,'make_shelter','rein',null),true);
+ for(let attempt=0;attempt<8&&npc.plan;attempt++){
+  browser.state.clock+=2;
+  browser.advancePlan(npc);
+  if(npc.task){
+   const node=browser.state.world.nodes.find(n=>n.id===npc.task.ref);
+   if(node){npc.x=node.x;npc.y=node.y;npc.body.x=node.x+.5;npc.body.y=node.y+.5;}
+   npc.path=[];browser.completeActivity(npc);
+  }
+ }
+ assert.ok(browser.state.world.structures.some(s=>s.type==='shelter'));
+ browser.state.clock+=2;browser.advancePlan(npc);
+ assert.equal(npc.plan,null,'Completed building goal must clear');
+ assert.ok(npc.memories.some(m=>m.text.includes('shelter')));
+});
+test('player and NPCs consume the same limited water and share item semantics',()=>{
+ const browser=makeBrowser();
+ const water=browser.state.world.nodes.find(n=>n.id==='wild_water_41_22');
+ assert.ok(water,'Starter island freshwater source is guaranteed');
+ const npc=browser.state.npcs[0],player=browser.state.player;
+ npc.x=water.x;npc.y=water.y;
+ player.x=water.x;player.y=water.y;
+ const initial=water.stock;
+ browser.playerAction('fill_water');
+ assert.equal(water.stock,initial-2);
+ npc.task={key:'fill_water',ref:water.id};
+ browser.completeActivity(npc);
+ assert.equal(water.stock,initial-4,'Both actors draw from the same world node');
+ player.needs.thirst=82;
+ browser.playerAction('drink');
+ assert.equal(player.needs.thirst,34);
+ browser.save();
+ const stored=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
+ assert.equal(stored.player.inventory.water,3);
+ assert.equal(stored.world.nodes.find(n=>n.id===water.id).stock,initial-4);
+});
+test('migration preserves legacy relationships but starts new discovery independently',()=>{
+ const first=makeBrowser();
+ first.save();
+ const old=JSON.parse(first.saved.get('ai-npc-cog-v2'));
+ old.npcs[0].relationships.jonas=77;
+ old.npcs[0].memories=[{time:'Day 1 08:10',text:'Remembering a promise'}];
+ first.saved.delete('ai-npc-cog-v2');
+ first.saved.set('ai-npc-cog-v1',JSON.stringify(old));
+ const next=makeBrowser({saved:first.saved});
+ assert.equal(next.state.npcs[0].relationships.jonas,77);
+ assert.equal(next.state.npcs[0].memories[0].text,'Remembering a promise');
+ assert.ok(next.state.world.discovered[12*80+21]);
+});
