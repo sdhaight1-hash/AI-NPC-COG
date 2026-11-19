@@ -115,7 +115,8 @@ function actionDuration(n,key){return WorldRuntime.actionDuration(n,key);}
 function backgroundOptions(n){
  // The same legal affordances serve the model and the autonomous executor.
  // Personal need, traits, remembered outcomes and ongoing goals order them.
- const choices=Agency.ranked(n,availableActivities(n).filter(o=>o.key!=='none'),
+ const sensedOptions=Perception.filterAffordances(state,n,availableActivities(n));
+ const choices=Agency.ranked(n,sensedOptions.filter(o=>o.key!=='none'),
   state.world,state.clock).slice(0,9);
  choices.push({key:'none',when:'Observe surroundings before deciding'});
  return choices.map(({key,when})=>({key,when}));
