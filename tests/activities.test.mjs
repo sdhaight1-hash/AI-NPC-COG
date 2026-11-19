@@ -90,3 +90,64 @@ test('legacy version-3 actor without lifecycle fields still restores a timed tas
  steps(c,restored,20);
  assert.equal(restored.world.structures.filter(x=>x.type==='campfire').length,1);
 });
+
+test('expired suspended freshwater reservation restarts safely instead of trapping a dehydrated actor',()=>{
+ const {c,state:s,n}=create();
+ const source=s.world.nodes.find(v=>v.kind==='water'&&v.stock>=2);
+ assert.ok(source);
+ n.x=source.x;n.y=source.y;n.z=0;n.path=[];
+ n.inventory.water=0;n.needs.thirst=96;n.bio.hydrationBudgetMl=120;n.energy=0;
+ assert.equal(c.WorldRuntime.begin(s,n,'drink_source'),true);
+ const oldCommand=n.task.commandId,before=source.stock;
+ assert.ok(s.reservations.some(x=>x.commandId===oldCommand&&x.status==='ACTIVE'));
+ assert.ok(c.Activities.interrupt(s,n,'CRITICAL_NEED'));
+ n.task=null;n.action='none';
+ // A lengthy interruption may outlast the resource claim while the task
+ // remains resumable. It must not shadow all later legal survival actions.
+ s.clock+=181;s.world.now=s.clock;
+ c.Reservations.expire(s);
+ assert.equal(c.Reservations.validCommand(s,oldCommand,1),false);
+ assert.equal(c.WorldRuntime.survival(s,n),true);
+ assert.equal(n.task?.key,'drink_source');
+ assert.notEqual(n.task.commandId,oldCommand,'Restart requires a fresh command');
+ assert.equal(n.suspendedActivities.some(a=>a.commandId===oldCommand),false);
+ assert.equal(source.stock,before,'New reservation does not consume water early');
+ steps(c,s,1);
+ assert.equal(source.stock,before-1,'Exactly one physical water unit was consumed');
+ assert.equal(n.inventory.water,0,'Direct drinking never mints portable water');
+ assert.ok(n.bio.hydrationBudgetMl>120);
+ assert.ok(s.receipts.some(x=>x.commandId===n.lastActivity?.id?.slice(4)&&
+  x.action==='drink_source'&&x.status==='COMPLETED'));
+});
+
+test('a freshwater source occupied by another resident remains drinkable from a free adjacent tile',()=>{
+ const {c,state:s,n}=create(),world=s.world;
+ const spring=world.nodes.find(v=>v.kind==='water'&&v.stock>=2&&
+  c.Frontier.neighbors(world,v).length>=2&&
+  world.nodes.filter(other=>other.kind==='water'&&other.id!==v.id)
+   .every(other=>c.Frontier.distance(world,v,other)>6));
+ assert.ok(spring);
+ const neighbor=c.Frontier.neighbors(world,spring)[0];
+ const start=c.Frontier.neighbors(world,neighbor).find(p=>
+  c.Frontier.distance(world,p,spring)===2&&
+  !s.npcs.slice(2).some(other=>other.x===p.x&&other.y===p.y));
+ assert.ok(start,'Fixture needs a legal two-tile approach');
+ const occupant=s.npcs[1];
+ occupant.x=spring.x;occupant.y=spring.y;occupant.z=0;
+ n.x=start.x;n.y=start.y;n.z=0;n.path=[];
+ n.inventory.water=0;n.bio.hydrationBudgetMl=500;n.needs.thirst=96;
+ assert.equal(c.WorldRuntime.available(s,n).find(o=>o.key==='drink_source')?.ref,
+  spring.id,'Fixture must target the occupied isolated spring');
+ const initialStock=spring.stock;
+ assert.equal(c.WorldRuntime.pathfind(s,n,spring).length,0,
+  'A live resident occupies the resource tile');
+ assert.equal(c.WorldRuntime.begin(s,n,'drink_source'),true);
+ assert.ok(n.path.length>0);
+ assert.notDeepEqual({x:n.path.at(-1).x,y:n.path.at(-1).y},
+  {x:occupant.x,y:occupant.y},'Approach does not collide with occupant');
+ steps(c,s,3);
+ assert.equal(spring.stock,initialStock-1,'Drinking debits real stock once');
+ assert.equal(n.inventory.water,0);
+ assert.ok(n.bio.hydrationBudgetMl>500);
+ assert.ok(s.receipts.some(r=>r.action==='drink_source'&&r.status==='COMPLETED'));
+});

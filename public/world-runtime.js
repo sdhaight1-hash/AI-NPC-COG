@@ -23,13 +23,17 @@
   const w=state.world;
   const a={x:wrap(start.x,w.width),y:wrap(start.y,w.height),z:start.z||0};
   const b={x:wrap(end.x,w.width),y:wrap(end.y,w.height),z:end.z||0};
-  if(blocked(state,b))return [];
+  // Moving residents are real obstacles. Dynamic occupancy is assessed at
+  // planning time and still rechecked by move() before each tile transition.
+  const occupied=new Set(state.npcs.filter(other=>
+   other!==start&&other.alive!==false).map(pointKey));
+  if(blocked(state,b)||occupied.has(pointKey(b)))return [];
   const queue=[a],back=new Map([[pointKey(a),null]]);
   for(let i=0;i<queue.length;i++){
    const p=queue[i];
    if(pointKey(p)===pointKey(b))break;
    for(const next of root.Frontier.neighbors(w,p)){
-    if(back.has(pointKey(next)))continue;
+    if(back.has(pointKey(next))||occupied.has(pointKey(next)))continue;
     back.set(pointKey(next),p);queue.push(next);
    }
   }
@@ -205,19 +209,23 @@
     option.target.needs.social<45||option.target.energy<20)){
    stats(n).rejected++;note(n,'Offline companion not mutually willing');return false;
   }
-  const resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
-  const resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
+  let resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
+  let resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
    a.key===action&&a.ref===(option.ref??null)&&
    (action!=='craft_stage'||(a.workpieceRecipe===n.workpiece?.recipe&&
     a.workpieceStage===n.workpiece?.stage))):null;
+  if(resumeCandidate&&!root.Reservations.validCommand(state,
+    resumeCandidate.commandId,resumeCandidate.reservationIds?.length||0)){
+   // A lapsed material claim must not shadow a fresh legal action forever.
+   // Discard only this suspended activity, never its separate workpiece.
+   root.Reservations.releaseCommand(state,resumeCandidate.commandId,
+    'RESERVATION_EXPIRED');
+   n.suspendedActivities=n.suspendedActivities.filter(a=>a!==resumeCandidate);
+   resumed=false;resumeCandidate=null;
+  }
   const commandId=resumeCandidate?.commandId||
    'cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   const request=root.Reservations.specsFor(state,n,action,option.ref);
-  const expected=resumeCandidate?.reservationIds?.length||0;
-  if(resumed&&!root.Reservations.validCommand(state,commandId,expected)){
-   stats(n).rejected++;note(n,'Reservation for suspended work expired');
-   return false;
-  }
   const hold=resumed?{ok:true,claims:root.Reservations.active(state)
     .filter(x=>x.commandId===commandId)}:
    root.Reservations.claim(state,n.id,commandId,request);
@@ -238,8 +246,10 @@
   }else{
    const target=option.target;
    if(target&&distance(state,n,target)>1){
-    const good=(action==='share_food'||action==='socialize')?
-     approach(state,n,target):moveTo(state,n,target);
+    // World interactions only need an adjacent free tile. Exploration alone
+    // requires entering its destination; an occupied spring must stay usable.
+    const good=action==='explore'?moveTo(state,n,target):
+     approach(state,n,target);
     if(!good){
      root.Reservations.releaseCommand(state,commandId,'ROUTE_REJECTED');
      stats(n).rejected++;note(n,'No reachable path for '+action);

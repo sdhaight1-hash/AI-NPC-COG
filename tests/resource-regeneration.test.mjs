@@ -25,7 +25,8 @@ test('existing resource classes preserve fractional stock recovery on save/load'
  for(const kind of ['water','food','fiber','wood','stone']){
   const original=node(w,kind),copy=restored.nodes.find(n=>n.id===original.id);
   assert.equal(copy.stock,original.stock);
-  assert.equal(copy.regrow,.37,kind+' fractional recovery must be checkpointed');
+  assert.equal(copy.regrow,kind==='stone'?0:.37,
+   kind+' recovery must reflect its physical renewable class');
  }
 });
 
@@ -56,4 +57,18 @@ test('legacy or malformed source-growth fractions restore to a safe zero',()=>{
  delete wood.regrow;
  A.restoreWorld(target,saved);
  assert.equal(target.nodes.find(n=>n.id===wood.id).regrow,0);
+});
+
+test('mineral depletion does not replenish stone without a geological event',()=>{
+ const A=kernel(),world=A.newWorld(379210),stone=node(world,'stone');
+ assert.ok(stone);
+ stone.stock=0;stone.regrow=.99;
+ A.regenerate(world,20000);
+ assert.equal(stone.stock,0);
+ assert.equal(stone.regrow,0);
+ const copy=A.newWorld(379210);
+ A.restoreWorld(copy,JSON.parse(JSON.stringify(world)));
+ assert.equal(copy.nodes.find(n=>n.id===stone.id).stock,0);
+ A.regenerate(copy,20000);
+ assert.equal(copy.nodes.find(n=>n.id===stone.id).stock,0);
 });
