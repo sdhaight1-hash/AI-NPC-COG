@@ -35,6 +35,7 @@ function restore(state,saved){
     !Array.isArray(saved.npcs)||!Array.isArray(saved.dead))return;
   AgentWorld.restoreWorld(state.world,saved.world);
   Frontier.restore(state.world,saved.world);
+  root.WorldRuntime.invalidateNavigation(state.world);
   state.clock=saved.clock;state.world.now=saved.clock;
   state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;
   state.receiptSeq=Number.isSafeInteger(saved.receiptSeq)&&saved.receiptSeq>=0?saved.receiptSeq:0;
