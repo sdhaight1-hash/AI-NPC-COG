@@ -355,11 +355,12 @@ function completeActivity(n){
   }
   void peerExchange(n,other);return;
  }
+ const finished={key:n.task.key,ref:n.task.ref};
  const outcome=AgentWorld.complete(n,state.world,state.npcs);
  if(outcome.ok){
   activity(n).completed++;activityNote(n,'Completed: '+outcome.message);
-  remember(n,outcome.message,{kind:'success',action:n.task?.key,ref:n.task?.ref,
-   salience:n.task?.key==='inspect'?3:2});
+  remember(n,outcome.message,{kind:'success',action:finished.key,ref:finished.ref,
+   salience:finished.key==='inspect'?3:2});
   record(n.name+': '+outcome.message,'social');
   if(n.plan){
    n.plan.steps++;n.nextPlanAt=state.clock+1;
@@ -367,8 +368,8 @@ function completeActivity(n){
   }else n.thoughtAt=state.clock+2;
   }else{
   activity(n).failed++;activityNote(n,'Task failed: '+outcome.message);
-  remember(n,'Could not finish '+n.task?.key+': '+outcome.message,
-   {kind:'failure',action:n.task?.key,ref:n.task?.ref,salience:3});
+  remember(n,'Could not finish '+finished.key+': '+outcome.message,
+   {kind:'failure',action:finished.key,ref:finished.ref,salience:3});
   record(n.name+': '+outcome.message+' [rejected]','warning');
   if(n.plan)finishPlan(n,'Plan blocked: '+outcome.message,'warning');
   n.thoughtAt=state.clock+4;
