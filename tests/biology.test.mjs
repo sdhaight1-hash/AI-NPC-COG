@@ -137,3 +137,12 @@ test('load rejects invalid biology data and reconciles older numeric food stacks
  assert.equal(restored.pantry[1],'ration');
  assert.equal(B.restore(null,2).pantry.length,2);
 });
+
+test('appetite drive reflects opposing energy reserve and post-meal endocrine signals',()=>{
+ const B=biology(),base=B.create(),hungry=B.create();
+ base.hormones={ghrelin:20,leptin:75,insulin:65,cortisol:20,melatonin:30};
+ hungry.hormones={ghrelin:80,leptin:20,insulin:12,cortisol:70,melatonin:20};
+ assert.ok(B.appetiteDrive(hungry)>B.appetiteDrive(base));
+ assert.ok(B.appetiteDrive(hungry)<=100);
+ assert.ok(B.appetiteDrive(base)>=0);
+});
