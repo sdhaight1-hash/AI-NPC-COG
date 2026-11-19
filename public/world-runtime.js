@@ -77,9 +77,15 @@
   if(root.EvidenceMemory&&n.energy>=12){
    const known=(n.evidenceMemory?.episodes||[]).filter(e=>
     e.certainty==='observed'&&e.type==='inspection'&&e.ref);
-   const pairs=[['food','forage'],['water','fill_water'],
+   // A remembered spring is a direct drinking destination without a flask.
+   // Never offer a phantom carried-water harvest from private knowledge.
+   const waterAction=(root.AgentWorld.vesselRoom(n)>0&&
+    root.AgentWorld.roomFor(n,'water')>0)?'fill_water':'drink_source';
+   const pairs=[['food','forage'],['water',waterAction],
     ['wood','collect_wood'],['stone','collect_stone'],['fiber','collect_fiber']];
    for(const [kind,key] of pairs){
+    if(kind==='water'&&key==='drink_source'&&
+     n.needs.thirst<10&&n.bio?.hydrationBudgetMl>=2400)continue;
     if(scoped.some(o=>o.key===key))continue;
     const visits=known.filter(e=>e.text.startsWith('Inspected '+kind+' '));
     for(const previous of visits.slice().reverse()){
@@ -101,6 +107,8 @@
     });
    for(const claim of reports){
     const key=Object.fromEntries(pairs)[claim.kind];
+    if(claim.kind==='water'&&key==='drink_source'&&
+     n.needs.thirst<10&&n.bio?.hydrationBudgetMl>=2400)continue;
     if(!key||scoped.some(o=>o.key===key&&o.ref===claim.sourceId)||
      scoped.some(o=>o.key===key))continue;
     const target=state.world.nodes.find(x=>

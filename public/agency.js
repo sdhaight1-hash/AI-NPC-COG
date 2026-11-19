@@ -58,7 +58,7 @@
   if(kind==='craft')value+=d.craft*.30;
   if(kind==='curiosity')value+=d.curiosity*.55;
   if(kind==='social')value+=d.social*.65;
-  if(k==='drink')value+=(n.needs.thirst||0)*.65-((n.needs.thirst||0)<30?35:0);
+  if(k==='drink'||k==='drink_source')value+=(n.needs.thirst||0)*.65-((n.needs.thirst||0)<30?35:0);
   if(k==='eat')value+=(n.needs.hunger||0)*.58-((n.needs.hunger||0)<30?35:0);
   if(k==='rest')value+=(100-n.energy)*.42;
   if(k==='fill_water')value+=Math.max(0,3-(inv.water||0))*16;
@@ -106,7 +106,7 @@
   if(!ref)return;
   // Learning requires physical contact or deliberate inspection; never ingest
   // unseen world nodes or other NPCs' private memories.
-  const permitted=action==='inspect'||action==='forage'||action==='fill_water'||
+  const permitted=action==='inspect'||action==='forage'||action==='fill_water'||action==='drink_source'||
    ['collect_wood','collect_stone','collect_fiber','pickup_item',
     'store_wood','retrieve_wood','stash_wood','stash_stone','stash_fiber',
     'withdraw_wood','withdraw_stone','withdraw_fiber'].includes(action);

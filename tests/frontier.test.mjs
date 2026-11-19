@@ -48,6 +48,10 @@ test('water collection and drinking consume real inventory and hydration',()=>{
   id:'person',x:0,y:0,energy:90,action:'none',relationships:{}});
  const water=w.nodes.find(v=>v.kind==='water');assert.ok(water);
  n.x=water.x;n.y=water.y;
+ // Real filled water must have physical container capacity.
+ n.inventory.flask=1;
+ n.craftedItems.push({kind:'flask',quality:2,maker:n.id,craftedAt:0,
+  method:'flask',materialQuality:2});
  const stock=water.stock,amount=n.inventory.water;
  n.task={key:'fill_water',ref:water.id};
  assert.equal(A.complete(n,w,[n]).ok,true);

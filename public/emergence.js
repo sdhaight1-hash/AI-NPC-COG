@@ -31,7 +31,8 @@
     wood:{kg:2.5,liters:5},stone:{kg:2.2,liters:.85},
     fiber:{kg:.2,liters:1.5},hatchet:{kg:1.5,liters:1.5},
     cord:{kg:.3,liters:.4},blade:{kg:.45,liters:.3},
-    plank:{kg:.9,liters:2},crate:{kg:5,liters:17}
+    plank:{kg:.9,liters:2},crate:{kg:5,liters:17},
+    flask:{kg:.6,liters:1.2}
   });
   const MAX_CARRY_KG=32,MAX_CARRY_L=45;
   function carrying(n){
@@ -47,6 +48,14 @@
       volumeL:Number(bulk.toFixed(3)),
       maxMassKg:MAX_CARRY_KG,maxVolumeL:MAX_CARRY_L};
   }
+  const FLASK_WATER_UNITS=2;
+  function vesselRoom(n){
+    const flasks=n.inventory?.flask;
+    if(!Number.isSafeInteger(flasks)||flasks<1)return 0;
+    const held=n.inventory?.water;
+    if(!Number.isSafeInteger(held)||held<0)return 0;
+    return Math.max(0,flasks*FLASK_WATER_UNITS-held);
+  }
   function roomFor(n,kind){
     const def=ITEM_LOAD[kind],load=carrying(n);
     if(!def||!load.valid)return 0;
@@ -60,7 +69,7 @@
     // Every new resident begins with a functioning body, not free possessions.
     // Real hydration/glycogen are physiological reserves; pantry is inventory.
     n.inventory = { food:0,water:0,wood:0,stone:0,fiber:0,hatchet:0,
-      cord:0,blade:0,plank:0,crate:0 };
+      cord:0,blade:0,plank:0,crate:0,flask:0 };
     n.skills = { foraging:0,gathering:0,crafting:0,survival:0,
       socializing:0,building:0,exploring:0 };
     n.bio = Biology.create(index,n.inventory.food);
@@ -162,18 +171,19 @@
     const list=[];
     const add=(key,when,target=null,ref=null)=>list.push({key,when,target,ref});
     for(const [kind,key,label] of [['food','forage','food'],['wood','collect_wood','wood'],
-      ['stone','collect_stone','stone'],['fiber','collect_fiber','plant fiber'],
-      ['water','fill_water','fresh water']]){
+      ['stone','collect_stone','stone'],['fiber','collect_fiber','plant fiber']]){
       const node=findNode(n,world,kind,canReach);
       if(node&&n.energy>=12&&roomFor(n,kind)>0){
         add(key,'Collect '+label+' from a visible source ('+node.stock+' remaining, '+distance(n,node)+' tiles away)',node,node.id);
       }
     }
     const drinkable=findNode(n,world,'water',canReach);
+    if(drinkable&&n.energy>=12&&vesselRoom(n)>0&&roomFor(n,'water')>0)
+      add('fill_water','Fill carried water flask from a real freshwater source',drinkable,drinkable.id);
     if(drinkable&&(n.needs.thirst>=10||n.bio?.hydrationBudgetMl<2400))
       add('drink_source','Drink directly at a reachable freshwater source',
        drinkable,drinkable.id);
-    if(!n.plan&&n.inventory.water<2&&findNode(n,world,'water',canReach))
+    if(!n.plan&&n.inventory.water<2&&vesselRoom(n)>0&&roomFor(n,'water')>0&&drinkable)
       add('stock_water','Prepare an emergency reserve of clean drinking water');
     if(!n.plan&&n.inventory.wood<3&&findNode(n,world,'wood',canReach))
       add('stock_wood','Gather several units of wood for future work');
@@ -296,8 +306,11 @@
       const hatchetQuality=n.craftedItems?.find(item=>item.kind==='hatchet')?.quality||2;
       const axeBonus=n.inventory.hatchet&&task.key==='collect_wood'?
        (hatchetQuality>=4?2:1):0;
+      if(task.key==='fill_water'&&vesselRoom(n)<1)
+        return {ok:false,message:'NO_LIQUID_CONTAINER: a real flask with space is required'};
       const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3))+
-        axeBonus,roomFor(n,node.kind));
+        axeBonus,roomFor(n,node.kind),
+        task.key==='fill_water'?vesselRoom(n):1000);
       if(collected<1)return {ok:false,message:'CARRYING_CAPACITY: no room for harvested material'};
       // Do not commit a food harvest unless both inventory and nutrition
       // bookkeeping can accept all gathered portions.
@@ -473,6 +486,7 @@
     let key;
     if(n.plan.key==='stock_water'){
       if(n.inventory.water>=2)return {status:'done'};
+      if(vesselRoom(n)<1)return {status:'blocked',reason:'NO_LIQUID_CONTAINER'};
       key='fill_water';
     }else if(n.plan.key==='stock_wood'){
       if(n.inventory.wood>=3)return {status:'done'};
@@ -644,6 +658,6 @@
         Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
     }));
   }
-  root.AgentWorld={KEYS,newWorld,newAgent,carrying,roomFor,focus,available,complete,nextPlanAction,
+  root.AgentWorld={KEYS,newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
     validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
 })(globalThis);

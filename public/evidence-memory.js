@@ -109,7 +109,7 @@
  // A failed command is evidence of depletion only if the actor actually
  // reached the same finite source. A route failure proves nothing about stock.
  function fromFailedReceipt(sim,n,receipt){
-  const kinds={forage:'food',fill_water:'water',collect_wood:'wood',
+  const kinds={forage:'food',fill_water:'water',drink_source:'water',collect_wood:'wood',
    collect_stone:'stone',collect_fiber:'fiber'};
   if(!receipt||receipt.status!=='FAILED'||receipt.actorId!==n.id||
    receipt.clock!==sim.clock||!kinds[receipt.action]||!sim.receipts?.some(r=>

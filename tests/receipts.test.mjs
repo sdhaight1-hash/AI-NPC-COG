@@ -2,6 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
+function equipFlask(n,clock){
+ n.inventory.flask=1;
+ n.craftedItems ||= [];
+ n.craftedItems.push({kind:'flask',quality:2,maker:n.id,
+  craftedAt:clock,method:'flask',materialQuality:2});
+}
 function load(){
  const c=vm.createContext({});
  const names=['frontier','biology','crafting','cognition','agency','emergence',
@@ -52,6 +58,7 @@ test('duplicate effect commit cannot award output or deduct input a second time'
  const c=load(),s=c.Simulation.initial(379210);s.auto=false;
  const n=s.npcs[0],node=s.world.nodes.find(x=>x.kind==='water'&&x.stock>3);
  n.x=node.x;n.y=node.y;n.z=0;n.path=[];
+ equipFlask(n,s.clock);
  c.WorldRuntime.begin(s,n,'fill_water');
  const task={...n.task};
  c.Simulation.advance(s,2);
@@ -87,6 +94,7 @@ test('receipt sequence survives version-3 checkpoint and contains no private NPC
  const n=s.npcs[0],node=s.world.nodes.find(x=>x.kind==='water'&&x.stock);
  n.x=node.x;n.y=node.y;n.z=0;n.path=[];
  n.memories=[{text:'SECRET_PRIVATE_MEMORY_DO_NOT_LOG',at:s.clock}];
+ equipFlask(n,s.clock);
  c.WorldRuntime.begin(s,n,'fill_water');
  c.Simulation.advance(s,2);
  const pack=JSON.parse(JSON.stringify(c.Persistence.save(s)));
@@ -143,6 +151,7 @@ test('truncated receipt history cannot authorize a completed task to mutate agai
  const c=load(),s=c.Simulation.initial(379210);s.auto=false;
  const n=s.npcs[0],water=s.world.nodes.find(x=>x.kind==='water'&&x.stock>4);
  n.x=water.x;n.y=water.y;n.z=0;n.path=[];
+ equipFlask(n,s.clock);
  assert.equal(c.WorldRuntime.begin(s,n,'fill_water'),true);
  const old={...n.task};
  c.Simulation.advance(s,2);
@@ -165,6 +174,7 @@ test('a valid still-running command can finish despite an evicted ACCEPTED recei
  const c=load(),s=c.Simulation.initial(379210);s.auto=false;
  const n=s.npcs[0],water=s.world.nodes.find(x=>x.kind==='water'&&x.stock>3);
  n.x=water.x;n.y=water.y;n.z=0;n.path=[];
+ equipFlask(n,s.clock);
  assert.equal(c.WorldRuntime.begin(s,n,'fill_water'),true);
  const id=n.task.commandId;
  for(let i=0;i<c.WorldReceipts.MAX+5;i++)
