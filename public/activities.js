@@ -71,9 +71,6 @@
   return a;
  }
  function restore(n,source,clock){
-  // Completed/interrupted work has an explicit empty active slot in saves.
-  // Preserve its shape across a checkpoint for canonical replay equality.
-  n.currentActivity=null;
   if(source?.lastActivity&&typeof source.lastActivity.id==='string'&&
    /^act_cmd_[1-9]\d*$/.test(source.lastActivity.id)&&
    typeof source.lastActivity.key==='string'&&
