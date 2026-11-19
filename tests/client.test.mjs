@@ -376,7 +376,7 @@ test('activity diagnostics distinguish decisions, abstentions, accepted work and
  assert.match(stats.last,/Started/);
  assert.equal(b.setAction(n,'nonexistent','rein'),false);
  assert.equal(stats.rejected,1);
- n.needs.thirst=60;
+ n.needs.thirst=60;n.inventory.water=1; // Explicit test fixture, not starter gear.
  assert.equal(b.setAction(n,'drink','rein'),true);
  assert.equal(stats.started,2);
  b.step(2);
@@ -601,6 +601,7 @@ test('new critical physiology supersedes an obsolete pending model decision',asy
   response:{connected:true}})});
  b.state.connected=true;
  const n=b.state.npcs[0];
+ n.inventory.water=1; // The stale-decision fixture assumes a carried drink.
  const waiting=b.deliberate(n);
  n.bio.hydrationBudgetMl=100;n.needs.thirst=96;
  resolveDecision({action:'none',source:'rein',durationMs:100});
