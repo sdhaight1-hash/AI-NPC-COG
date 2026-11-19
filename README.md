@@ -22,6 +22,13 @@ No administrator access or external AI service is required. First-time installat
 - Bodies have energy, nutritional state, hydration, sleep pressure, stress, age metadata and simplified health. Death removes an inhabitant permanently and records their identity and cause. The world persists when no humans survive, allowing future independent arrivals.
 - The inspectable event log is bounded for now. People have basic short individual memories and earned action experience; **full durable knowledge, genealogy, reproduction and historical provenance are scheduled for later phases**.
 
+### Simulation calendar
+
+Twelve nine-day months form a 108-day game year, divided into four 27-day
+seasons. Temperature, rain, snow and plant renewal follow the season. Aging,
+monthly arrivals, the HUD and NPC context share this same calendar.
+This is game-time chronology, not a 365-day real-world calendar.
+
 ### Simulation clock
 
 The speed selector advances simulated time independently of rendering frames. Its 1×, 60× and 3600× options are time multipliers. At 60×, one real second advances one in-game minute; at 3600×, one real second advances one in-game hour. Time acceleration can outpace local AI decisions: monitor model throughput and do not mistake offline defaults for rich autonomy.
