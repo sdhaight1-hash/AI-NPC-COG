@@ -128,6 +128,7 @@
    action:task.key,targetId:task.ref,status:outcome.ok?'COMPLETED':'FAILED',
    reason:outcome.ok?null:String(outcome.message||'Action rejected').slice(0,160),
    delta});
+  if(outcome.ok)root.EvidenceMemory?.fromReceipt(state,n,receipt);
   return {...outcome,receipt};
  }
  root.WorldReceipts={MAX,accept,decision,lifecycle,execute,snapshot,change,committed};
