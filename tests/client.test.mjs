@@ -103,9 +103,9 @@ test('an action is time-costed and consumes actual stock only at completion',()=
 test('a model cannot craft undiscovered recipes, but experimentation can reveal one',()=>{
  const b=makeBrowser(),n=b.state.npcs[0];
  n.inventory.wood=2;n.inventory.stone=2;n.inventory.fiber=2;
- assert.ok(b.availableActivities(n).some(o=>o.key==='experiment_tool'));
+ assert.ok(b.availableActivities(n).some(o=>o.key==='experiment_wood_stone_fiber'));
  assert.ok(!b.backgroundOptions(n).some(o=>o.key==='craft_hatchet'));
- assert.equal(b.setAction(n,'experiment_tool','rein',{experiment_tool:1}),true);
+ assert.equal(b.setAction(n,'experiment_wood_stone_fiber','rein',{experiment_wood_stone_fiber:1}),true);
  b.step(18);
  assert.ok(n.knowledge.recipes.includes('hatchet'));
  assert.ok(b.availableActivities(n).some(o=>o.key==='craft_hatchet'));
