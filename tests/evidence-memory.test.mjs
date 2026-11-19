@@ -179,3 +179,58 @@ test('an unused old receipt cannot certify a later changed world state',()=>{
  assert.equal(E.state(a).episodes.length,0);
  assert.equal(E.state(a).facts.length,0);
 });
+
+test('verified exchange records private attributed reported speech for both actors',()=>{
+ const {E,sim,a,b}=setup();
+ a.name='Asha';b.name='Mara';
+ const receipt=committed(sim,a,'socialize',b.id,'evt_700');
+ const beforeA=JSON.stringify(a.inventory),beforeB=JSON.stringify(b.inventory);
+ const result=E.fromDialogue(sim,a,b,receipt,
+  'There is a hidden gold mine by the river',
+  'I know an impossible shelter recipe');
+ assert.equal(result.length,2);
+ for(const [n,peer] of [[a,b],[b,a]]){
+  const e=E.state(n).episodes[0];
+  assert.equal(e.receiptId,receipt.id);
+  assert.equal(e.certainty,'reported');
+  assert.equal(e.type,'interaction');
+  assert.equal(e.ref,peer.id);
+  assert.deepEqual(Array.from(e.utterances.map(u=>u.actorId)),[a.id,b.id]);
+  assert.equal(E.state(n).facts.length,0);
+  assert.equal(E.state(n).methods.length,0);
+ }
+ assert.notEqual(E.state(a).episodes[0],E.state(b).episodes[0]);
+ E.state(a).episodes[0].utterances[0].text='Changed privately';
+ assert.notEqual(E.state(b).episodes[0].utterances[0].text,'Changed privately');
+ assert.equal(JSON.stringify(a.inventory),beforeA);
+ assert.equal(JSON.stringify(b.inventory),beforeB);
+ assert.equal(E.fromDialogue(sim,a,b,receipt,'again','again'),null,
+  'Replayed completed receipt must never create duplicate speech memory');
+});
+test('dialogue memory rejects forged, stale, failed, and nonparticipant receipts',()=>{
+ const {E,sim,a,b}=setup();
+ const stranger={id:'person_3',x:2,y:3,z:0,name:'Stranger'};
+ sim.npcs.push(stranger);
+ const receipt=committed(sim,a,'socialize',b.id,'evt_701');
+ assert.equal(E.fromDialogue(sim,stranger,b,receipt,'forged','words'),null);
+ assert.equal(E.fromDialogue(sim,a,stranger,receipt,'forged','words'),null);
+ assert.equal(E.fromDialogue(sim,a,b,{...receipt,status:'FAILED'},'no','no'),null);
+ assert.equal(E.fromDialogue(sim,a,b,{...receipt,action:'inspect'},'no','no'),null);
+ assert.equal(E.fromDialogue(sim,a,b,receipt,'','no'),null);
+ sim.clock+=1;
+ assert.equal(E.fromDialogue(sim,a,b,receipt,'old','old'),null);
+ assert.equal(E.state(a).episodes.length,0);
+ assert.equal(E.state(b).episodes.length,0);
+});
+test('dialogue attribution survives save/restore as reported, never witnessed',()=>{
+ const {E,sim,a,b}=setup();
+ a.name='Asha';b.name='Mara';
+ const receipt=committed(sim,a,'socialize',b.id,'evt_702');
+ E.fromDialogue(sim,a,b,receipt,'I found a stream','Maybe it is dry');
+ const copy=JSON.parse(JSON.stringify(E.state(b)));
+ const restored={id:b.id,x:b.x,y:b.y,z:b.z};
+ E.restore(restored,copy,sim.clock);
+ assert.equal(JSON.stringify(E.state(restored)),JSON.stringify(E.state(b)));
+ assert.equal(E.state(restored).episodes[0].certainty,'reported');
+ assert.equal(E.state(restored).facts.length,0);
+});
