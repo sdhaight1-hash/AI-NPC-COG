@@ -265,7 +265,7 @@
       weather:world.weather?.kind,resting:n.action==='rest',sheltered,
       moving:!!n.path?.length
     });
-    const appetite=clamp(n.bio.hormones.ghrelin,0,100)/100;
+    const appetite=Biology.appetiteDrive(n.bio)/100;
     const dryness=1-clamp(n.bio.hydrationBudgetMl/3000,0,1);
     n.needs.hunger=clamp(n.needs.hunger+dt*(.035+.045*appetite));
     n.needs.thirst=clamp(n.needs.thirst+dt*(.037+.07*dryness));
