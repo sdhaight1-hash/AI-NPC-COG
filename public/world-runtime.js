@@ -140,9 +140,10 @@
   if(!option){
    stats(n).rejected++;note(n,'Action '+action+' no longer available');return false;
   }
+  const commandId='cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   if(GOALS.has(action)){
    if(n.plan)return false;
-   n.plan={key:action,steps:0};n.nextPlanAt=state.clock;
+   n.plan={key:action,steps:0,commandId};n.nextPlanAt=state.clock;
    n.goal='Pursuing '+action;n.action='none';n.source=source;n.scores=scores;
   }else if(action==='none'){
    n.action='none';n.task=null;n.source=source;n.scores=scores;
@@ -162,12 +163,13 @@
     }
    }
    n.action=action;n.source=source;n.scores=scores;
-   n.task={key:action,ref:option.ref||null,readyAt:n.path.length?null:
+   n.task={key:action,ref:option.ref||null,commandId,readyAt:n.path.length?null:
     state.clock+actionDuration(n,action)};
    if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
    n.goal=action.replaceAll('_',' ')+' (self-chosen)';
   }
   root.Agency.begin(n,action,state.clock,source);
+  root.WorldReceipts.accept(state,n,action,commandId,option.ref);
   if(action!=='none'&&source==='plan'&&n.plan)
    n.goal='Pursuing '+n.plan.key+' · '+action.replaceAll('_',' ');
   if(action==='none'){
@@ -197,8 +199,9 @@
    if(hooks.social)return hooks.social(n);
    n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
   }
-  const finished={key:n.task.key,ref:n.task.ref};
-  const outcome=root.AgentWorld.complete(n,state.world,state.npcs);
+  const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId};
+  const outcome=root.WorldReceipts.execute(state,n,finished,()=>
+   root.AgentWorld.complete(n,state.world,state.npcs));
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
