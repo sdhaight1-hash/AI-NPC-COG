@@ -89,7 +89,7 @@ test('world simulation advances a legal shelter project without granting resourc
  assert.equal(completed,true,n.project.blockedReason||'No structure completed');
  assert.ok(s.world.structures.some(x=>x.type==='shelter'));
  assert.equal(n.inventory.wood,0);
- assert.ok(s.receipts.some(x=>x.status==='COMPLETED'&&x.action==='build_shelter'));
+ assert.ok(s.receipts.some(x=>x.status==='COMPLETED'&&x.action==='craft_shelter'));
  assert.ok(n.project.completedActions>=10,
   'One discovery, one initiation and eight staged physical operations are required');
  assert.ok(s.receipts.filter(x=>x.action==='craft_stage'&&x.status==='COMPLETED').length>=8);
