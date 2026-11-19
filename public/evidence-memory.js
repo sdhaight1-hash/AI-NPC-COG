@@ -5,7 +5,7 @@
  const MAX_EPISODES=240,MAX_FACTS=120,MAX_SUMMARIES=36;
  const words=s=>String(s||'').toLowerCase().match(/[a-z][a-z0-9_]{2,}/g)||[];
  const unique=s=>[...new Set(words(s))];
- const empty=()=>({sequence:0,episodes:[],facts:[],summaries:[],lastDay:0});
+ const empty=()=>({sequence:0,episodes:[],facts:[],summaries:[],methods:[],social:[],lastDay:0});
  const state=n=>n.evidenceMemory ||=empty();
  const clone=x=>JSON.parse(JSON.stringify(x));
  const kinds=new Set(['action','inspection','interaction','sound','personal']);
@@ -70,8 +70,25 @@
     if(Number.isInteger(observed.stock))fact={key:'stock',value:observed.stock};
    }
   }
-  return record(sim,n,{type:action==='inspect'?'inspection':'action',
-   text,receiptId:receipt.id,ref:receipt.targetId,salience:action==='inspect'?4:2,fact});
+  const entry=record(sim,n,{type:action==='inspect'?'inspection':'action',
+   text,receiptId:receipt.id,ref:receipt.targetId,
+   salience:action==='inspect'?4:2,fact});
+  if(!entry)return null;
+  const m=state(n);
+  for(const method of receipt.delta?.knowledge?.learnedMethods||[]){
+   if(typeof method!=='string'||!n.knowledge?.recipes?.includes(method)||
+    m.methods.some(x=>x.method===method))continue;
+   m.methods.push({method:method.slice(0,64),sourceEpisodeId:entry.id,
+    receiptId:receipt.id,at:sim.clock});
+  }
+  m.methods=m.methods.slice(-80);
+  if(['share_food','socialize'].includes(action)&&
+   typeof receipt.targetId==='string'){
+   m.social.push({actorId:receipt.targetId,
+    action,at:sim.clock,sourceEpisodeId:entry.id,receiptId:receipt.id});
+   m.social=m.social.slice(-80);
+  }
+  return entry;
  }
  function recall(n,query,clock,limit=5){
   const items=state(n).episodes;
@@ -158,6 +175,20 @@
     .slice(-MAX_SUMMARIES).map(s=>({id:s.id,text:s.text.slice(0,400),
      at:s.at,sourceEpisodeIds:s.sourceEpisodeIds.slice(0,4),
      certainty:'inferred'}));
+   result.methods=(Array.isArray(saved.methods)?saved.methods:[])
+    .filter(x=>x&&typeof x.method==='string'&&
+     typeof x.receiptId==='string'&&episodeIds.has(x.sourceEpisodeId)&&
+     Number.isFinite(x.at)&&x.at<=clock)
+    .slice(-80).map(x=>({method:x.method.slice(0,64),
+     sourceEpisodeId:x.sourceEpisodeId,receiptId:x.receiptId,at:x.at}));
+   result.social=(Array.isArray(saved.social)?saved.social:[])
+    .filter(x=>x&&typeof x.actorId==='string'&&
+     ['share_food','socialize'].includes(x.action)&&
+     typeof x.receiptId==='string'&&episodeIds.has(x.sourceEpisodeId)&&
+     Number.isFinite(x.at)&&x.at<=clock)
+    .slice(-80).map(x=>({actorId:x.actorId.slice(0,100),
+     action:x.action,at:x.at,sourceEpisodeId:x.sourceEpisodeId,
+     receiptId:x.receiptId}));
    result.lastDay=Number.isSafeInteger(saved.lastDay)?
     Math.max(0,Math.min(Math.floor(clock/1440),saved.lastDay)):0;
   }
@@ -180,6 +211,12 @@
   n.evidenceMemory=result;
   return result;
  }
- root.EvidenceMemory={state,record,fromReceipt,recall,consolidate,restore,
+ function working(n){
+  return {task:n.task?.key||null,commandId:n.task?.commandId||null,
+   goal:n.project?.goal||n.plan?.key||n.agency?.goal?.key||null,
+   remainingMinutes:n.currentActivity?
+    Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
+ }
+ root.EvidenceMemory={state,record,fromReceipt,recall,consolidate,restore,working,
   MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES};
 })(globalThis);
