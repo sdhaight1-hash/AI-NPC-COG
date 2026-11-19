@@ -199,7 +199,11 @@ function scheduleIdleAgents(){
     WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
     n.thoughtAt=state.clock+18;continue;
    }
-   const success=setAction(n,fallbackBackground(n),'offline routine');
+   const options=availableActivities(n);
+   const peer=options.find(o=>o.key==='socialize'&&
+    n.needs.social>=60&&n.energy>=25&&
+    o.target?.needs.social>=45&&o.target?.energy>=20);
+   const success=setAction(n,peer?'socialize':fallbackBackground(n),'offline routine');
    n.thoughtAt=state.clock+(success?18:3);
   }
  }else if(!state.backgroundBusy&&due.length&&
@@ -233,6 +237,8 @@ function completeActivity(n){
   const other=state.npcs.find(v=>v.id===n.task.ref);
   if(!other||dist(n,other)>2){n.task=null;n.thoughtAt=state.clock+5;return;}
   if(!state.connected){
+   if(n.source==='offline routine')
+    return WorldRuntime.complete(state,n,{onRecord:renderEvents});
    n.task=null;n.action='none';n.thoughtAt=state.clock+15;
    return;
   }
