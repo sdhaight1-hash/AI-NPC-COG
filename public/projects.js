@@ -243,6 +243,8 @@
   if(!['ACTIVE','BLOCKED','COMPLETED'].includes(old.status))return null;
   const p=create(state,n,kind);
   p.startedAt=old.startedAt;p.status=old.status;
+  p.blockedReason=typeof old.blockedReason==='string'?
+   old.blockedReason.slice(0,140):null;
   p.completedActions=Number.isInteger(old.completedActions)?
    Math.max(0,Math.min(100000,old.completedActions)):0;
   p.nextAt=Number.isFinite(old.nextAt)?Math.max(state.clock,old.nextAt):state.clock;
@@ -256,6 +258,9 @@
    if(!previous)continue;
    node.attempts=Number.isInteger(previous.attempts)?
     Math.min(100000,Math.max(0,previous.attempts)):0;
+   if(states.has(previous.status))node.status=previous.status;
+   node.blockedBy=typeof previous.blockedBy==='string'?
+    previous.blockedBy.slice(0,120):null;
   }
   // World predicates win over persisted claims of completed work.
   sync(state,n);
