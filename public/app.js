@@ -39,7 +39,7 @@ function reachable(n,point){
  return dist(n,point)===0||pathfind(n,point).length>0;
 }
 function reachability(n){return WorldRuntime.reachability(state,n);}
-function availableActivities(n){return AgentWorld.available(n,state.world,state.npcs,reachability(n));}
+function availableActivities(n){return WorldRuntime.available(state,n);}
 function timeString(){
  const d=Civilization.stamp(state.clock);
  return String(d.hour).padStart(2,'0')+':'+String(d.minute).padStart(2,'0');
