@@ -101,9 +101,10 @@
   state.reservations.push(...claims);
   return {ok:true,claims,existing:false};
  }
- function validCommand(state,commandId){
+ function validCommand(state,commandId,expected=0){
   const all=(state.reservations||[]).filter(x=>x.commandId===commandId);
-  return !all.length||all.every(x=>x.status==='ACTIVE'&&x.expiresAt>state.clock);
+  const live=all.filter(x=>x.status==='ACTIVE'&&x.expiresAt>state.clock);
+  return live.length>=expected&&all.length===live.length;
  }
  function releaseCommand(state,commandId,reason='RELEASED'){
   let count=0;
