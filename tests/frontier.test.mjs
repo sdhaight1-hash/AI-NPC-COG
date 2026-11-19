@@ -91,3 +91,27 @@ test('practice increases gathering output without imposing occupational roles',(
  assert.equal(A.complete(n,w,[n]).ok,true);
  assert.equal(node.stock,4);
 });
+
+test('compact year transitions across months, seasons and years',()=>{
+ const {Frontier:F}=modules();
+ assert.equal(F.DAYS_PER_YEAR,108);
+ assert.equal(F.calendar(8*1440).dayOfMonth,9);
+ assert.equal(F.calendar(9*1440).month,2);
+ assert.equal(F.calendar(27*1440).season,'Summer');
+ assert.equal(F.calendar(54*1440).season,'Autumn');
+ assert.equal(F.calendar(81*1440).season,'Winter');
+ assert.equal(F.calendar(108*1440).year,2);
+});
+test('winter cools weather and limits plant regrowth',()=>{
+ const {AgentWorld:A,Frontier:F}=modules(),map=F.generate(379210);
+ assert.ok(F.weather(map,40*1440+720).temperature>
+  F.weather(map,94*1440+720).temperature+12);
+ const summer=A.newWorld(),winter=A.newWorld();
+ const a=summer.nodes.find(n=>n.kind==='food');
+ const b=winter.nodes.find(n=>n.id===a.id);
+ a.stock=0;b.stock=0;
+ summer.weather={kind:'clear',season:'Summer'};
+ winter.weather={kind:'clear',season:'Winter'};
+ A.regenerate(summer,100);A.regenerate(winter,100);
+ assert.ok(a.stock>b.stock);
+});
