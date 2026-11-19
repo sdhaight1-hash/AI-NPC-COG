@@ -15,7 +15,7 @@ function setup(){
   items:[],structures:[],weather:{kind:'clear'}};
  const sim={clock:10000,npcs:[a,b],world,receipts:[]};
  c.EvidenceMemory.state(a);c.EvidenceMemory.state(b);
- return {E:c.EvidenceMemory,P:c.Perception,c,sim,a,b};
+ return {E:c.EvidenceMemory,P:c.Perception,c,sim,a,b,world};
 }
 function committed(sim,actor,action,ref,id){
  const receipt={id,clock:sim.clock,actorId:actor.id,action,targetId:ref,
