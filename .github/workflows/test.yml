@@ -21,6 +21,7 @@ jobs:
       - run: node --check public/civilization.js
       - run: node --check public/receipts.js
       - run: node --check public/activities.js
+      - run: node --check public/reservations.js
       - run: node --check public/world-runtime.js
       - run: node --check public/persistence.js
       - run: node --check public/simulation.js

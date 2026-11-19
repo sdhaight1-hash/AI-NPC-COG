@@ -5,7 +5,7 @@ import vm from 'node:vm';
 function load(){
  const c=vm.createContext({});
  const names=['frontier','biology','crafting','cognition','agency','emergence',
-  'civilization','receipts','activities','world-runtime','simulation','persistence'];
+  'civilization','receipts','activities','reservations','world-runtime','simulation','persistence'];
  vm.runInContext(names.map(n=>readFileSync(new URL('../public/'+n+'.js',import.meta.url),'utf8')).join('\n'),c);
  return c;
 }

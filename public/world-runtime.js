@@ -166,6 +166,20 @@
     a.workpieceStage===n.workpiece?.stage))):null;
   const commandId=resumeCandidate?.commandId||
    'cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
+  const request=root.Reservations.specsFor(state,n,action,option.ref);
+  const expected=resumeCandidate?.reservationIds?.length||0;
+  if(resumed&&!root.Reservations.validCommand(state,commandId,expected)){
+   stats(n).rejected++;note(n,'Reservation for suspended work expired');
+   return false;
+  }
+  const hold=resumed?{ok:true,claims:root.Reservations.active(state)
+    .filter(x=>x.commandId===commandId)}:
+   root.Reservations.claim(state,n.id,commandId,request);
+  if(!hold.ok){
+   stats(n).rejected++;note(n,'Material blocked: '+hold.reason);
+   root.WorldReceipts.decision(state,n,action,'world','REJECTED',hold.reason);
+   return false;
+  }
   if(GOALS.has(action)){
    if(n.plan)return false;
    n.plan={key:action,steps:0,commandId};n.nextPlanAt=state.clock;
@@ -181,6 +195,7 @@
     const good=(action==='share_food'||action==='socialize')?
      approach(state,n,target):moveTo(state,n,target);
     if(!good){
+     root.Reservations.releaseCommand(state,commandId,'ROUTE_REJECTED');
      stats(n).rejected++;note(n,'No reachable path for '+action);
      remember(state,n,'Failed to reach a destination for '+action,
       {kind:'failure',action,ref:option.ref,salience:3});
@@ -191,9 +206,14 @@
    const active=resumed?root.Activities.resume(state,n,action,option.ref):null;
    const duration=actionDuration(n,action);
    const remaining=active?active.workRequired-active.workDone:duration;
-   n.task={key:action,ref:option.ref||null,commandId,readyAt:n.path.length?null:
+   n.task={key:action,ref:option.ref||null,commandId,
+    reservationIds:hold.claims.map(x=>x.idTag),readyAt:n.path.length?null:
     state.clock+remaining};
-   if(!active)root.Activities.start(state,n,n.task,duration);
+   if(active)active.reservationIds=[...n.task.reservationIds];
+   if(!active){
+    const activity=root.Activities.start(state,n,n.task,duration);
+    activity.reservationIds=[...n.task.reservationIds];
+   }
    if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
    n.goal=action.replaceAll('_',' ')+' (self-chosen)';
   }
@@ -231,8 +251,14 @@
   }
   root.Activities.progress(state,n);
   const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId};
-  const outcome=root.WorldReceipts.execute(state,n,finished,()=>
-   root.AgentWorld.complete(n,state.world,state.npcs));
+  const expected=n.task.reservationIds?.length||0;
+  const outcome=root.WorldReceipts.execute(state,n,finished,()=>(
+   root.Reservations.validCommand(state,finished.commandId,expected)?
+    root.AgentWorld.complete(n,state.world,state.npcs):
+    {ok:false,message:'RESERVATION_EXPIRED: required materials unavailable'}
+  ));
+  root.Reservations.releaseCommand(state,finished.commandId,
+   outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
