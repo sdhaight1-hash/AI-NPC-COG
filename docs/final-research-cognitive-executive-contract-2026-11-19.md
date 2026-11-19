@@ -167,3 +167,11 @@ First run code-only trait counterfactual fixtures, then add LLM deliberation. If
 **Do not:** add a POMDP solver, a second action executor, 60 personality dimensions, a global city director, mandatory per-minute inferencing, broad Rust rewrite, or autonomous code execution.
 
 **Decision frozen for coding:** world and bodily safety continue without LLM; deliberation gates proposed intentions, not world effects; all cues are actor-private and provenance-scoped; existing implementation remains the foundation.
+
+## Implementation checkpoint — PR #77 (2026-11-19)
+
+- **Changed:** `public/app.js:deliberate` now binds a model request to the current actor's action/plan/project, personal intention identity, private evidence count, personal inventory, urgency bands and perceived affordance targets. Responses are accepted only if still in the **current** actor-private legal option menu and the original target remains relevant.
+- **Negative control:** a distant resident's inventory mutation or a global `effectRevision` increment does not by itself reject another NPC's decision. The authoritative `WorldRuntime.begin` still validates physical action feasibility.
+- **Added test:** three delayed-response fixtures in `tests/client.test.mjs` cover depleted source target, new critical thirst while model pending, and irrelevant distant mutations.
+- **Not implemented:** a persisted cue inbox, actor-wide preference/trait model, long-horizon intention-governance state machine or a different Rein planning protocol. Those remain separate #73 / G5 research gates.
+- **Validation:** see [PR #77](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/77) for tested state and merge status.
