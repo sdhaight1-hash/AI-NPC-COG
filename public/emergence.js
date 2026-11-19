@@ -494,8 +494,6 @@
   function regenerate(world,dt){
     // Gradual finite regeneration, never more than a node's starting capacity.
     for(const node of world.nodes){
-      // Geological deposits are finite; weather cannot replace mined stone.
-      if(node.kind==='stone'){node.regrow=0;continue;}
       if(node.stock>=node.max)continue;
       const season=world.weather?.season||'Spring';
       const growth=season==='Winter'?.08:season==='Autumn'?.50:
@@ -503,9 +501,7 @@
       const precipitation=['rain','storm','snow'].includes(world.weather?.kind);
       const rate=node.kind==='water'?.027*(precipitation?1.5:.8):
         node.kind==='food'?.018*growth:
-        node.kind==='fiber'?.012*growth:
-        node.kind==='wood'?.008*growth:0;
-      if(rate<=0)continue;
+        node.kind==='fiber'?.012*growth:.008;
       node.regrow=(node.regrow||0)+dt*rate;
       while(node.regrow>=1&&node.stock<node.max){node.stock++;node.regrow--;}
     }
@@ -544,7 +540,7 @@
       if(old&&Number.isInteger(old.stock)&&old.stock>=0&&old.stock<=node.max){
         node.stock=old.stock;
         // A checkpoint must not discard partially accumulated resource growth.
-        node.regrow=node.kind!=='stone'&&Number.isFinite(old.regrow)&&
+        node.regrow=Number.isFinite(old.regrow)&&
           old.regrow>=0&&old.regrow<1?old.regrow:0;
       }
     }
