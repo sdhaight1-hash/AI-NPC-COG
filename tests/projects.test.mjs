@@ -153,3 +153,27 @@ test('storage project has an acyclic real production chain with tool repair',()=
  assert.equal(tool.status,'PENDING','Lost tool must reopen its prerequisite');
  assert.ok(project.nodes.some(x=>x.status!=='DONE'));
 });
+
+test('storage production actually builds and places a crate through verified stages',()=>{
+ const {c,s,n}=setup();
+ s.npcs=[n]; // Isolate production from unrelated traffic; keep the real terrain.
+ n.inventory.wood=9;n.inventory.stone=4;n.inventory.fiber=12;
+ c.Projects.create(s,n,'storage');
+ let achieved=false;
+ for(let i=0;i<500;i++){
+  n.energy=100;
+  tick(c,s);
+  if(n.project.status==='COMPLETED'){achieved=true;break;}
+ }
+ assert.equal(achieved,true,n.project.blockedReason||'Storage supply chain stalled');
+ const crate=s.world.structures.find(x=>x.type==='crate');
+ assert.ok(crate,'A physical storage object must exist');
+ assert.equal(n.inventory.crate,0,'Placed crate cannot remain carried');
+ assert.ok(crate.capacity>=12,'Crate retains real finite capacity');
+ const results=s.receipts.filter(x=>x.status==='COMPLETED');
+ assert.ok(results.filter(x=>x.action==='craft_stage').length>=18,
+  'Six staged recipes must complete in physical time');
+ assert.ok(results.some(x=>x.action==='place_crate'));
+ assert.equal(s.receipts.filter(x=>x.action==='place_crate'&&
+  x.status==='COMPLETED').length,1);
+});
