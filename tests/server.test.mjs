@@ -63,3 +63,29 @@ test('Hivemind decisions accept only advertised action keys', async () => {
     assert.throws(() => parseHivemindAction(value, input.options));
   }
 });
+
+test('HTTP server serves every engine script declared by index.html', async t => {
+  const {startServer}=await import('../server.mjs');
+  const server=startServer(0);
+  await new Promise(resolve=>server.once('listening',resolve));
+  t.after(()=>new Promise(resolve=>server.close(resolve)));
+  const base='http://127.0.0.1:'+server.address().port;
+  const page=await fetch(base+'/');
+  assert.equal(page.status,200,'HTML must load');
+  const html=await page.text();
+  const scripts=[...html.matchAll(/<script src="([^"]+)"/g)]
+   .map(m=>m[1]);
+  assert.ok(scripts.includes('/simulation.js'),'Simulation must be on the page');
+  assert.ok(scripts.length>=15,'Expected physical-world engine modules');
+  const responses=await Promise.all(scripts.map(async src=>{
+   const response=await fetch(base+src);
+   return {src,status:response.status,type:response.headers.get('content-type'),
+    source:await response.text()};
+  }));
+  assert.deepEqual(responses.filter(r=>r.status!==200).map(r=>r.src),[],
+   'Every script in HTML must be actually served by server.mjs');
+  for(const r of responses){
+   assert.match(r.type||'',/javascript/,r.src+' must have JavaScript MIME type');
+   assert.ok(r.source.trim().length>100,r.src+' cannot be empty');
+  }
+});
