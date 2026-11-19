@@ -274,7 +274,7 @@
     n.energy=clamp(n.energy-dt*(.045+
       (n.bio.sleepDebt>70?.024:0)+(n.bio.stress>70?.015:0)+
       (phys?.energyShortfallKcal>0?.1:0)));
-    if((world.weather?.kind==='storm'||world.weather?.kind==='rain')&&!sheltered)
+    if(['storm','rain','snow'].includes(world.weather?.kind)&&!sheltered)
       n.energy=clamp(n.energy-dt*.055);
     if(n.action==='rest'){
       // Nutrition influences recovery only modestly; an early-game unbalanced
