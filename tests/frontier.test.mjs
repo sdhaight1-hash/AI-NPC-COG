@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 function modules(){
  const c={};
- for(const name of ['frontier.js','biology.js','crafting.js','cognition.js','emergence.js'])
+ for(const name of ['frontier.js','biology.js','crafting.js','cognition.js','agency.js','emergence.js'])
   vm.runInNewContext(readFileSync(new URL('../public/'+name,import.meta.url),'utf8'),c);
  return c;
 }
