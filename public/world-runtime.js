@@ -200,6 +200,11 @@
   if(!option){
    stats(n).rejected++;note(n,'Action '+action+' no longer available');return false;
   }
+  if(action==='socialize'&&source==='offline routine'&&
+   (n.needs.social<50||n.energy<25||!option.target||
+    option.target.needs.social<45||option.target.energy<20)){
+   stats(n).rejected++;note(n,'Offline companion not mutually willing');return false;
+  }
   const resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
   const resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
    a.key===action&&a.ref===(option.ref??null)&&
@@ -288,8 +293,20 @@
   if(!n.task||n.path.length||n.task.readyAt===null||state.clock<n.task.readyAt)return;
   if(n.task.key==='socialize'){
    if(hooks.social)return hooks.social(n);
-   root.Activities.finish(state,n,false,'No connected conversation');
-   n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
+   const other=state.npcs.find(v=>v.id===n.task.ref);
+   const willing=n.source==='offline routine'&&other&&
+    other.peerReservedFor===n.id&&other.alive!==false&&
+    other.needs.social>=45&&other.energy>=20&&
+    !other.task&&!other.path?.length&&!other.peerPending&&
+    root.Frontier.distance(state.world,n,other)<=2;
+   if(!willing){
+    if(other?.peerReservedFor===n.id)delete other.peerReservedFor;
+    root.Activities.finish(state,n,false,'Offline companionship interrupted');
+    n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
+   }
+   // Physical co-presence and mutual willingness allow time together.
+   // No invented speech, transcript, or social affinity is awarded.
+   n.task.approved=true;
   }
   root.Activities.progress(state,n);
   const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId,
@@ -302,6 +319,10 @@
   ));
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
+  if(finished.key==='socialize'&&finished.source==='offline routine'){
+   const peer=state.npcs.find(v=>v.id===finished.ref);
+   if(peer?.peerReservedFor===n.id)delete peer.peerReservedFor;
+  }
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
   if(finished.source==='project'||(n.project&&finished.source==='plan'&&
     finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
@@ -374,7 +395,9 @@
   return begin(state,n,urgent,'survival instinct',null,hooks);
  }
  function chooseOffline(state,n){
-  const options=available(state,n).filter(o=>o.key!=='socialize');
+  const options=available(state,n).filter(o=>o.key!=='socialize'||
+   (n.needs.social>=50&&n.energy>=25&&
+    o.target?.needs.social>=45&&o.target?.energy>=20));
   const selected=root.Agency.choose(n,options,state.world,state.clock);
   if(selected)return selected.key;
   return root.AgentWorld.fallback(n,options);
@@ -387,6 +410,13 @@
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
+   if(n.needs.social>=80){
+    const partner=available(state,n).find(o=>o.key==='socialize'&&
+     o.target?.needs.social>=45&&o.target?.energy>=20&&n.energy>=25);
+    if(partner&&begin(state,n,'socialize','offline routine',null,hooks)){
+     n.thoughtAt=state.clock+18;continue;
+    }
+   }
    if(root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
@@ -399,7 +429,7 @@
   }
  }
  root.WorldRuntime={DURATION,stats,note,pathfind,reachability,available,moveTo,
-  approach,move,actionDuration,begin,complete,advancePlan,advanceProject,survival,scheduleOffline,
+  approach,move,actionDuration,begin,complete,advancePlan,advanceProject,survival,chooseOffline,scheduleOffline,
   invalidateNavigation,
   finishPlan,remember,log};
 })(globalThis);

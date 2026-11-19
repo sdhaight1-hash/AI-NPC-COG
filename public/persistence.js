@@ -146,6 +146,14 @@ function restore(state,saved){
    state.npcs.push(n);
   }
   root.Reservations.restore(state,saved);
+  // Ephemeral partner reservations are reconstructed from real pending
+  // offline activities, not trusted directly from serialized peer flags.
+  for(const n of state.npcs){
+   if(n.source!=='offline routine'||n.task?.key!=='socialize')continue;
+   const peer=state.npcs.find(p=>p.id===n.task.ref&&p!==n&&
+    !p.task&&!p.peerReservedFor);
+   if(peer)peer.peerReservedFor=n.id;
+  }
   state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
   const maxId=Math.max(5,...state.npcs.map(n=>Number(n.id.slice(7))),
    ...state.dead.filter(v=>/^person_[1-9]\d*$/.test(v.id))
