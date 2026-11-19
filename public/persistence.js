@@ -44,6 +44,7 @@ function restore(state,saved){
   state.world.now=saved.clock;
   Frontier.restore(state.world,saved.world);
   AgentWorld.restoreWorld(state.world,saved.world);
+  Civilization.restoreRemains(state.world,saved.world?.remains,saved.dead);
   root.WorldRuntime.invalidateNavigation(state.world);
   state.clock=saved.clock;
   state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;

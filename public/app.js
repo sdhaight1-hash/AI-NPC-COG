@@ -495,11 +495,17 @@ function drawWorld(){
   if(state.viewZ===0){
    VillageArt.drawWorldObjects(ctx,state.world,{
     left:-1,top:-1,right:W+1,bottom:H+1});
-   const focused=AgentWorld.objectById(state.world,state.selectedObject);
-   if(focused){
-    ctx.strokeStyle='#fff0a6';ctx.lineWidth=2;
-    ctx.strokeRect(focused.x*TILE+1,focused.y*TILE+1,TILE-2,TILE-2);
-   }
+  }
+  for(const remains of state.world.remains){
+   if(remains.z!==state.viewZ)continue;
+   const rx=remains.x*TILE,ry=remains.y*TILE;
+   ctx.fillStyle='#403831';ctx.fillRect(rx+TILE*.19,ry+TILE*.44,TILE*.64,TILE*.26);
+   ctx.fillStyle='#b4a093';ctx.fillRect(rx+TILE*.23,ry+TILE*.45,TILE*.54,TILE*.15);
+  }
+  const focused=AgentWorld.objectById(state.world,state.selectedObject);
+  if(focused&&(focused.z||0)===state.viewZ){
+   ctx.strokeStyle='#fff0a6';ctx.lineWidth=2;
+   ctx.strokeRect(focused.x*TILE+1,focused.y*TILE+1,TILE-2,TILE-2);
   }
   for(const n of state.npcs.filter(v=>(v.z||0)===state.viewZ)
    .sort((a,b)=>position(a).y-position(b).y)){
@@ -750,10 +756,11 @@ function setZ(n){state.viewZ=clamp(n,Frontier.MIN_Z,Frontier.MAX_Z);
  drawnLayer=null;$('zLabel').textContent='Z '+state.viewZ;}
 canvas.addEventListener('click',event=>{
  const tile=clientToTile(event.clientX,event.clientY,canvas.getBoundingClientRect());
- const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=1);
+ const remains=state.world.remains.find(o=>o.z===tile.z&&o.x===tile.x&&o.y===tile.y);
+ const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=(remains?0:1));
  if(n){state.selectedObject=null;selectNpc(n.id);renderObjectInspector();return;}
- const object=tile.z===0?[...state.world.items,...state.world.nodes,
-  ...state.world.structures].find(o=>o.x===tile.x&&o.y===tile.y):null;
+ const object=remains||(tile.z===0?[...state.world.items,...state.world.nodes,
+  ...state.world.structures].find(o=>o.x===tile.x&&o.y===tile.y):null);
  state.selectedObject=object?.id||null;renderObjectInspector();
  if(!object){state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
   state.camera.y=tile.y*TILE-canvas.height/(2*state.zoom);}

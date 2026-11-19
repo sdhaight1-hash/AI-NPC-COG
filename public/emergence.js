@@ -21,7 +21,7 @@
       generator:island.generator,terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
       nodes:island.resources,construction:root.Construction?.fresh(),
-      structures:[],items:[],itemSeq:1};
+      structures:[],items:[],remains:[],itemSeq:1};
   }
   // Transitional physical-load view over the existing numeric inventory.
   // This computes measurements; it does not introduce a competing item store.
@@ -95,10 +95,12 @@
   function objectById(world,id){
     return world.nodes.find(o=>o.id===id)||
       world.items.find(o=>o.id===id)||
-      world.structures.find(o=>o.id===id)||null;
+      world.structures.find(o=>o.id===id)||world.remains?.find(o=>o.id===id)||null;
   }
   function describeObject(world,object){
     if(!object)return null;
+    if(object.kind==='remains')return {id:object.id,kind:'remains',name:'Remains',
+      x:object.x,y:object.y,z:object.z,description:'Remains of a deceased resident'};
     if(Object.hasOwn(OBJECT_LABELS,object.kind)&&object.max!==undefined){
       const condition=object.stock===0?'depleted':
         object.stock<=object.max/3?'sparse':'available';
@@ -134,8 +136,9 @@
   }
   function inspectTarget(n,world,canReach){
     const seen=new Set((n.knowledge?.observations||[]).map(o=>o.id));
-    return [...world.nodes,...world.structures,...world.items]
-      .filter(o=>!seen.has(o.id)&&distance(n,o)<=8&&
+    return [...world.nodes,...world.structures,...world.items,...(world.remains||[])]
+      .filter(o=>!seen.has(o.id)&&(n.z||0)===(o.z||0)&&distance(n,o)<=8&&
+        (o.kind!=='remains'||root.Perception?.line(world,n,o))&&
         describeObject(world,o)&&canReach(o))
       .sort((a,b)=>distance(n,a)-distance(n,b)||
         a.id.localeCompare(b.id))[0]||null;
@@ -326,7 +329,9 @@
       message='Collected '+collected+' '+node.kind+' (source '+node.stock+'/'+node.max+' remaining)';
     }else if(task.key==='inspect'){
       const target=objectById(world,task.ref);
-      if(!target||distance(n,target)>1)return {ok:false,message:'Object is no longer nearby'};
+      if(!target||(n.z||0)!==(target.z||0)||distance(n,target)>1||
+       (target.kind==='remains'&&!root.Perception?.line(world,n,target)))
+        return {ok:false,message:'Object is no longer nearby'};
       const info=describeObject(world,target);
       if(!info)return {ok:false,message:'Unknown object'};
       n.knowledge.observations ||= [];
@@ -658,6 +663,6 @@
         Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
     }));
   }
-  root.AgentWorld={KEYS,newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
+  root.AgentWorld={KEYS,INVENTORY_KINDS:Object.freeze(Object.keys(ITEM_LOAD)),newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
     validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
 })(globalThis);

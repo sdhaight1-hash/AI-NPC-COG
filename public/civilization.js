@@ -119,8 +119,77 @@ function advanceArrivals(state,before,after){
  }
  return newcomers;
 }
+
+const MAX_REMAINS=10000;
+const personId=id=>typeof id==='string'&&/^person_[1-9]\d{0,15}$/.test(id)&&
+ Number.isSafeInteger(Number(id.slice(7)));
+const between=(n,min,max)=>Number.isFinite(n)&&n>=min&&n<=max;
+const boundedText=(value,max)=>typeof value==='string'&&value.length<=max;
+function copyWorkpiece(p,world,at){
+ const spec=root.Crafting.RECIPES;
+ if(typeof p?.recipe!=='string'||!Object.hasOwn(spec,p.recipe))return null;
+ const recipeSpec=spec[p.recipe];
+ if(!spec||!Number.isInteger(p.stage)||!between(p.stage,0,recipeSpec.stages.length-1)||
+  !between(p.workmanship,0,1000)||!between(p.materialQuality,1,5)||
+  !between(p.startedAt,0,at)||!Number.isInteger(p.x)||!between(p.x,0,world.width-1)||
+  !Number.isInteger(p.y)||!between(p.y,0,world.height-1)||
+  (p.station!==null&&!boundedText(p.station,100)))return null;
+ const {recipe,stage,workmanship,materialQuality,station,x,y,startedAt}=p;
+ return {recipe,stage,workmanship,materialQuality,station,x,y,startedAt};
+}
+function restoreRemains(world,records,archive){
+ world.remains=[];
+ if(!Array.isArray(records))return;
+ const deaths=new Map(archive.slice(-MAX_REMAINS).filter(a=>personId(a?.id)).map(a=>[a.id,a]));
+ const seen=new Set(),kinds=root.AgentWorld.INVENTORY_KINDS,craftedKinds=root.Crafting.KINDS;
+ for(const r of records.slice(0,MAX_REMAINS)){
+  if(!r||!personId(r.actorId)||r.id!=='remains_'+r.actorId||seen.has(r.actorId)||
+   r.kind!=='remains'||!between(r.deathAt,0,world.now)||
+   deaths.get(r.actorId)?.deathAt!==r.deathAt||
+   !Number.isInteger(r.x)||!between(r.x,0,world.width-1)||
+   !Number.isInteger(r.y)||!between(r.y,0,world.height-1)||
+   !Number.isInteger(r.z)||!between(r.z,world.zMin,world.zMax)||
+   !r.inventory||Object.keys(r.inventory).length!==kinds.length||
+   !kinds.every(k=>Object.hasOwn(r.inventory,k)&&Number.isInteger(r.inventory[k])&&
+     between(r.inventory[k],0,1000))||
+   !Array.isArray(r.pantry)||r.pantry.length!==r.inventory.food||
+   !r.pantry.every(food=>typeof food==='string'&&Object.hasOwn(root.Biology.FOOD,food))||
+   !Array.isArray(r.craftedItems)||r.craftedItems.length>1000)continue;
+  const inventory=Object.fromEntries(kinds.map(k=>[k,r.inventory[k]]));
+  const counts=Object.fromEntries(craftedKinds.map(k=>[k,0]));
+  const craftedItems=[];
+  for(const item of r.craftedItems){
+   if(!item||typeof item.kind!=='string'||!Object.hasOwn(counts,item.kind)||!Number.isInteger(item.quality)||
+    !between(item.quality,1,5)||!boundedText(item.maker,80)||
+    !boundedText(item.method,32)||!between(item.materialQuality,1,5)||
+    !between(item.craftedAt,0,r.deathAt))break;
+   const {kind,quality,maker,method,materialQuality,craftedAt}=item;
+   craftedItems.push({kind,quality,maker,craftedAt,method,materialQuality});
+   counts[kind]++;
+  }
+  // A legacy hatchet may have arrived in an older save as a counted tool.
+  if(craftedItems.length!==r.craftedItems.length||craftedKinds.some(k=>
+    k==='hatchet'?counts[k]>inventory[k]:counts[k]!==inventory[k]))continue;
+  const workpiece=copyWorkpiece(r.workpiece,world,r.deathAt);
+  if(r.workpiece!==null&&!workpiece)continue;
+  const {id,kind,actorId,x,y,z,deathAt}=r;
+  world.remains.push({id,kind,actorId,x,y,z,deathAt,inventory,
+   pantry:r.pantry.slice(),craftedItems,workpiece});
+  seen.add(actorId);
+ }
+}
 function die(state,npc,cause='unknown'){
- if(!npc||npc.alive===false||!state.npcs.some(n=>n.id===npc.id))return false;
+ if(!npc||npc.alive===false||!state.npcs.includes(npc))return false;
+ const world=state.world;
+ const remains={id:'remains_'+npc.id,kind:'remains',actorId:npc.id,
+  x:root.Frontier.wrap(npc.x,world.width),y:root.Frontier.wrap(npc.y,world.height),
+  z:npc.z||0,deathAt:state.clock,inventory:npc.inventory,
+  pantry:npc.bio.pantry,craftedItems:npc.craftedItems,workpiece:npc.workpiece};
+ root.Reservations?.releaseActor(state,npc.id);
+ root.Activities?.finish(state,npc,false,'ACTOR_DEAD');
+ (world.remains ||= []).push(remains);
+ npc.inventory=Object.fromEntries(Object.keys(remains.inventory).map(k=>[k,0]));
+ npc.bio.pantry=[];npc.craftedItems=[];npc.workpiece=null;
  npc.alive=false;
  state.dead.push({id:npc.id,name:npc.name,birthAt:npc.birthAt,
   deathAt:state.clock,cause,parents:[...(npc.lineage?.biologicalParents||[])],
@@ -160,5 +229,5 @@ function stamp(clock){
   dayOfYear:d.dayOfYear,hour:Math.floor(minutes/60),minute:minutes%60};
 }
 root.Civilization={founders,person,addArrival,advanceArrivals,die,updateHealth,
- spawnPosition,stamp,dateAt,age,YEAR_MINUTES};
+ spawnPosition,stamp,dateAt,age,YEAR_MINUTES,restoreRemains};
 })(globalThis);
