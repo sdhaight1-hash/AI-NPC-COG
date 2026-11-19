@@ -18,6 +18,10 @@
   salience=2,fact=null}={}){
   if(!kinds.has(type)||typeof text!=='string'||!text.trim())return null;
   const receipt=sourceReceipt(sim,n,receiptId);
+  // Evidence is captured at physical commitment, not replayed from an old
+  // receipt after the actor or target may have moved or changed.
+  if(receipt&&(receipt.clock!==sim.clock||
+   state(n).episodes.some(e=>e.receiptId===receipt.id)))return null;
   if((type==='action'||type==='inspection'||fact)&&!receipt)return null;
   if(receipt&&(type==='action'||type==='inspection')){
    if(type==='inspection'){
