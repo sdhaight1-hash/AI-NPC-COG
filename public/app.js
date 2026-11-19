@@ -521,118 +521,15 @@ function renderChat(){
   }
  }
 }
-function serializePerson(n){
- const {travel,motion,blockedFor,peerPending,peerReservedFor,peerRetryAt,...stored}=n;
- return stored;
-}
+function serializePerson(n){return Persistence.save({...state,npcs:[n]}).npcs[0];}
 function save(){
- try{
-  const pack={version:3,seed:state.world.seed,clock:state.clock,
-   nextPersonId:state.nextPersonId,npcs:state.npcs.map(serializePerson),
-   dead:state.dead,world:state.world,events:state.events,
-   selected:state.selected,viewZ:state.viewZ};
-  localStorage.setItem(STORE,JSON.stringify(pack));
- }catch{ /* No destructive reset when storage is unavailable. */ }
+ try{localStorage.setItem(STORE,JSON.stringify(Persistence.save(state)));}
+ catch{ /* Retain current world when browser storage is unavailable. */ }
 }
-function validSavedPath(path,start){
- if(!Array.isArray(path)||path.length>W*H*8)return false;
- let prev={x:start.x,y:start.y,z:start.z||0};
- for(const tile of path){
-  if(!tile||!Frontier.neighbors(state.world,prev).some(p=>key(p)===key(tile)))
-   return false;
-  prev=tile;
- }
- return true;
-}
+function validSavedPath(path,start){return Persistence.validSavedPath(state,path,start);}
 function restore(){
- try{
-  const saved=JSON.parse(localStorage.getItem(STORE)||'null');
-  if(!saved||saved.version!==3||saved.seed!==state.world.seed||
-    !Number.isFinite(saved.clock)||saved.clock<490||
-    !Number.isInteger(saved.nextPersonId)||saved.nextPersonId<6||
-    !Array.isArray(saved.npcs)||!Array.isArray(saved.dead))return;
-  AgentWorld.restoreWorld(state.world,saved.world);
-  Frontier.restore(state.world,saved.world);
-  state.clock=saved.clock;state.world.now=saved.clock;
-  const seen=new Set();
-  const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
-  state.npcs=[];
-  for(const old of saved.npcs.slice(0,5000)){
-   if(!old||typeof old.id!=='string'||!/^person_[1-9]\d*$/.test(old.id)||
-     seen.has(old.id)||archived.has(old.id)||!Number.isInteger(old.x)||!Number.isInteger(old.y)||
-     !Number.isInteger(old.z)||isBlocked(old.x,old.y,old.z))continue;
-   if(!Number.isFinite(old.birthAt)||old.birthAt>state.clock||
-     !Number.isFinite(old.health)||old.health<=0)continue;
-   seen.add(old.id);
-   const n=Civilization.person(state.world,Number(old.id.slice(7)),
-    Number.isFinite(old.spawnAt)?old.spawnAt:490,old);
-   n.x=old.x;n.y=old.y;n.z=old.z;
-   n.name=String(old.name||n.name).slice(0,80);
-   n.birthAt=old.birthAt;n.health=clamp(old.health);n.alive=true;
-   for(const k of ['mood','energy','trust'])if(Number.isFinite(old[k]))n[k]=clamp(old[k]);
-   for(const k of ['goal','source','personality','facing'])
-    if(typeof old[k]==='string')n[k]=old[k].slice(0,300);
-   for(const k of Object.keys(n.needs))
-    if(Number.isFinite(old.needs?.[k]))n.needs[k]=clamp(old.needs[k]);
-   for(const k of Object.keys(n.inventory))
-    if(Number.isInteger(old.inventory?.[k])&&old.inventory[k]>=0)
-     n.inventory[k]=Math.min(old.inventory[k],1000);
-   for(const k of Object.keys(n.skills))
-    if(Number.isInteger(old.skills?.[k])&&old.skills[k]>=0)
-     n.skills[k]=Math.min(old.skills[k],100000);
-   n.bio=Biology.restore(old.bio,n.inventory.food);
-   if(old.activityStats&&typeof old.activityStats==='object'){
-    const a=activity(n);
-    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','errors'])
-     if(Number.isInteger(old.activityStats[k])&&old.activityStats[k]>=0)
-      a[k]=Math.min(old.activityStats[k],10000000);
-    if(typeof old.activityStats.last==='string')
-     a.last=old.activityStats.last.slice(0,110);
-   }
-   Crafting.restore(n,old);
-   n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
-    [...new Set(old.knowledge.recipes.filter(v=>
-      ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
-   if(Array.isArray(old.knowledge?.observations))
-    n.knowledge.observations=old.knowledge.observations.filter(o=>o&&
-     typeof o.id==='string'&&AgentWorld.objectById(state.world,o.id)&&
-     typeof o.text==='string'&&Number.isFinite(o.at))
-     .slice(-40).map(o=>({id:o.id,kind:String(o.kind||'').slice(0,30),
-      at:o.at,text:o.text.slice(0,240)}));
-   Cognition.restore(n,old.memories);
-   Agency.restore(n,old.agency,state.clock);
-   if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
-   if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
-   if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
-   if(validSavedPath(old.path,n))n.path=old.path;
-   if(AgentWorld.KEYS.includes(old.task?.key)&&
-     (old.task.ref===null||typeof old.task.ref==='string')){
-    n.task={key:old.task.key,ref:old.task.ref,
-     readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
-   }
-   n.plan=AgentWorld.validatePlan(old.plan);
-   if(n.workpiece&&(!n.plan||n.plan.key!=='craft_project'||
-    n.plan.recipe!==n.workpiece.recipe))
-    n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
-   if(!n.workpiece&&n.plan?.key==='craft_project')n.plan=null;
-   if(n.plan&&(!n.agency.goal||n.agency.goal.key!==n.plan.key))
-    n.agency.goal={key:n.plan.key,source:'restored project',
-     reason:'security',startedAt:state.clock,progress:n.plan.steps};
-   n.action=AgentWorld.KEYS.includes(old.action)?old.action:'none';
-   n.thoughtAt=state.clock+3+state.npcs.length*2;
-   state.npcs.push(n);
-  }
-  state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
-  const maxId=Math.max(5,...state.npcs.map(n=>Number(n.id.slice(7))),
-   ...state.dead.filter(v=>/^person_[1-9]\d*$/.test(v.id))
-    .map(v=>Number(v.id.slice(7))));
-  state.nextPersonId=Math.max(saved.nextPersonId,maxId+1);
-  state.events=Array.isArray(saved.events)?saved.events.slice(0,100):[];
-  state.selected=state.npcs.some(n=>n.id===saved.selected)
-   ?saved.selected:state.npcs[0]?.id||null;
-  if(Number.isInteger(saved.viewZ)&&saved.viewZ>=Frontier.MIN_Z&&
-   saved.viewZ<=Frontier.MAX_Z)state.viewZ=saved.viewZ;
- }catch{ /* Damaged save is ignored; a fresh world remains available. */ }
+ try{return Persistence.restore(state,JSON.parse(localStorage.getItem(STORE)||'null'));}
+ catch{return false;}
 }
 function step(dt){
  if(state.paused||dt<=0)return;
