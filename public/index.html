@@ -16,7 +16,7 @@
       <div class="panel simulation">
         <div class="panel-head"><div><span class="eyebrow">WORLD 001 / SANDBOX</span><h1>Hearthbrook · Emergent World</h1><p>Six unassigned inhabitants · one shared mind · world-constrained choices</p></div><div class="clock-group"><strong id="worldTime">08:10</strong><small id="worldDay">DAY 01</small></div></div>
         <div class="toolbar"><button id="pauseBtn" class="control">Ⅱ Pause</button><div class="speed-picker"><span>Time scale</span><button class="speed active" data-speed="1">1×</button><button class="speed" data-speed="3">3×</button><button class="speed" data-speed="8">8×</button></div><div class="zoom-picker"><span>Camera</span><button class="zoom-btn" id="zoomOut" type="button" aria-label="Zoom out">−</button><strong id="zoomLevel" aria-live="polite">1×</strong><button class="zoom-btn" id="zoomIn" type="button" aria-label="Zoom in">+</button></div><label class="switch"><input id="autoAI" type="checkbox" checked><span>Autonomous decisions</span></label><button id="resetBtn" class="control reset">Reset</button></div>
-        <div class="world-frame"><canvas id="world" width="640" height="416" aria-label="Interactive top-down village with six NPCs"></canvas><div class="map-hint">Click ground to move · WASD to walk · Click a resident · E to talk · +/- camera</div><div class="world-status" id="worldStatus">World running</div></div>
+        <div class="world-frame"><canvas id="world" width="640" height="416" aria-label="Interactive top-down village with six NPCs"></canvas><div class="map-hint">WASD / arrows: smooth movement · Click: navigate · E: talk · +/- zoom</div><div class="world-status" id="worldStatus">World running</div></div>
         <div class="world-footer"><span><i class="legend player"></i> You</span><span><i class="legend npc"></i> Villagers</span><span><i class="legend selected"></i> Selected resident</span><span class="footer-note" id="footerNote">Offline routines are explicitly labeled.</span></div>
       </div>
       <div class="panel journal">
@@ -52,6 +52,7 @@
     </aside>
   </main>
   <script src="/pixel-art.js" defer></script>
+  <script src="/physics.js" defer></script>
   <script src="/emergence.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
