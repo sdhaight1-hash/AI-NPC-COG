@@ -266,8 +266,11 @@ test('Rein always receives at most ten legal action choices, even with planning'
  const options=browser.backgroundOptions(npc);
  assert.ok(options.length<=10);
  assert.equal(options.at(-1).key,'none');
- assert.ok(options.some(x=>x.key==='stock_food'));
- assert.ok(options.some(x=>x.key==='make_campfire'));
+ const legal=browser.availableActivities(npc).map(x=>x.key);
+ assert.ok(legal.includes('stock_food'));
+ assert.ok(legal.includes('make_campfire'));
+ assert.ok(options.every(x=>legal.includes(x.key)),
+   'The ten scored choices must all be legal, even when some are omitted');
  assert.ok(!options.some(x=>x.key==='work'),'No occupational scheduling');
 });
 
