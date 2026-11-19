@@ -353,12 +353,39 @@
    certainty:'inferred',confidence:Math.round(confidence*1000)/1000,
    contradictory,sourceEpisodeIds:claims.slice(-12).map(f=>f.sourceEpisodeId)};
  }
+ // A speaker's reliability concerns only resource reports this listener
+ // independently verified. Stale/depleted reports are not evidence of lies.
+ function speakerReliability(n,speakerId){
+  const own=state(n);
+  const reports=own.claims.filter(c=>c.speakerId===speakerId);
+  const seen=new Set(),counts={supported:0,contradicted:0,stale:0,unverified:0};
+  for(const claim of reports){
+   if(['stale','unverified'].includes(claim.status)){
+    counts[claim.status]++;continue;
+   }
+   if(!['supported','contradicted'].includes(claim.status)||
+    typeof claim.verificationReceiptId!=='string'||
+    seen.has(claim.verificationReceiptId))continue;
+   // A reported status is not trusted unless there is a matching private
+   // firsthand inspection episode linked to the physical verification receipt.
+   const verified=own.episodes.some(e=>e.type==='inspection'&&
+    e.certainty==='observed'&&e.ref===claim.sourceId&&
+    e.receiptId===claim.verificationReceiptId&&e.at>=claim.at);
+   if(!verified)continue;
+   seen.add(claim.verificationReceiptId);
+   counts[claim.status]++;
+  }
+  const samples=counts.supported+counts.contradicted;
+  return {speakerId,samples,...counts,
+   // Symmetric Beta(1,1) prior, not an absolute truth or affinity score.
+   score:(counts.supported+1)/(samples+2)};
+ }
  function working(n){
   return {task:n.task?.key||null,commandId:n.task?.commandId||null,
    goal:n.project?.goal||n.plan?.key||n.agency?.goal?.key||null,
    remainingMinutes:n.currentActivity?
     Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
  }
- root.EvidenceMemory={state,record,fromReceipt,fromFailedReceipt,fromDialogue,recall,consolidate,restore,working,belief,
+ root.EvidenceMemory={state,record,fromReceipt,fromFailedReceipt,fromDialogue,recall,consolidate,restore,working,belief,speakerReliability,
   MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES,MAX_CLAIMS};
 })(globalThis);

@@ -93,6 +93,14 @@ function sceneFor(n){
     ' [source:'+m.ref+']':'')).join('; ')||'No source-backed experiences';
  const beliefs=a.beliefs.slice(-4).map(b=>b.kind+' at '+b.x+','+b.y+
   ' ('+b.status+', last personally witnessed '+Math.floor(b.at)+')').join('; ')||'None';
+ const heardSpeakers=[...new Set((n.evidenceMemory?.claims||[])
+  .map(c=>c.speakerId))].slice(-4);
+ const reliability=heardSpeakers.map(id=>{
+  const r=EvidenceMemory.speakerReliability(n,id);
+  return id+' '+r.supported+' supported, '+r.contradicted+
+   ' contradicted ('+r.samples+' verified; report score '+
+   r.score.toFixed(2)+')';
+ }).join('; ')||'No independently verified reports';
  return 'Year '+Civilization.stamp(state.clock).year+', '+Civilization.stamp(state.clock).season+', '+timeString()+
   '. Untamed procedural wilderness; no predefined community or government. '+
   n.name+' at ('+n.x+','+n.y+','+(n.z||0)+'). Personality: '+n.personality+
@@ -104,6 +112,7 @@ function sceneFor(n){
   '. Current intention: '+(a.goal?.key||n.plan?.key||'undecided')+
   '. My witnessed beliefs: '+beliefs+'. Relevant personal recall: '+memories+
   '. Evidence-linked recall: '+evidenced+
+  '. My own verification of others\' resource reports (not friendship): '+reliability+
   '. Weather '+state.world.weather.kind+', '+state.world.weather.temperature+'C.'+
   ' Inventory: '+Object.entries(n.inventory).map(([k,v])=>k+' '+v).join(', ')+
   '. Skills earned by actions: '+Object.entries(n.skills).filter(([,v])=>v>0)
