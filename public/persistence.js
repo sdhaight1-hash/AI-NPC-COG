@@ -42,7 +42,7 @@ function restore(state,saved){
   state.receipts=Array.isArray(saved.receipts)?saved.receipts.filter(x=>
    x&&typeof x.id==='string'&&Number.isSafeInteger(x.sequence)&&
    typeof x.actorId==='string'&&typeof x.commandId==='string'&&
-   ['ACCEPTED','COMPLETED','FAILED'].includes(x.status)).slice(-4096):[];
+   ['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED'].includes(x.status)).slice(-4096):[];
   state.receiptSeq=Math.max(state.receiptSeq,0,...state.receipts.map(x=>x.sequence));
   const seen=new Set();
   const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
