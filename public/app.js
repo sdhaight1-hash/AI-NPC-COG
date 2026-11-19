@@ -463,24 +463,66 @@ async function sendMessage(event){
  }
 }
 
-function updateMovement(actor,dt,tilesPerSec){
- if(!actor.path?.length)return;
- actor.travel+=dt*tilesPerSec;
- while(actor.travel>=1&&actor.path.length){
-  const next=actor.path.shift();
-  if(isBlocked(next.x,next.y)){actor.path=[];break;}
-  const dx=next.x-actor.x,dy=next.y-actor.y;
-  actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
-  actor.x=next.x;actor.y=next.y;actor.travel-=1;
+function ensureBody(actor){
+ if(!actor.body)actor.body=Physics2D.create(actor.x,actor.y,actor===state.player?.235:.23);
+ return actor.body;
+}
+function nearbyBodies(actor){
+ const body=ensureBody(actor);
+ return [state.player,...state.npcs].filter(other=>other!==actor&&other.body)
+  .map(other=>other.body).filter(other=>Math.abs(other.x-body.x)<2&&Math.abs(other.y-body.y)<2);
+}
+function controlVector(){
+ let x=0,y=0;
+ if(heldKeys.has('a')||heldKeys.has('arrowleft'))x--;
+ if(heldKeys.has('d')||heldKeys.has('arrowright'))x++;
+ if(heldKeys.has('w')||heldKeys.has('arrowup'))y--;
+ if(heldKeys.has('s')||heldKeys.has('arrowdown'))y++;
+ return {x,y};
+}
+function updateMovement(actor,dt,speed){
+ const body=ensureBody(actor),others=nearbyBodies(actor);
+ const input=actor===state.player?controlVector():{x:0,y:0};
+ if(actor===state.player&&(input.x||input.y)){
+  actor.path=[];actor.travel=0;
+  Physics2D.steer(body,input,dt,isBlocked,others,speed);
+  actor.x=Math.floor(body.x);actor.y=Math.floor(body.y);
+ }else if(actor.path?.length){
+  const next=actor.path[0];
+  if(isBlocked(next.x,next.y)){
+   actor.path=[];body.vx=0;body.vy=0;
+  }else{
+   const movement=Physics2D.follow(body,next,dt,isBlocked,others,speed);
+   const dx=body.vx,dy=body.vy;
+   if(Math.hypot(dx,dy)>.12)
+    actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+   if(movement.arrived){
+    actor.x=next.x;actor.y=next.y;
+    actor.path.shift();actor.travel=0;
+    actor.blockedFor=0;
+   }else if(movement.blocked){
+    actor.blockedFor=(actor.blockedFor||0)+dt;
+    // Do not corrupt a task route. Wait briefly and let nearby bodies clear.
+    if(actor.blockedFor>6){
+     actor.path=[];
+     actor.blockedFor=0;
+     if(actor.task){actor.task=null;actor.goal='Route blocked by another resident';
+       actor.thoughtAt=state.clock+5;}
+    }
+   }else actor.blockedFor=0;
+  }
+ }else{
+  Physics2D.steer(body,{x:0,y:0},dt,isBlocked,others,speed);
  }
- if(!actor.path.length)actor.travel=0;
+ actor.motion=Math.hypot(body.vx,body.vy);
+ if(actor.motion>.13 && !actor.path?.length && actor===state.player){
+  actor.facing=Math.abs(body.vx)>Math.abs(body.vy)
+    ?(body.vx>0?'right':'left'):(body.vy>0?'down':'up');
+ }
 }
 function position(actor){
- if(actor.path?.length){
-  const n=actor.path[0],t=Math.min(1,actor.travel);
-  return {x:actor.x+(n.x-actor.x)*t,y:actor.y+(n.y-actor.y)*t};
- }
- return {x:actor.x,y:actor.y};
+ const body=actor.body;
+ return body?{x:body.x-.5,y:body.y-.5}:{x:actor.x,y:actor.y};
 }
 const staticCanvas=document.createElement('canvas');
 staticCanvas.width=W*TILE;staticCanvas.height=H*TILE;
@@ -494,8 +536,10 @@ function updateCamera(){
  const zoom=state.zoom;
  const viewW=canvas.width/zoom,viewH=canvas.height/zoom;
  const p=position(state.player);
- state.camera.x=clamp(Math.round((p.x+.5)*TILE-viewW/2),0,W*TILE-viewW);
- state.camera.y=clamp(Math.round((p.y+.5)*TILE-viewH/2),0,H*TILE-viewH);
+ const tx=clamp((p.x+.5)*TILE-viewW/2,0,Math.max(0,W*TILE-viewW));
+ const ty=clamp((p.y+.5)*TILE-viewH/2,0,Math.max(0,H*TILE-viewH));
+ state.camera.x+=(tx-state.camera.x)*.26;
+ state.camera.y+=(ty-state.camera.y)*.26;
 }
 function clientToTile(clientX,clientY,rect){
  const sx=(clientX-rect.left)*canvas.width/rect.width;
@@ -688,15 +732,13 @@ function restore(){
  }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
 }
 state.world.now=state.clock;
+// Physics bodies are transient and rebuilt from the validated saved tile positions.
+ensureBody(state.player);
+for(const agent of state.npcs)ensureBody(agent);
 const heldKeys=new Set();
 function step(dt){
  if(state.paused)return;
- if(!state.player.path.length&&heldKeys.size){
-  const key=Array.from(heldKeys).at(-1);
-  const delta={w:[0,-1],arrowup:[0,-1],s:[0,1],arrowdown:[0,1],
-   a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]}[key];
-  if(delta)moveTo(state.player,{x:state.player.x+delta[0],y:state.player.y+delta[1]});
- }
+ // Continuous keyboard steering is handled by Physics2D, not per-tile path resets.
  const elapsed=dt*state.speed;
  const beforeDay=Math.floor(state.clock/1440);
  state.clock+=elapsed;
