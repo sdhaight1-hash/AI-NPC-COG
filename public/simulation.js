@@ -4,9 +4,23 @@
 // Existing game-time semantics are preserved: elapsed is in simulated minutes.
 (function(root){
  'use strict';
+ const MAX_ADVANCE_MINUTES=1440;
+ // Each authoritative slice is at most one simulated minute. A long direct
+ // caller interval must not silently skip metabolism, due jobs or weather.
  function advance(state,elapsed,ports={}){
   if(state.paused||!Number.isFinite(elapsed)||elapsed<=0)
    return {advanced:false,arrivals:[],deaths:[]};
+  if(elapsed>MAX_ADVANCE_MINUTES)
+   throw new RangeError('Simulation interval exceeds one simulated day');
+  if(elapsed<=1)return advanceSlice(state,elapsed,ports);
+  const arrivals=[],deaths=[];
+  const whole=Math.floor(elapsed),fraction=elapsed-whole;
+  const accumulate=result=>{arrivals.push(...result.arrivals);deaths.push(...result.deaths);};
+  for(let minute=0;minute<whole;minute++)accumulate(advanceSlice(state,1,ports));
+  if(fraction>0)accumulate(advanceSlice(state,fraction,ports));
+  return {advanced:true,arrivals,deaths};
+ }
+ function advanceSlice(state,elapsed,ports){
   const {Frontier,AgentWorld,Civilization}=root;
   if(!Frontier||!AgentWorld||!Civilization)
    throw Error('Simulation kernels unavailable');
