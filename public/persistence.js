@@ -22,7 +22,9 @@
   return {version:3,seed:state.world.seed,clock:state.clock,
    nextPersonId:state.nextPersonId,npcs:state.npcs.map(serializePerson),
    dead:state.dead,world:state.world,events:state.events,
-   selected:state.selected,viewZ:state.viewZ};
+   selected:state.selected,viewZ:state.viewZ,
+   commandSeq:state.commandSeq||0,receiptSeq:state.receiptSeq||0,
+   effectRevision:state.effectRevision||0,receipts:(state.receipts||[]).slice(-4096)};
  }
 
 function restore(state,saved){
@@ -34,6 +36,16 @@ function restore(state,saved){
   AgentWorld.restoreWorld(state.world,saved.world);
   Frontier.restore(state.world,saved.world);
   state.clock=saved.clock;state.world.now=saved.clock;
+  state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;
+  state.receiptSeq=Number.isSafeInteger(saved.receiptSeq)&&saved.receiptSeq>=0?saved.receiptSeq:0;
+  state.effectRevision=Number.isSafeInteger(saved.effectRevision)&&saved.effectRevision>=0?saved.effectRevision:0;
+  state.receipts=Array.isArray(saved.receipts)?saved.receipts.filter(x=>
+   x&&typeof x.id==='string'&&Number.isSafeInteger(x.sequence)&&
+   typeof x.actorId==='string'&&
+   (typeof x.commandId==='string'||
+    (x.commandId===null&&['DECIDED','REJECTED'].includes(x.status)))&&
+   ['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED'].includes(x.status)).slice(-4096):[];
+  state.receiptSeq=Math.max(state.receiptSeq,0,...state.receipts.map(x=>x.sequence));
   const seen=new Set();
   const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
   state.npcs=[];
@@ -94,9 +106,15 @@ function restore(state,saved){
    if(AgentWorld.KEYS.includes(old.task?.key)&&
      (old.task.ref===null||typeof old.task.ref==='string')){
     n.task={key:old.task.key,ref:old.task.ref,
+     commandId:typeof old.task.commandId==='string'&&/^cmd_[1-9]\d*$/.test(old.task.commandId)?old.task.commandId:null,
      readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
    }
    n.plan=AgentWorld.validatePlan(old.plan);
+   if(n.task&&!n.task.commandId)n.task.commandId='cmd_'+(++state.commandSeq);
+   if(n.task?.commandId){
+    const seq=Number(n.task.commandId.slice(4));
+    if(Number.isSafeInteger(seq))state.commandSeq=Math.max(state.commandSeq,seq);
+   }
    if(n.workpiece&&(!n.plan||n.plan.key!=='craft_project'||
     n.plan.recipe!==n.workpiece.recipe))
     n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
