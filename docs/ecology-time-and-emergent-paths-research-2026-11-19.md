@@ -98,3 +98,12 @@ We cannot claim per-frame 100-NPC real-world scalability from a passing 5-NPC so
 **First next tests:** (1) variable-step partition equivalence, (2) resource-category regen/conservation audit, (3) no-LLM actor time and offscreen progression parity, (4) emerging desire path without minted infrastructure, (5) survival across multiple viable seeds **without starter possessions** after inventory redesign.
 
 **What we should not do:** install large general ECS, try to simulate tectonic uplift per NPC tick, write a whole Rust engine port, add speculative 50-parameter personality model, or claim Earth-like biology. The high-confidence gain is an authoritative contract with tested boundaries, not system size.
+
+## Implementation checkpoint — stone and regrowth persistence (2026-11-19)
+
+Tracked in [#72](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/72) and [PR #78](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/78). This is deliberately a **small** implementation slice, not a claim of globally conserved ecology:
+
+- `AgentWorld.regenerate` no longer grants stone back after extraction. Stone's nonrenewable mineral stock persists with no calendar-based growth. The current temporary woody biomass growth rate is still weather/season based and does **not** yet consume water or soil nutrients.
+- `AgentWorld.restoreWorld` restores a valid fractional regrowth accumulator of renewable resource nodes, rather than silently resetting partial progress on save/reload; legacy or invalid values normalize to zero.
+- Added test fixtures: nonrenewable depleted stone across a long interval, save/reload parity for fractional wood recovery, and malformed/legacy accumulator handling.
+- **Still outstanding:** explicit water mass reservoirs (the existing water-source precipitation refill is not conserved), plant species identity, photosynthesis/soil budgets, finite biomass ecology, and multi-seed survival balancing. Do not close #72 on this patch.
