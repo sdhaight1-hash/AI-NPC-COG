@@ -424,6 +424,7 @@ async function peerExchange(n,other){
   n.task.approved=true;
   const outcome=AgentWorld.complete(n,state.world,state.npcs);
   if(!outcome.ok)throw Error(outcome.message);
+  activity(n).completed++;activityNote(n,'Completed conversation with '+other.name);
   const first=response.first.slice(0,220),second=response.second.slice(0,220);
   const exchange={at:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
    with:other.id,first:n.name+': '+first,second:other.name+': '+second};
@@ -437,6 +438,7 @@ async function peerExchange(n,other){
   record(n.name+' ↔ '+other.name+': '+e.message,'warning');
   if(n.task?.key==='socialize')n.task=null;
   n.action='none';n.thoughtAt=state.clock+8;
+  activity(n).failed++;activityNote(n,'Conversation failed: '+e.message);
  }finally{
   if(other.peerReservedFor===n.id)delete other.peerReservedFor;
   n.peerPending=false;other.peerPending=false;state.backgroundBusy=false;
@@ -765,7 +767,10 @@ function step(dt){
   if(n.peerReservedFor&&!state.npcs.some(peer=>peer.id===n.peerReservedFor&&
    peer.task?.key==='socialize'&&peer.task.ref===n.id))delete n.peerReservedFor;
   if(!n.peerPending&&!n.peerReservedFor)updateMovement(n,elapsed);
-  AgentWorld.stepNeeds(n,state.world,elapsed);
+  const recovery=AgentWorld.stepNeeds(n,state.world,elapsed);
+  if(recovery==='Recovered'){
+   activity(n).completed++;activityNote(n,'Finished resting and recovered');
+  }
   const death=Civilization.updateHealth(state,n,elapsed);
   if(death){record(n.name+' died of '+death,'warning');continue;}
   if(!n.peerPending){
