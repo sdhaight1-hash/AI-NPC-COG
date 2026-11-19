@@ -640,7 +640,8 @@ function updateHUD(now){
  $('populationStats').textContent=state.npcs.length+' living · '+state.dead.length+
   ' deaths · '+state.world.structures.length+' constructed objects · next arrivals on the 1st';
  $('zLabel').textContent='Z '+state.viewZ;
- $('worldStatus').textContent=state.paused?'Paused':state.backgroundBusy?
+ $('worldStatus').textContent=state.fatalFrameError?
+  'ERROR · '+state.fatalFrameError.slice(0,110):state.paused?'Paused':state.backgroundBusy?
   state.modelLabel+' deliberating…':'World running';
  $('footerNote').textContent=state.connected?
   'One shared '+state.modelLabel+' lane · deterministic world rules':'Offline survival fallback (not AI cognition)';
@@ -722,6 +723,7 @@ $('newIsland').addEventListener('click',()=>{
  localStorage.removeItem(STORE);window.location.reload();
 });
 function tick(now){
+ try{
  // A synchronous exception must not silently terminate requestAnimationFrame.
  let failure=null;
  try{
@@ -747,9 +749,14 @@ function tick(now){
    console.error('AI-NPC-COG frame failure:',message,failure.error);
    tick.lastError=message;
   }
-  $('worldStatus').textContent='ERROR · '+message.slice(0,110);
- }else tick.lastError=null;
- requestAnimationFrame(tick);
+  if(failure.phase==='simulation')state.fatalFrameError=message;
+  const status=$('worldStatus');
+  if(status)status.textContent='ERROR · '+message.slice(0,110);
+ }else if(!state.fatalFrameError)tick.lastError=null;
+ }finally{
+  // Required even if a new unanticipated exception escapes diagnostics.
+  requestAnimationFrame(tick);
+ }
 }
 drawStaticWorld();restore();loadTileset();
 state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
