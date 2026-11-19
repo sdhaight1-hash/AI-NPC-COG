@@ -172,8 +172,8 @@
      Number.isFinite(s.at)&&s.at<=clock&&Array.isArray(s.sourceEpisodeIds)&&
      s.sourceEpisodeIds.length>0&&
      s.sourceEpisodeIds.every(id=>episodeIds.has(id)))
-    .slice(-MAX_SUMMARIES).map(s=>({id:s.id,text:s.text.slice(0,400),
-     at:s.at,sourceEpisodeIds:s.sourceEpisodeIds.slice(0,4),
+    .slice(-MAX_SUMMARIES).map(s=>({id:s.id,at:s.at,
+     text:s.text.slice(0,400),sourceEpisodeIds:s.sourceEpisodeIds.slice(0,4),
      certainty:'inferred'}));
    result.methods=(Array.isArray(saved.methods)?saved.methods:[])
     .filter(x=>x&&typeof x.method==='string'&&
