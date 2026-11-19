@@ -220,10 +220,13 @@ test('offline scheduling starts multiple independent NPC tasks without a wall-cl
   n.thoughtAt=b.state.clock;n.action='none';n.task=null;n.plan=null;n.path=[];
  }
  b.scheduleIdleAgents();
- const active=b.state.npcs.filter(n=>n.task||n.path.length||n.action!=='none');
- assert.ok(active.length>=3,'Multiple inhabitants should begin tasks independently');
- assert.ok(active.every(n=>['offline routine','survival reflex'].includes(n.source)));
+ const active=b.state.npcs.filter(n=>n.plan||n.task||n.path.length||n.action!=='none');
+ assert.ok(active.length>=3,'Multiple inhabitants should choose work or a persistent purpose');
+ assert.ok(active.every(n=>['offline routine','survival instinct'].includes(n.source)));
  assert.ok(b.state.npcs.every(n=>n.thoughtAt>b.state.clock));
+ b.step(2);
+ assert.ok(b.state.npcs.some(n=>n.task||n.path.length||n.action!=='none'),
+  'A persistent purpose must begin an actual physical subaction');
 });
 test('urgent needs act while model inference is busy and use finite world inventory',()=>{
  const b=makeBrowser();
