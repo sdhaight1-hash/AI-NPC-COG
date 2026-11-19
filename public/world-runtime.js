@@ -428,7 +428,7 @@
   if(selected)return selected.key;
   return root.AgentWorld.fallback(n,options);
  }
- function scheduleOffline(state,hooks={}){
+ function scheduleOffline(state,hooks={},policy={}){
   if(!state.auto||state.paused)return;
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
@@ -443,13 +443,13 @@
      n.thoughtAt=state.clock+18;continue;
     }
    }
-   if(root.Projects?.maybeStart(state,n)){
+   if(policy.projects!==false&&root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
    const suspended=n.suspendedActivities?.at(-1);
    const canResume=suspended&&available(state,n).some(o=>o.key===suspended.key&&
     (o.ref??null)===suspended.ref);
-   const action=canResume?suspended.key:chooseOffline(state,n);
+   const action=canResume?suspended.key:(policy.choose||chooseOffline)(state,n);
    const ok=begin(state,n,action,canResume?'resume':'offline routine',null,hooks);
    n.thoughtAt=state.clock+(ok?18:3);
   }

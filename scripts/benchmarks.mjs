@@ -1,8 +1,8 @@
 // G0.3 — state-predicate benchmarks. No browser, network or LLM required.
-// Usage: node scripts/benchmarks.mjs [--soak-days=30] [--seed=379210]
+// Usage: node scripts/benchmarks.mjs [--soak-days=30] [--seed=379210] [--profile=no-llm | --compare]
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-for(const name of ['frontier','biology','crafting','cognition','agency',
+for(const name of ['frontier','construction','biology','crafting','cognition','agency',
  'emergence','civilization','receipts','activities','reservations','projects','perception','evidence-memory','world-runtime','simulation','persistence'])
  await import('../public/'+name+'.js');
 const {Simulation,WorldRuntime,Biology,WorldReceipts}=globalThis;
@@ -36,16 +36,16 @@ function tick(state,minutes=1){
  }
 }
 function until(state,predicate,budget=100){
- for(let i=0;i<budget;i++){
-  if(predicate())return i;
-  tick(state);
+ for(let elapsed=0;elapsed<=budget;elapsed++){
+  if(predicate())return elapsed;
+  if(elapsed<budget)tick(state);
  }
  throw Error('Unmet authoritative predicate after '+budget+' minutes');
 }
 function end(name,state,elapsed,goal){
  assert.equal(goal(),true,name+' goal predicate failed');
  return {scenario:name,pass:true,elapsedTicks:elapsed,worldHash:hash(state),
-  modelCalls:0,receiptSequence:state.receiptSeq,
+  modelCalls:0,goalsCompleted:1,receiptSequence:state.receiptSeq,
   committed:state.receipts.filter(r=>r.status==='COMPLETED').length,
   rejected:state.receipts.filter(r=>r.status==='FAILED'||r.status==='REJECTED').length,
   noops:state.receipts.filter(r=>r.action==='none').length};
@@ -64,6 +64,7 @@ function cordProduction(seed){
  const inputs=s.receipts.filter(r=>r.action==='craft_cord'&&r.status==='COMPLETED')
   .flatMap(r=>r.delta.inventory).find(d=>d.key==='fiber');
  assert.equal(inputs?.delta,-3);
+ assertCraftConservation(3,n.inventory.fiber,n.inventory.cord);
  return end('four_operation_cord',s,elapsed,()=>n.inventory.cord===1&&n.inventory.fiber===0);
 }
 function toolChain(seed){
@@ -145,7 +146,21 @@ export function assertCraftConservation(initialFiber,finalFiber,producedCord){
  assert.equal(initialFiber-finalFiber,producedCord*3,
   'Manufacturing must consume exactly three plant fibers per cord');
 }
-export function runSoak(seed=379210,days=30){
+export const SOAK_PROFILES=Object.freeze(['no-llm','no-memory','no-planner','mock-model']);
+export function runSoak(seed=379210,days=30,profile='no-llm'){
+ assert.ok(SOAK_PROFILES.includes(profile),'Unknown benchmark profile');
+ let modelCalls=0;
+ const policy={projects:profile!=='no-planner'&&profile!=='mock-model'};
+ if(profile==='mock-model')policy.choose=(state,n)=>{
+  // A deterministic test double scores the same privacy-filtered menu used
+  // for model requests and still submits through ordinary physical commands.
+  const privateMenu=globalThis.Perception.filterAffordances(state,n,WorldRuntime.available(state,n));
+  const proposed=WorldRuntime.chooseOffline(state,n);
+  const accepted=privateMenu.some(option=>option.key===proposed)?proposed:'none';
+  modelCalls++;
+  WorldReceipts.decision(state,n,accepted,'mock-model');
+  return accepted;
+ };
  const state=setup(seed);state.auto=true;
  const ticks=days*1440,deathDetails=[],criticalWindows=new Map();
  assert.ok(Number.isInteger(ticks)&&ticks>0&&ticks<=1440*120);
@@ -169,7 +184,15 @@ export function runSoak(seed=379210,days=30){
    criticalWindows.set(actor.id,previous);
   }
   // Check cheaply every hour; action-specific receipts are checked separately.
-  Simulation.advance(state,1,{onDeath:(actor,cause)=>{
+  Simulation.advance(state,1,{schedule:()=>{
+   if(profile==='no-memory')for(const actor of state.npcs){
+    actor.memories=[];actor.knowledge.observations=[];actor.agency.beliefs=[];
+    const memory=actor.evidenceMemory;
+    memory.episodes=[];memory.facts=[];memory.claims=[];memory.summaries=[];
+    memory.methods=[];memory.social=[];
+   }
+   WorldRuntime.scheduleOffline(state,{},policy);
+  },onDeath:(actor,cause)=>{
    const nearest=state.world.nodes.filter(s=>s.kind==='water')
     .map(s=>({id:s.id,stock:s.stock,
      distance:globalThis.Frontier.distance(state.world,actor,s)}))
@@ -186,7 +209,8 @@ export function runSoak(seed=379210,days=30){
     nearestWaterPath:waterPath?.length??null,
     needs:{...actor.needs},energy:actor.energy,
     hydrationMl:actor.bio?.hydrationBudgetMl??null,
-    inventory:{...actor.inventory},nearestWater:nearest,
+    inventory:{...(state.world.remains?.find(r=>r.actorId===actor.id)?.inventory||actor.inventory)},
+    nearestWater:nearest,
     recentActions:state.receipts.filter(r=>r.actorId===actor.id)
      .slice(-12).map(r=>({clock:r.clock,action:r.action,status:r.status,reason:r.reason})),
     lastCriticalSnapshots:criticalWindows.get(actor.id)||[]});
@@ -199,13 +223,17 @@ export function runSoak(seed=379210,days=30){
  const deathCauses={};
  for(const d of state.dead)deathCauses[d.cause]=(deathCauses[d.cause]||0)+1;
  const firstDeathAt=state.dead.length?Math.min(...state.dead.map(d=>d.deathAt)):null;
- return {scenario:'autonomous_'+days+'_day_soak',pass:true,elapsedTicks:ticks,
+ const rejected=state.receipts.filter(r=>r.status==='REJECTED'||r.status==='FAILED').length;
+ return {scenario:'autonomous_'+days+'_day_soak',seed,profile,pass:true,elapsedTicks:ticks,
   initialFounders:5,alive:state.npcs.length,deaths:state.dead.length,
   founderSurvivors:state.npcs.filter(n=>n.spawnKind==='founder').length,
   deathCauses,firstDeathDay:firstDeathAt===null?null:1+Math.floor(firstDeathAt/1440),
   arrivals:Math.max(0,state.nextPersonId-6),worldHash:hash(state),
-  retainedReceipts:state.receipts.length,completed,
-  deathDetails,modelCalls:0};
+  retainedReceipts:state.receipts.length,completed,rejected,
+  noops:state.receipts.filter(r=>r.status==='DECIDED'&&r.action==='none').length,
+  rejectionRate:completed+rejected>0?rejected/(completed+rejected):0,
+  retainedProjectCompletions:state.npcs.reduce((sum,n)=>sum+(n.completedProjects?.length||0),0),
+  deathDetails,modelCalls};
 }
 if(process.argv[1]?.replaceAll('\\','/').endsWith('/scripts/benchmarks.mjs')){
  const option=process.argv.find(v=>v.startsWith('--seed='));
@@ -213,7 +241,12 @@ if(process.argv[1]?.replaceAll('\\','/').endsWith('/scripts/benchmarks.mjs')){
  const daysArg=process.argv.find(v=>v.startsWith('--soak-days='));
  const days=daysArg?Number(daysArg.slice(12)):0;
  const reports=runScenarios(seed);
- if(days)reports.push(runSoak(seed,days));
+ const profileArg=process.argv.find(v=>v.startsWith('--profile='));
+ const profile=profileArg?.slice(10)||'no-llm';
+ if(days){
+  const profiles=process.argv.includes('--compare')?SOAK_PROFILES:[profile];
+  for(const mode of profiles)reports.push(runSoak(seed,days,mode));
+ }
  console.log(JSON.stringify(reports,null,2));
  if(reports.some(r=>!r.pass))process.exitCode=1;
 }

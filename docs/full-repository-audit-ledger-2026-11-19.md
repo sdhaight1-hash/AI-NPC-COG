@@ -79,3 +79,36 @@ The REST PR and issue indexes through #69 were inspected, including non-PR issue
 The authenticated GitHub account lists **19 repositories** including AI-NPC-COG. Candidate cross-project evidence includes: `Hexel-survival-game` streamed chunks/world source contracts; `Hexel-Game-Engine` independent planetary patch and fields designs; `Voxel-Game-Engine` foliage vector silhouettes and biome authoring; `World-building-Project` tectonic layers; `AI-RP-Program` provenance/actor memory benchmarks and world-epoch stale-reply cancellation; `Gaia` and `Voxel-Survival` hydrology/terrain design. Verify source and design status individually: **do not assume aspirational docs are running game code**.
 
 Further linked research/working designs will be in separate files on this branch.
+
+## 6. Implementation and branch reconciliation checkpoint
+
+The branch inventory was compared with `main` at `9c5ae81`. Of 66
+non-main refs, 11 were ancestors and 47 others were the exact heads of
+closed, merged PRs. Squash merges account for branch ancestry divergences
+with recorded merged PRs. The two death-custody refs were active during
+this scan.
+
+| Older branch or PR | Integrated implementation |
+| --- | --- |
+| #34 resumable activities | #35 uses the same activity lifecycle and ships interrupted checkpoint tests |
+| #37 finite reservations | #36 ships `reservations.js`, ordered finite holds, and contention tests |
+| #12 season cycle and #13 model selector | #14 integrates the compact calendar, seasonal resource effects, and local model selection |
+| `feat/durable-project-planner-g1-3` | #38 owns the hierarchical construction/crafting graphs. Supply goals already execute through the legacy plan and ordinary action kernel |
+| `feat/g2-2-evidence-linked-memory` | #40 includes receipt-linked recall, consolidation, migration, and derived beliefs. Later PRs add private reported claims and verification |
+
+The older alternatives are historical refs. The active custody branch
+incorporates the merged generator work and retains both commit histories.
+
+| Gate | Current evidence |
+| --- | --- |
+| #22 browser-free runtime | Merged #30, deterministic headless smoke and mid-activity restore tests |
+| #70 generator identity | Merged #94, legacy seed fingerprints, wrapped region checks and checkpoint migration |
+| #91 vessel bootstrap | Merged #92, direct source drinking, staged flask manufacture, and constrained collection |
+| #90 per-vessel ownership | Still needs vessel instance identities and independent fluid contents |
+| #26 lot custody | Still needs canonical ownership of carried and placed material lots |
+| #59 real construction | Existing blueprint declarations, with physical tile work and co-operative housing still open |
+| #72 ecology | Resource regeneration and finite source work are in place. Conserved environmental budgets remain open |
+
+Major phases still require acceptance fixtures for server-owned world state,
+lineages and development, nonhuman ecology, voluntary institutions, and
+cultural continuity.
