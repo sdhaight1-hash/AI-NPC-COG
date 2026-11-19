@@ -407,7 +407,7 @@ async function deliberate(n){
   if(state.connected){
    const data=await jsonPost('/api/decide',{
     persona:n.personality,scene:sceneFor(n),history:[],
-    question:'Which available action do you choose independently, and why?',options
+    question:'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
    });
    activity(n).decisions++;
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
@@ -454,6 +454,7 @@ async function peerExchange(n,other){
   if(!outcome.ok)throw Error(outcome.message);
   activity(n).completed++;activityNote(n,'Completed conversation with '+other.name);
   Agency.outcome(n,state.world,'socialize',other.id,true,state.clock);
+  Agency.outcome(other,state.world,'socialize',n.id,true,state.clock);
   Agency.finish(n,true,state.clock);
   const first=response.first.slice(0,220),second=response.second.slice(0,220);
   const exchange={at:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
