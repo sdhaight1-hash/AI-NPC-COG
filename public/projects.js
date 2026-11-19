@@ -220,7 +220,14 @@
    if(options.some(o=>o.key==='rest'))action='rest';
    else {p.nextAt=state.clock+5;return {status:'deferred'};}
   }
-  const option=options.find(o=>o.key===action);
+  let option=options.find(o=>o.key===action);
+  if(!option&&['collect_wood','collect_stone','collect_fiber',
+   'forage','fill_water'].includes(action)){
+   // Unknown resource locations prompt bounded physical exploration, not an
+   // omniscient search query or fictitious harvest.
+   const scout=options.find(o=>o.key==='explore');
+   if(scout){action='explore';option=scout;}
+  }
   if(!option){
    node.status='BLOCKED';node.blockedBy='LEGAL_ACTION_UNAVAILABLE:'+action;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
