@@ -3,6 +3,12 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 
+function equipFlask(n,clock){
+ n.inventory.flask=1;
+ n.craftedItems ||= [];
+ n.craftedItems.push({kind:'flask',quality:2,maker:n.id,
+  craftedAt:clock,method:'flask',materialQuality:2});
+}
 function setup(){
  const c=vm.createContext({});
  const modules=['frontier','biology','crafting','cognition','agency',
@@ -48,7 +54,7 @@ test('real checkpoint with completed physical evidence matches uninterrupted wor
 
 test('old inspected water location guides a real return trip outside visual range',()=>{
  const {c,s,n}=setup();
- s.npcs=[n];n.energy=100;
+ s.npcs=[n];n.energy=100;equipFlask(n,s.clock);
  const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>0);
  assert.ok(spring);
  s.world.nodes=[spring];
@@ -92,7 +98,7 @@ test('old inspected water location guides a real return trip outside visual rang
 
 test('cited hearsay leads to physical travel, finite gathering, then firsthand verification',()=>{
  const {c,s,n}=setup();
- const listener=s.npcs[1];
+ const listener=s.npcs[1];equipFlask(listener,s.clock);
  s.npcs=[n,listener];s.auto=false;
  const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>0);
  assert.ok(spring);
@@ -159,7 +165,7 @@ test('cited hearsay leads to physical travel, finite gathering, then firsthand v
 
 test('depleted reported source produces one stale claim and stops futile return attempts',()=>{
  const {c,s,n}=setup();
- const listener=s.npcs[1];s.npcs=[n,listener];s.auto=false;
+ const listener=s.npcs[1];equipFlask(listener,s.clock);s.npcs=[n,listener];s.auto=false;
  const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>0);
  assert.ok(spring);s.world.nodes=[spring];
  n.x=spring.x;n.y=spring.y;listener.x=spring.x;listener.y=spring.y;
@@ -215,7 +221,7 @@ test('depleted reported source produces one stale claim and stops futile return 
 
 test('private verified speaker reliability outranks newer competing resource hearsay',()=>{
  const {c,s,n}=setup();
- s.auto=false;s.npcs=[n];n.energy=100;n.inventory.water=0;
+ s.auto=false;s.npcs=[n];n.energy=100;n.inventory.water=0;equipFlask(n,s.clock);
  s.clock=23*60;s.world.now=s.clock;
  const points=Array.from({length:s.world.width*s.world.height},(_,i)=>({
   x:i%s.world.width,y:Math.floor(i/s.world.width),z:0})).filter(p=>
