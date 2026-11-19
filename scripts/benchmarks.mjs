@@ -156,8 +156,16 @@ export function runSoak(seed=379210,days=30){
     .map(s=>({id:s.id,stock:s.stock,
      distance:globalThis.Frontier.distance(state.world,actor,s)}))
     .sort((a,b)=>a.distance-b.distance||a.id.localeCompare(b.id))[0]||null;
+   const waterPath=nearest?.id?WorldRuntime.pathfind(state,actor,
+    state.world.nodes.find(x=>x.id===nearest.id)):null;
+   let possibleActions=[];
+   try{possibleActions=WorldRuntime.available(state,actor).map(o=>o.key);}catch{}
    deathDetails.push({actorId:actor.id,clock:state.clock,cause,
     position:{x:actor.x,y:actor.y,z:actor.z},
+    action:actor.action,task:actor.task?.key||null,
+    plan:actor.plan?.key||null,peerPending:!!actor.peerPending,
+    peerReservedFor:actor.peerReservedFor||null,possibleActions,
+    nearestWaterPath:waterPath?.length??null,
     needs:{...actor.needs},energy:actor.energy,
     hydrationMl:actor.bio?.hydrationBudgetMl??null,
     inventory:{...actor.inventory},nearestWater:nearest,
