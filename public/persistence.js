@@ -44,7 +44,7 @@ function restore(state,saved){
    typeof x.actorId==='string'&&
    (typeof x.commandId==='string'||
     (x.commandId===null&&['DECIDED','REJECTED'].includes(x.status)))&&
-   ['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED'].includes(x.status)).slice(-4096):[];
+   ['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED','INTERRUPTED','RESUMED'].includes(x.status)).slice(-4096):[];
   state.receiptSeq=Math.max(state.receiptSeq,0,...state.receipts.map(x=>x.sequence));
   const seen=new Set();
   const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
@@ -109,6 +109,7 @@ function restore(state,saved){
      commandId:typeof old.task.commandId==='string'&&/^cmd_[1-9]\d*$/.test(old.task.commandId)?old.task.commandId:null,
      readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
    }
+   root.Activities.restore(n,old,state.clock);
    n.plan=AgentWorld.validatePlan(old.plan);
    if(n.task&&!n.task.commandId)n.task.commandId='cmd_'+(++state.commandSeq);
    if(n.task?.commandId){
