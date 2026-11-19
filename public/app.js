@@ -21,7 +21,7 @@ const dist=(a,b)=>Frontier.distance(state.world,a,b);
 const key=p=>(p.z||0)+':'+p.x+':'+p.y;
 const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
 const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
- fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_wood_stone:15,
+ fill_water:1,eat:3,drink:1,drink_source:1,craft_hatchet:12,experiment_wood_stone:15,
  experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
  build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,pickup_item:2,place_crate:6,
  stash_wood:2,stash_stone:2,stash_fiber:2,
