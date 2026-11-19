@@ -44,6 +44,7 @@ const initialNPCs = [
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
   auto:true, backgroundBusy:false, conversationBusy:false, debugPhysics:false,
+  model:'rein', modelLabel:'Rein-NPC-4B',
   selected:'mara', lastDecisionMs:0,
   zoom:1, camera:{x:0,y:0},
   player:AgentWorld.newAgent({id:'player',name:'You',x:21,y:12,path:[],travel:0,
@@ -329,7 +330,7 @@ function setAction(npc,action,source,scores){
   npc.action='none';npc.source=source;npc.scores=scores;
   npc.goal='Planning to '+action.replaceAll('_',' ');
   record(npc.name+' chose a multi-step intention: '+action.replaceAll('_',' ')+
-   ' ['+source+']',source==='rein'?'ai':'routine');
+   ' ['+source+']',['rein','hivemind'].includes(source)?'ai':'routine');
   return true;
  }
  if(action==='none'){
@@ -354,8 +355,8 @@ function setAction(npc,action,source,scores){
  }
  const score=scores&&Number.isFinite(scores[action])?' ('+Math.round(scores[action]*100)+'%)':'';
  record(npc.name+' chose '+action.replaceAll('_',' ')+score+' ['+source+']',
-  source==='rein'?'ai':'routine');
- if(source==='rein')remember(npc,'Chose '+action+' based on current needs and local opportunities');
+  ['rein','hivemind'].includes(source)?'ai':'routine');
+ if(['rein','hivemind'].includes(source))remember(npc,'Chose '+action+' based on current needs and local opportunities');
  updateInspector();
  return true;
 }
@@ -375,10 +376,15 @@ async function checkModel(){
   const response=await fetch('/api/health',{cache:'no-store'});
   const health=await response.json();
   state.connected=!!health.connected;
+   state.model=health.model==='hivemind'?'hivemind':'rein';
+   state.modelLabel=typeof health.modelLabel==='string'?health.modelLabel:'Rein-NPC-4B';
  }catch{state.connected=false;}
  const tag=$('modelStatus');
  tag.className='chip '+(state.connected?'online':'offline');
- tag.innerHTML='<i class="status-dot"></i> '+(state.connected?'Rein connected':'Offline · simulated routines');
+ tag.replaceChildren();
+  const dot=document.createElement('i');dot.className='status-dot';
+  tag.append(dot,document.createTextNode(' '+(state.connected?state.modelLabel+' connected':'Offline · simulated routines')));
+  $('modelName').textContent=state.modelLabel;
 }
 async function deliberate(npc){
  state.backgroundBusy=true;
@@ -390,7 +396,7 @@ async function deliberate(npc){
     history:[],question:'What do you choose to do next for your own reasons, with your current needs, possessions, nearby people and resources?',options
    });
    if(!state.paused&&!state.conversationBusy&&options.some(o=>o.key===data.action)){
-    setAction(npc,data.action,'rein',data.scores);
+    setAction(npc,data.action,data.source==='hivemind'?'hivemind':'rein',data.scores);
     record(npc.name+' inference completed in '+data.durationMs+'ms','ai');
    }
   }else if(!state.paused&&!state.conversationBusy){
@@ -464,7 +470,7 @@ async function sendMessage(event){
     options
    });
    action=response.action;scores=response.scores;reply=response.reply;
-   durationMs=response.durationMs;source='rein';
+   durationMs=response.durationMs;source=response.source==='hivemind'?'hivemind':'rein';
    if(!options.some(o=>o.key===action))throw new Error('Model returned an unknown social action');
   }else{
    action=fallbackSocial(npc,message);
@@ -478,7 +484,7 @@ async function sendMessage(event){
    };
    reply=phrases[action];
   }
-  // Commit state only after a complete, validated response from both Rein calls.
+  // Commit state only after a complete, validated decision and reply.
   const pending=npc.chat.findLast(item=>item.role==='player'&&item.source==='pending');
   if(pending)pending.source='player';
   npc.action=action;npc.source=source;npc.scores=scores;
@@ -487,7 +493,7 @@ async function sendMessage(event){
   addConversation(npc,'npc',reply,source);
   remember(npc,'Player said: '+message.slice(0,85)+'; I replied: '+reply.slice(0,80));
   record(npc.name+' response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+
-   ' ['+source+']'+(source==='rein'?' '+durationMs+'ms':''),source==='rein'?'ai':'social');
+   ' ['+source+']'+(['rein','hivemind'].includes(source)?' '+durationMs+'ms':''),['rein','hivemind'].includes(source)?'ai':'social');
   if(action==='avoid'){
    npc.task=null;
    moveTo(npc,locations.square);
@@ -728,7 +734,7 @@ function updateInspector(){
    ' meals · '+diet.diversity+' kinds · '+diet.adequacy+'% gameplay coverage';
  $('bioHormones').textContent=Object.entries(npc.bio.hormones)
    .map(([k,v])=>k+' '+Math.round(v)).join(' · ');
- $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
+ $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='hivemind'?'Hivemind (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
  $('talkDistance').textContent=manhattan(state.player,npc)+' tiles away';
  const scores=$('npcDecisions');scores.replaceChildren();
  if(npc.scores){
@@ -767,7 +773,7 @@ function renderChat(){
  for(const item of npc.chat){
   const bubble=document.createElement('div');bubble.className='chat-bubble'+(item.role==='player'?' player-msg':'');
   const label=document.createElement('small');
-  label.textContent=item.role==='player'?'You':item.role==='system'?'System':npc.name+' · '+(item.source==='rein'?'Rein':'offline');
+  label.textContent=item.role==='player'?'You':item.role==='system'?'System':npc.name+' · '+(item.source==='rein'?'Rein':item.source==='hivemind'?'Hivemind':'offline');
   const body=document.createElement('span');body.textContent=item.content;
   bubble.append(label,body);area.append(bubble);
  }
@@ -924,7 +930,7 @@ function updateHUD(now){
    ' · Feeling: '+Biology.sensation(p.bio,p.needs);
  updatePlayerActions();drawMinimap();
  $('worldStatus').textContent=state.paused?'Simulation paused':state.conversationBusy?'Conversing with NPC…':state.backgroundBusy?'Background thinking…':'World running';
- $('footerNote').textContent=state.connected?'Model decisions are labeled Rein.':'No model connected: deterministic routines active.';
+ $('footerNote').textContent=state.connected?'Model decisions are labeled '+state.modelLabel+'.':'No model connected: deterministic routines active.';
  $('pauseBtn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';
  if(!state.conversationBusy)updateInspector();
  if(now>state.nextSave){save();state.nextSave=now+5000;}
