@@ -45,3 +45,47 @@ test('real checkpoint with completed physical evidence matches uninterrupted wor
  assert.equal(saved.evidenceMemory.episodes.length,1);
  assert.equal(saved.evidenceMemory.episodes[0].certainty,'observed');
 });
+
+test('old inspected water location guides a real return trip outside visual range',()=>{
+ const {c,s,n}=setup();
+ s.npcs=[n];n.energy=100;
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>0);
+ assert.ok(spring);
+ s.world.nodes=[spring];
+ n.x=spring.x;n.y=spring.y;n.z=0;n.path=[];
+ const inspect=c.WorldRuntime.available(s,n).find(x=>x.key==='inspect');
+ assert.equal(inspect?.ref,spring.id);
+ assert.equal(c.WorldRuntime.begin(s,n,'inspect'),true);
+ c.Simulation.advance(s,2);
+ assert.equal(n.evidenceMemory.episodes[0].type,'inspection');
+ // Choose a real reachable location beyond the night vision radius.
+ const point=Array.from({length:s.world.width*s.world.height},(_,i)=>({
+  x:i%s.world.width,y:Math.floor(i/s.world.width),z:0})).find(p=>{
+   const d=c.Frontier.distance(s.world,p,spring);
+   return d>=5&&d<=8&&c.Frontier.traversable(s.world,p.x,p.y,0)&&
+    c.WorldRuntime.pathfind(s,spring,p).length>0;
+ });
+ assert.ok(point);
+ n.x=point.x;n.y=point.y;n.path=[];n.travel=null;
+ s.clock=23*60;s.world.now=s.clock;
+ assert.equal(c.Perception.canSee(s,n,spring),false);
+ const recalled=c.EvidenceMemory.recall(n,'water source',s.clock,1);
+ assert.equal(recalled[0].ref,spring.id);
+ const option=c.WorldRuntime.available(s,n).find(x=>
+  x.key==='fill_water'&&x.ref===spring.id);
+ assert.ok(option,'Previously inspected source should be available as a remembered goal');
+ assert.equal(option.when.includes(String(spring.stock)+' remaining'),false);
+ n.inventory.water=0;
+ const stock=spring.stock;
+ assert.equal(c.WorldRuntime.begin(s,n,'fill_water','memory'),true);
+ let completed=false;
+ for(let i=0;i<40;i++){
+  c.Simulation.advance(s,1);
+  if(s.receipts.some(r=>r.action==='fill_water'&&r.status==='COMPLETED')){
+   completed=true;break;
+  }
+ }
+ assert.equal(completed,true);
+ assert.ok(spring.stock<stock);
+ assert.ok(n.inventory.water>0);
+});
