@@ -467,7 +467,12 @@ function updateInspector(){
   .map(([k,v])=>k+' '+v).join(' · ')||'No practice yet';
  $('knowledgeVal').textContent=(n.knowledge?.recipes||[]).join(', ')||'No learned recipes';
  $('npcGoal').textContent=n.goal;
- $('npcPlan').textContent=n.plan?n.plan.key+' ('+n.plan.steps+' steps)':
+ $('npcPlan').textContent=n.project?
+  n.project.kind+' · '+n.project.status+' · '+
+  n.project.nodes.filter(x=>x.status==='DONE').length+'/'+n.project.nodes.length+
+  ' prerequisites · '+n.project.completedActions+' actions'+
+  (n.project.blockedReason?' · blocked: '+n.project.blockedReason:''):
+  n.plan?n.plan.key+' ('+n.plan.steps+' steps)':
   (n.agency?.goal?.key||'No active plan');
  const drives=Agency.drives(n);
  $('npcMotivations').textContent=Object.entries(drives).map(([k,v])=>
