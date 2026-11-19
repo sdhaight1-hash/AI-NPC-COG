@@ -81,8 +81,13 @@
    const reserve=choose('fill_water');
    if(reserve)return reserve;
   }
-  if(n.needs.hunger>=85||n.bio?.longTermKcal<150)
-   return choose(n.inventory.food>0?'eat':'forage','forage','eat');
+  if(n.needs.hunger>=85||n.bio?.longTermKcal<150){
+   const food=choose(n.inventory.food>0?'eat':'forage','forage','eat');
+   if(food)return food;
+   // If all arms are occupied, put down raw burden rather than starving
+   // despite having a nearby physical food source.
+   return choose('drop_fiber','drop_stone','drop_wood');
+  }
   if(n.energy<=18)return choose('rest');
   return null;
  }
