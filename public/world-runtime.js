@@ -410,6 +410,13 @@
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
+   if(n.needs.social>=80){
+    const partner=available(state,n).find(o=>o.key==='socialize'&&
+     o.target?.needs.social>=45&&o.target?.energy>=20&&n.energy>=25);
+    if(partner&&begin(state,n,'socialize','offline routine',null,hooks)){
+     n.thoughtAt=state.clock+18;continue;
+    }
+   }
    if(root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
