@@ -109,6 +109,14 @@
   }
   function tree(ctx,x,y,variant=0){
     const X=x*16,Y=y*16;
+    // Use Kenney's vertically paired 16x16 deciduous tree tiles when loaded;
+    // other tree variants keep their original richly layered canopies.
+    if(tinyTownAtlas && variant%3===0){
+      rect(ctx,'#274833',X+2,Y+12,14,3);
+      atlasTile(ctx,4,X,Y-16);
+      atlasTile(ctx,16,X,Y);
+      return;
+    }
     rect(ctx,'#294a32',X+2,Y+13,20,6);
     rect(ctx,'#344330',X+10,Y+11,5,14);
     rect(ctx,C.trunk,X+11,Y+9,4,13);
