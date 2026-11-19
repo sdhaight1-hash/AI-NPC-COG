@@ -43,3 +43,27 @@ test('lighting and campfire effects support dusk, dawn and daytime without chang
  for(const time of [60,360,720,1080,1400])art.drawAmbient(canvas,world,time,5000);
  assert.equal(JSON.stringify(world),before,'Rendering cannot mutate world state');
 });
+
+test('residents show authoritative timed work and visible rest without changing state',()=>{
+ const labels=[],rects=[];
+ const canvas=new Proxy({measureText:t=>({width:String(t).length*5}),
+  fillText:t=>labels.push(t),fillRect:(...args)=>rects.push(args),
+  drawImage(){}},{get:(obj,key)=>obj[key]??(()=>{}),
+  set:(obj,key,value)=>{obj[key]=value;return true;}});
+ const sandbox={document:{createElement:()=>({width:16,height:24,getContext:()=>canvas})}};
+ vm.runInNewContext(readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8'),sandbox);
+ const art=sandbox.VillageArt;
+ const resident={id:'person_6',name:'Builder',x:10,y:10,motion:0,
+  path:[],task:{key:'collect_wood'},currentActivity:{workRequired:10,workDone:5}};
+ const before=JSON.stringify(resident);
+ art.drawActor(canvas,resident,false,{x:10,y:10},false,720);
+ assert.ok(labels.includes('WOOD'),'Current work must be visible over the person');
+ const px=Math.round((10+.5)*16),py=Math.round((10+1)*16);
+ assert.ok(rects.some(r=>r[0]===px-12&&r[1]===py-37&&
+  r[2]===12&&r[3]===2),'Progress bar must reflect the real 50% activity');
+ assert.equal(JSON.stringify(resident),before,'Rendering is never authorized to mutate tasks');
+ const sleeping={...resident,task:null,currentActivity:null,action:'rest'};
+ labels.length=0;
+ art.drawActor(canvas,sleeping,false,{x:10,y:10},false,720);
+ assert.ok(labels.includes('Zz'),'Stationary recovery must be legible');
+});
