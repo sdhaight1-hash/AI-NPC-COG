@@ -38,17 +38,33 @@
   for(let p=b;p&&pointKey(p)!==pointKey(a);p=back.get(pointKey(p)))path.push(p);
   return path.reverse();
  }
+ const navCache=new WeakMap();
  function reachability(state,n){
-  const p={x:n.x,y:n.y,z:n.z||0};
-  const queue=[p],seen=new Set([pointKey(p)]);
-  for(let i=0;i<queue.length;i++){
-   for(const next of root.Frontier.neighbors(state.world,queue[i])){
-    if(!seen.has(pointKey(next))){seen.add(pointKey(next));queue.push(next);}
-   }
+  const world=state.world;
+  const stairs=world.structures.filter(s=>s.type==='stairs')
+   .map(s=>[s.x,s.y,s.z,s.toZ]).join(';');
+  const signature=JSON.stringify(world.edits||{})+'|'+stairs;
+  let cache=navCache.get(world);
+  if(!cache||cache.signature!==signature){
+   cache={signature,components:new Map()};navCache.set(world,cache);
   }
-  return target=>seen.has(pointKey({x:wrap(target.x,state.world.width),
-   y:wrap(target.y,state.world.height),z:target.z||0}));
+  const origin={x:n.x,y:n.y,z:n.z||0};
+  const originKey=pointKey(origin);
+  let seen=cache.components.get(originKey);
+  if(!seen){
+   const queue=[origin];seen=new Set([originKey]);
+   for(let i=0;i<queue.length;i++){
+    for(const next of root.Frontier.neighbors(world,queue[i])){
+     if(!seen.has(pointKey(next))){seen.add(pointKey(next));queue.push(next);}
+    }
+   }
+   for(const tileKey of seen)cache.components.set(tileKey,seen);
+  }
+  return target=>seen.has(pointKey({x:wrap(target.x,world.width),
+   y:wrap(target.y,world.height),z:target.z||0}));
  }
+ function invalidateNavigation(world){navCache.delete(world);}
+
  function available(state,n){
   return root.AgentWorld.available(n,state.world,state.npcs,reachability(state,n));
  }
@@ -238,6 +254,10 @@
  }
  function survival(state,n,hooks={}){
   if(n.peerPending||n.peerReservedFor)return false;
+  // Avoid a full flood-fill every simulated minute when no reflex is possible.
+  // These are exactly the thresholds used by Cognition.instinct.
+  if(n.needs.thirst<85&&n.bio?.hydrationBudgetMl>=350&&
+   n.needs.hunger<85&&n.bio?.longTermKcal>=150&&n.energy>18)return false;
   const urgent=root.Cognition.instinct(n,available(state,n));
   if(!urgent)return false;
   const critical=n.needs.thirst>=90||n.needs.hunger>=95||
@@ -271,5 +291,6 @@
  }
  root.WorldRuntime={DURATION,stats,note,pathfind,reachability,available,moveTo,
   approach,move,actionDuration,begin,complete,advancePlan,survival,scheduleOffline,
+  invalidateNavigation,
   finishPlan,remember,log};
 })(globalThis);

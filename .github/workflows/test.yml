@@ -24,8 +24,10 @@ jobs:
       - run: node --check public/persistence.js
       - run: node --check public/simulation.js
       - run: node --check scripts/headless.mjs
+      - run: node --check scripts/benchmarks.mjs
       - run: node scripts/headless.mjs 10000 379210
       - run: node scripts/headless.mjs 200 379210 --auto --trace=receipt-trace.jsonl
+      - run: node scripts/benchmarks.mjs --soak-days=30
       - run: node --test tests/*.test.mjs
   windows-installer:
     runs-on: windows-latest
