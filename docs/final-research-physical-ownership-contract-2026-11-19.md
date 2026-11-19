@@ -134,6 +134,14 @@ Within one synchronous JS simulation, there is no need for a distributed databas
 
 This is a prerequisite for **zero-possession spawning**, not that final feature. Today's founders/new arrivals still receive initial carried food/water and the legacy `fill_water` action can still create carried counter-based water without a physical vessel. Do **not** claim that #26's physical inventory or water-container requirement is complete. The next authority change must replace portable water counters with actual vessel-compatible physical lots **before** switching new NPC spawns to empty inventories, then rerun multi-seed founder survival.
 
+## Implementation checkpoint — live-command authority beyond receipt retention (2026-11-19)
+
+[PR #84](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/84) addresses a narrow identity-replay gap: `WorldReceipts.execute` previously relied only on the bounded recent 4,096 receipts to identify committed commands. Now an effect may execute only while the matching command key, target and command ID are **still the actor's active physical task**, and the actor still exists and is alive. A replayed callback cannot mutate world effects after the task was cleared, even after the original receipt has been evicted from audit history.
+
+Tests prove both that (a) an old completed water-gather action cannot mint a second water amount after 4,101 unrelated decision receipts and (b) a *legitimately active* task still finishes even if its ACCEPTED audit receipt has been evicted. The existing receipt delta/history format and persistence v3 schema stay unchanged.
+
+This is **not** a global durable transaction log, rollback after partially mutating exceptions, or protection from maliciously forged local saves that fabricate both actor tasks and world records. Full canonical item-lot transactions remain #26. It is a minimal correctness guard in the current single-process authoritative action model.
+
 ## In-progress recovery invariant — stale activity reservations (2026-11-19)
 
 The mineral-scarcity survival diagnostic in [PR #83](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/83) exposed a concrete liveness failure: an expired material claim on a suspended activity blocked **every** fresh attempt to carry out the same lawful action. The tested corrective rule is: when an actor deliberately retries an activity whose original reservation is invalid, remove **only the stale suspended activity**, release its residual reservation token, keep any physically consumed workpiece intact, then acquire a **new command ID and legitimate stock claim**. A valid suspended claim must continue with the original command ID and exact remaining work. This is the first exercised claim-expiry recovery, not full canonical physical item ownership or transactional rollback.

@@ -113,6 +113,13 @@
  function execute(state,n,task,apply){
   if(typeof apply!=='function')throw Error('World effect callback is required');
   if(!task)throw Error('Authoritative operation requires a task');
+  // A bounded audit log is not the authority to rerun a previously finished
+  // physical command. Its original task must still be live for this actor.
+  const active=n.task;
+  if(!state.npcs.includes(n)||n.alive===false||!active||
+     active.key!==task.key||(active.ref??null)!==(task.ref??null)||
+     (active.commandId&&task.commandId&&active.commandId!==task.commandId))
+   return {ok:false,message:'Command is not the actor\'s active task',duplicate:true};
   if(!task.commandId)task.commandId='cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   const previous=committed(state,task.commandId);
   if(previous)return {ok:false,message:'Duplicate command; already resolved',
