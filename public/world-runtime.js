@@ -89,9 +89,10 @@
    }
    // Hearsay can motivate checking a destination, but not reveal live stock.
    for(const claim of n.evidenceMemory?.claims||[]){
-    if(claim.status!=='unverified'||scoped.some(o=>o.ref===claim.sourceId))continue;
+    if(claim.status!=='unverified')continue;
     const key=Object.fromEntries(pairs)[claim.kind];
-    if(!key||scoped.some(o=>o.key===key))continue;
+    if(!key||scoped.some(o=>o.key===key&&o.ref===claim.sourceId)||
+     scoped.some(o=>o.key===key))continue;
     const target=state.world.nodes.find(x=>
      x.id===claim.sourceId&&x.kind===claim.kind);
     if(!target||distance(state,n,target)>18||
