@@ -33,7 +33,7 @@ function makeBrowser(options={}){
    getItem:k=>saved.get(k)||null,
    setItem(k,v){saved.set(k,v);},
    removeItem(k){saved.delete(k);}
-  },fetch:options.fetch||async()=>({ok:true,json:async()=>({connected:false})})};
+  },fetch:options.fetch||(async()=>({ok:true,json:async()=>({connected:false})}))};
  const source=['pixel-art.js','frontier.js','biology.js','emergence.js',
   'civilization.js','app.js'].map(path=>
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
