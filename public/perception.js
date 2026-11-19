@@ -105,5 +105,27 @@
   return freeze({actorId:n.id,at:state.clock,visionRange:range,
    people,objects,heard,bodily});
  }
- root.Perception={line,visionRange,canSee,sound,inspect,snapshot};
+ function filterAffordances(state,n,options){
+  const packet=snapshot(state,n);
+  const visible=new Set([...packet.people,...packet.objects].map(o=>o.id));
+  const witnessed=new Set([
+   ...(n.knowledge?.observations||[]).map(o=>o.id),
+   ...(n.agency?.beliefs||[]).map(o=>o.ref)
+  ]);
+  const known=id=>visible.has(id)||witnessed.has(id);
+  const visibleKinds=new Set(packet.objects.map(o=>o.kind));
+  const rememberedKinds=new Set((n.agency?.beliefs||[])
+   .filter(b=>b.status!=='failed').map(b=>b.kind));
+  const map={stock_water:'water',stock_food:'food',stock_wood:'wood',
+   stock_stone:'stone',stock_fiber:'fiber'};
+  return options.filter(o=>{
+   if(o.ref&&!known(o.ref))return false;
+   if(map[o.key]&&!visibleKinds.has(map[o.key])&&
+    !rememberedKinds.has(map[o.key]))return false;
+   return true;
+  }).map(o=>({...o,
+   when:String(o.when||'').replace(/\(\d+ remaining, \d+ tiles away\)/g,
+    '(source visually identified)')}));
+ }
+ root.Perception={line,visionRange,canSee,sound,inspect,snapshot,filterAffordances};
 })(globalThis);
