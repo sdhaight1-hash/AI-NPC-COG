@@ -84,6 +84,7 @@ test('time partition: fractional game-minute advance keeps one physical slice',(
 test('time partition: unreasonably large catch-up rejects without partial mutation',()=>{
  const k=kernels(),state=k.Simulation.initial(379210);
  const old=k.Simulation.canonical(state);
- assert.throws(()=>k.Simulation.advance(state,1441),RangeError);
+ assert.throws(()=>k.Simulation.advance(state,1441),
+  {name:'RangeError',message:'Simulation interval exceeds one simulated day'});
  assert.equal(k.Simulation.canonical(state),old);
 });
