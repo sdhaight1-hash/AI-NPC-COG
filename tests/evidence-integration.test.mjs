@@ -89,3 +89,63 @@ test('old inspected water location guides a real return trip outside visual rang
  assert.ok(spring.stock<stock);
  assert.ok(n.inventory.water>0);
 });
+
+test('cited hearsay leads to physical travel, finite gathering, then firsthand verification',()=>{
+ const {c,s,n}=setup();
+ const listener=s.npcs[1];
+ s.npcs=[n,listener];s.auto=false;
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>0);
+ assert.ok(spring);
+ s.world.nodes=[spring];
+ for(const a of [n,listener]){
+  a.x=spring.x;a.y=spring.y;a.z=0;a.path=[];a.travel=null;
+  a.energy=100;
+ }
+ assert.equal(c.WorldRuntime.begin(s,n,'inspect','test'),true);
+ c.Simulation.advance(s,2);
+ const observation=n.evidenceMemory.episodes.find(e=>
+  e.type==='inspection'&&e.ref===spring.id);
+ assert.ok(observation);
+ n.task={key:'socialize',ref:listener.id,approved:true,
+  commandId:'cmd_'+(++s.commandSeq)};
+ const spoken=c.WorldReceipts.execute(s,n,n.task,()=>
+  c.AgentWorld.complete(n,s.world,s.npcs));
+ assert.equal(spoken.ok,true);
+ n.task=null;
+ const words='The spring is at [source:'+spring.id+']';
+ c.EvidenceMemory.fromDialogue(s,n,listener,spoken.receipt,words,'I will investigate.');
+ assert.equal(listener.evidenceMemory.claims.length,1);
+ assert.equal(listener.evidenceMemory.facts.length,0);
+ const point=Array.from({length:s.world.width*s.world.height},(_,i)=>({
+  x:i%s.world.width,y:Math.floor(i/s.world.width),z:0})).find(p=>{
+   const d=c.Frontier.distance(s.world,p,spring);
+   return d>=5&&d<=8&&c.Frontier.traversable(s.world,p.x,p.y,0)&&
+    c.WorldRuntime.pathfind(s,spring,p).length>0;
+ });
+ assert.ok(point);
+ listener.x=point.x;listener.y=point.y;listener.path=[];listener.travel=null;
+ s.clock=23*60;s.world.now=s.clock;
+ assert.equal(c.Perception.canSee(s,listener,spring),false);
+ const option=c.WorldRuntime.available(s,listener).find(x=>
+  x.key==='fill_water'&&x.ref===spring.id);
+ assert.ok(option,'A cited source should motivate a real verification journey');
+ assert.match(option.when,/unverified/);
+ assert.equal(option.when.includes(String(spring.stock)+' remaining'),false);
+ listener.inventory.water=0;
+ const before=spring.stock;
+ assert.equal(c.WorldRuntime.begin(s,listener,'fill_water','reported claim'),true);
+ let gathered=false;
+ for(let i=0;i<45;i++){
+  c.Simulation.advance(s,1);
+  if(s.receipts.some(r=>r.actorId===listener.id&&r.action==='fill_water'&&
+   r.status==='COMPLETED')){gathered=true;break;}
+ }
+ assert.equal(gathered,true);
+ assert.ok(listener.inventory.water>0&&spring.stock<before);
+ assert.equal(listener.evidenceMemory.claims[0].status,'unverified',
+  'Successful gathering does not silently rewrite hearsay as an inspected fact');
+ assert.equal(c.WorldRuntime.begin(s,listener,'inspect','verify'),true);
+ c.Simulation.advance(s,2);
+ assert.equal(listener.evidenceMemory.claims[0].status,'supported');
+ assert.ok(listener.evidenceMemory.claims[0].verificationReceiptId);
+});
