@@ -149,7 +149,7 @@ function sceneFor(n){
  const sensations=Biology.sensation(n.bio,n.needs);
  const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
  const memories=n.memories.slice(-4).map(m=>m.text).join('; ')||'None';
- return 'Year '+Civilization.stamp(state.clock).year+', '+timeString()+
+ return 'Year '+Civilization.stamp(state.clock).year+', '+Civilization.stamp(state.clock).season+', '+timeString()+
   '. Untamed procedural wilderness; no predefined community or government. '+
   n.name+' at ('+n.x+','+n.y+','+(n.z||0)+'). Personality: '+n.personality+
   '. Age '+Math.floor(Civilization.age(n,state.clock))+
@@ -631,7 +631,7 @@ function updateHUD(now){
  state.nextUI=now+600;
  const stamp=Civilization.stamp(state.clock);
  $('worldTime').textContent=timeString();
- $('worldDay').textContent='YEAR '+stamp.year+' · MONTH '+stamp.month+' · DAY '+stamp.day;
+ $('worldDay').textContent=stamp.season.toUpperCase()+' · YEAR '+stamp.year+' · MONTH '+stamp.month+' · DAY '+stamp.day;
  $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+
   ' · '+state.world.weather.temperature+'°C';
  $('worldSeed').textContent=String(state.world.seed);
