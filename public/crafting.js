@@ -31,14 +31,19 @@
    {name:'Dress and check the faces',minutes:5}],output:{kind:'plank',count:3}},
   crate:{name:'Timber storage crate',inputs:{plank:3,cord:1},station:'workbench',stages:[
    {name:'Lay out the boards',minutes:5},{name:'Assemble the crate sides',minutes:9},
-   {name:'Bind and fit the lid',minutes:6}],output:{kind:'crate',count:1}}
+   {name:'Bind and fit the lid',minutes:6}],output:{kind:'crate',count:1}},
+  flask:{name:'Carved wooden water flask',inputs:{wood:1,cord:1},tool:'blade',stages:[
+   {name:'Choose and hollow solid seasoned timber',minutes:8},
+   {name:'Fit a snug wooden stopper and seal the joint',minutes:9},
+   {name:'Bind the stopper and test for leaks',minutes:6}
+  ],output:{kind:'flask',count:1}}
  });
  const MATERIALS=Object.freeze({
   wood:{hardness:2,flexibility:3},stone:{hardness:5,flexibility:0},
   fiber:{hardness:0,flexibility:5},cord:{hardness:1,flexibility:5},
   blade:{hardness:5,flexibility:0},plank:{hardness:2,flexibility:3}
  });
- const KINDS=['cord','blade','hatchet','plank','crate'];
+ const KINDS=['cord','blade','hatchet','plank','crate','flask'];
  const hasInputs=(npc,recipe)=>Object.entries(recipe.inputs)
   .every(([kind,amount])=>(npc.inventory[kind]||0)>=amount);
  function stationNear(npc,world,type,range=8){
