@@ -344,3 +344,38 @@ test('per-NPC activity diagnostics persist safely across save reloads',()=>{
  assert.equal(copy.activityStats.rejected,1);
  assert.match(copy.activityStats.last,/no longer available/);
 });
+
+test('critical thirst interrupts a crafting stage but keeps its committed workpiece',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0];
+ b.state.auto=false;
+ n.inventory.fiber=3;
+ assert.equal(b.setAction(n,'craft_cord','rein'),true);
+ b.step(3);
+ assert.ok(n.workpiece,'Project was started');
+ const workpiece=n.workpiece,recipe=n.workpiece.recipe,stage=n.workpiece.stage;
+ n.needs.thirst=96;n.bio.hydrationBudgetMl=150;n.inventory.water=2;
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.task?.key,'drink');
+ assert.equal(n.workpiece,workpiece,'No material duplication or loss on interruption');
+ assert.equal(n.workpiece.recipe,recipe);
+ assert.equal(n.workpiece.stage,stage);
+ assert.equal(n.plan?.key,'craft_project');
+ b.step(2);
+ assert.equal(n.inventory.water,1,'Real hydration consumes a carried water unit');
+ assert.equal(n.needs.thirst<96,true);
+ b.state.auto=true;
+ for(let i=0;i<80;i++)b.step(1);
+ assert.equal(n.inventory.cord,1,'The paused workpiece must eventually finish');
+ assert.equal(n.workpiece,null);
+});
+test('the model sees recalled personal history without giving it to other inhabitants',()=>{
+ const b=makeBrowser(),[a,other]=b.state.npcs;
+ a.goal='I need to find the freshwater spring again';
+ b.Cognition?.record?.(a,'Only I observed the spring behind the northern trees',100,
+  {kind:'observation',salience:5});
+ // The model-facing scene is assembled from the NPC personal memory store.
+ a.memories.push({text:'Only I observed the spring behind the northern trees',
+  kind:'observation',at:100,x:a.x,y:a.y,salience:5});
+ assert.match(b.sceneFor(a),/Only I observed the spring/);
+ assert.doesNotMatch(b.sceneFor(other),/Only I observed the spring/);
+});
