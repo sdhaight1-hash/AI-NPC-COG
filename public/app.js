@@ -1,685 +1,422 @@
 'use strict';
-
-// Browser-only world simulation. Rein inference lives in the separate local Node bridge.
-const canvas = document.getElementById('world');
-const ctx = canvas.getContext('2d');
-const TILE = VillageArt.TILE;
-const W = Frontier.WIDTH, H = Frontier.HEIGHT;
-const STORE='ai-npc-cog-v2', LEGACY_STORE='ai-npc-cog-v1';
+// God-mode observer. Rendering is a projection of the authoritative toroidal grid.
+const canvas=document.getElementById('world'),ctx=canvas.getContext('2d');
+const TILE=VillageArt.TILE,W=Frontier.WIDTH,H=Frontier.HEIGHT;
+const STORE='ai-npc-cog-v3';
 const WORLD_SEED=Number(localStorage.getItem('ai-npc-cog-world-seed'))||Frontier.DEFAULT_SEED;
-
-const buildings = [
-  { id:'cottage', name:'Longhouse', x:4, y:3, w:7, h:5, door:{x:7,y:8}, roof:'#97674c' },
-  { id:'cafe', name:'Common House', x:15, y:3, w:8, h:5, door:{x:19,y:8}, roof:'#bd775d' },
-  { id:'clinic', name:'Storehouse', x:29, y:3, w:8, h:5, door:{x:33,y:8}, roof:'#7e93a4' },
-  { id:'forge', name:'Old Shed', x:4, y:16, w:7, h:5, door:{x:7,y:21}, roof:'#78665a' },
-  { id:'library', name:'Meeting Hall', x:16, y:17, w:8, h:5, door:{x:20,y:22}, roof:'#6a7c9f' },
-  { id:'market', name:'Covered Stalls', x:29, y:17, w:8, h:5, door:{x:33,y:22}, roof:'#b58c5a' }
-];
-const locations = Object.fromEntries(buildings.map(b => [b.id, b.door]));
-locations.square={x:26,y:12};
-locations.garden={x:36,y:13};
-locations.bench={x:12,y:14};
-const trees=[[1,2],[12,3],[26,4],[38,4],[2,9],[12,9],[26,9],[38,10],[1,16],[12,18],[27,18],[38,16],[2,23],[13,23],[26,24],[38,24],[3,13],[36,24]];
-
-let installedAtlas=null;
-let showAtlas=true;
-const initialNPCs = [
- { id:'mara', name:'Mara', x:21,y:11, mood:79, energy:84, trust:56, color:'#e9aa85',
-   personality:'Mara, 32. Warm, observant, protective of friends, quietly stubborn. Values honesty and dislikes gossip.' },
- { id:'jonas', name:'Jonas', x:12,y:11, mood:55, energy:80, trust:41, color:'#9bc3cc',
-   personality:'Jonas, 40. Dry humor, pragmatic, guarded with strangers, loyal once trust is earned.' },
- { id:'asha', name:'Asha', x:30,y:12, mood:72, energy:73, trust:63, color:'#bc9add',
-   personality:'Asha, 28. Curious, patient, precise about facts, sometimes shy, loves learning and exploring.' },
- { id:'rowan', name:'Rowan', x:15,y:13, mood:65, energy:71, trust:62, color:'#a1d6aa',
-   personality:'Rowan, 35. Calm under pressure, empathic but blunt, cautious, respects boundaries.' },
- { id:'lina', name:'Lina', x:26,y:14, mood:83, energy:90, trust:48, color:'#d9cb79',
-   personality:'Lina, 24. Spirited, resourceful, outgoing, competitive, fond of teasing friends.' },
- { id:'nico', name:'Nico', x:8,y:12, mood:68, energy:76, trust:51, color:'#e693ad',
-   personality:'Nico, 21. Restless, cheerful, socially awkward when surprised, loves discovering new places.' }
-].map((n,i) => AgentWorld.newAgent({...n,
-  goal:'Learning about this place',action:'none',source:'simulation',scores:null,
-  memories:[],chat:[],relationships:{},path:[],travel:0,
-  thoughtAt:8*60+10+i*5,lastSeen:0},i));
-
-const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
-  auto:true, backgroundBusy:false, conversationBusy:false, debugPhysics:false,
-  selected:'mara', lastDecisionMs:0,
-  zoom:1, camera:{x:0,y:0},
-  player:AgentWorld.newAgent({id:'player',name:'You',x:21,y:12,path:[],travel:0,
-    energy:90,action:'none',relationships:{},goal:'Explore'},6),
-  npcs:initialNPCs,world:AgentWorld.newWorld(WORLD_SEED),
-  events:[],nextUI:0,nextSave:0,lastSocial:0};
+const world=AgentWorld.newWorld(WORLD_SEED);
+const founders=Civilization.founders(world,490);
+const state={clock:490,speed:60,day:1,paused:false,auto:true,connected:false,
+ backgroundBusy:false,conversationBusy:false,debugGrid:false,
+ npcs:founders,dead:[],nextPersonId:6,world,events:[],selected:founders[0].id,
+ zoom:1,viewZ:0,follow:true,camera:{x:0,y:0},nextUI:0,nextSave:0,lastDecisionMs:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
-const manhattan=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
-const rand=(x,y)=>{const n=Math.sin(x*127.1+y*311.7)*43758.5453;return n-Math.floor(n);};
-const nearest=(npc,range=6)=>state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=range)
- .sort((a,b)=>manhattan(a,npc)-manhattan(b,npc))[0];
-
-function isBlocked(x,y){
- if(x<0||y<0||x>=W||y>=H) return true;
- if(buildings.some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)) return true;
- if((x-38)**2+(y-21)**2<=4) return true;
- return Frontier.terrainAt(state.world,x,y)==='water';
+const dist=(a,b)=>Frontier.distance(state.world,a,b);
+const key=p=>(p.z||0)+':'+p.x+':'+p.y;
+const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
+const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
+ fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_tool:15,
+ build_fire:20,build_shelter:75,share_food:2,socialize:3,explore:1,none:1};
+let installedAtlas=null,showAtlas=true;
+function selectedNpc(){return state.npcs.find(n=>n.id===state.selected)||null;}
+function selectNpc(id){
+ if(!state.npcs.some(n=>n.id===id))return;
+ state.selected=id;state.follow=true;updateCamera(true);
+ renderResidents();updateInspector();renderChat();
 }
+function nearest(n,range=8){
+ return state.npcs.filter(p=>p!==n&&dist(p,n)<=range).sort((a,b)=>dist(a,n)-dist(b,n))[0]||null;
+}
+function isBlocked(x,y,z=0){return !Frontier.traversable(state.world,wrapX(x),wrapY(y),z);}
 function pathfind(start,end){
- const tx=Math.round(end.x),ty=Math.round(end.y);
- if(isBlocked(tx,ty)) return [];
- const key=(x,y)=>y*W+x;
- const queue=[{x:Math.round(start.x),y:Math.round(start.y)}];
- const back=new Map([[key(queue[0].x,queue[0].y),null]]);
+ const s={x:wrapX(start.x),y:wrapY(start.y),z:start.z||0};
+ const e={x:wrapX(end.x),y:wrapY(end.y),z:end.z||0};
+ if(isBlocked(e.x,e.y,e.z))return [];
+ const queue=[s],back=new Map([[key(s),null]]);
  for(let i=0;i<queue.length;i++){
-  const p=queue[i];if(p.x===tx&&p.y===ty) break;
-  for(const d of [[0,-1],[1,0],[0,1],[-1,0]]){
-   const x=p.x+d[0],y=p.y+d[1],k=key(x,y);
-   if(!isBlocked(x,y)&&!back.has(k)){back.set(k,p);queue.push({x,y});}
+  const p=queue[i];if(key(p)===key(e))break;
+  for(const next of Frontier.neighbors(state.world,p)){
+   if(back.has(key(next)))continue;
+   back.set(key(next),p);queue.push(next);
   }
  }
- if(!back.has(key(tx,ty))) return [];
- const path=[];let p={x:tx,y:ty};
- while(p && (p.x!==start.x||p.y!==start.y)){path.push({x:p.x,y:p.y});p=back.get(key(p.x,p.y));}
+ if(!back.has(key(e)))return [];
+ const path=[];let current=e;
+ while(current&&key(current)!==key(s)){
+  path.push(current);current=back.get(key(current));
+ }
  return path.reverse();
 }
+function reachable(n,point){
+ if(isBlocked(point.x,point.y,point.z||0))return false;
+ return dist(n,point)===0||pathfind(n,point).length>0;
+}
+function reachability(n){
+ const queue=[{x:n.x,y:n.y,z:n.z||0}],seen=new Set([key(queue[0])]);
+ for(let i=0;i<queue.length;i++){
+  for(const next of Frontier.neighbors(state.world,queue[i])){
+   if(!seen.has(key(next))){seen.add(key(next));queue.push(next);}
+  }
+ }
+ return point=>seen.has(key({x:wrapX(point.x),y:wrapY(point.y),z:point.z||0}));
+}
+function availableActivities(n){return AgentWorld.available(n,state.world,state.npcs,reachability(n));}
 function timeString(){
- const minutes=((Math.floor(state.clock)%1440)+1440)%1440;
- return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');
+ const d=Civilization.stamp(state.clock);
+ return String(d.hour).padStart(2,'0')+':'+String(d.minute).padStart(2,'0');
 }
 function record(message,type='routine'){
- const line={time:timeString(),text:message,type};
- state.events.unshift(line);if(state.events.length>65)state.events.length=65;
- renderEvents();
+ state.events.unshift({time:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
+  text:String(message).slice(0,250),type});
+ state.events=state.events.slice(0,100);renderEvents();
 }
-function remember(npc,entry){
- npc.memories.push({time:'Day '+state.day+' '+timeString(),text:String(entry).slice(0,180)});
- npc.memories=npc.memories.slice(-16);
+function remember(n,entry){
+ n.memories.push({time:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
+  text:String(entry).slice(0,180)});
+ n.memories=n.memories.slice(-24);
 }
-function moveTo(actor,target){
- const path=pathfind(actor,target);
- if(path.length===0 && manhattan(actor,target)>0) return false;
- actor.path=path;actor.travel=0;
+function moveTo(n,target){
+ const path=pathfind(n,target);
+ if(!path.length&&dist(n,target)>0)return false;
+ n.path=path;n.travel=null;
  if(path.length){
-  const next=path[0],dx=next.x-actor.x,dy=next.y-actor.y;
-  actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+  const next=path[0],dx=next.x-n.x,dy=next.y-n.y;
+  const hx=Math.abs(dx)>W/2?(dx>0?dx-W:dx+W):dx;
+  const hy=Math.abs(dy)>H/2?(dy>0?dy-H:dy+H):dy;
+  n.facing=Math.abs(hx)>Math.abs(hy)?(hx>0?'right':'left'):(hy>0?'down':'up');
  }
  return true;
 }
-function approach(actor,target){
- let best=null,dist=Infinity;
- for(const d of [[0,1],[1,0],[0,-1],[-1,0]]){
-  const point={x:target.x+d[0],y:target.y+d[1]};
-  if(isBlocked(point.x,point.y))continue;
-  const route=pathfind(actor,point);
-  if((route.length>0 || manhattan(actor,point)===0)&&route.length<dist){dist=route.length;best=point;}
- }
- return best ? moveTo(actor,best) : false;
+function approach(n,target){
+ const options=Frontier.neighbors(state.world,target);
+ const routes=options.map(p=>({p,path:pathfind(n,p)}))
+  .filter(v=>v.path.length>0||dist(n,v.p)===0)
+  .sort((a,b)=>a.path.length-b.path.length);
+ return routes.length?moveTo(n,routes[0].p):false;
 }
-function reachableFrom(npc,point){
- return !isBlocked(point.x,point.y)&&
-  (manhattan(npc,point)===0||pathfind(npc,point).length>0);
+function position(n){
+ if(!n.travel||!n.path?.length)return {x:n.x,y:n.y};
+ const next=n.path[0],fraction=clamp(1-n.travel.remaining/n.travel.total,0,1);
+ let dx=next.x-n.x,dy=next.y-n.y;
+ if(dx>W/2)dx-=W;if(dx<-W/2)dx+=W;
+ if(dy>H/2)dy-=H;if(dy<-H/2)dy+=H;
+ return {x:n.x+dx*fraction,y:n.y+dy*fraction};
 }
-function reachability(npc){
- // One breadth-first flood per cognition event. Avoid dozens of separate
- // pathfind calls over the larger island when comparing resource affordances.
- const visited=new Uint8Array(W*H);
- const queue=[{x:npc.x,y:npc.y}];
- if(isBlocked(npc.x,npc.y))return ()=>false;
- visited[npc.y*W+npc.x]=1;
- for(let i=0;i<queue.length;i++){
-  const point=queue[i];
-  for(const [dx,dy] of [[0,-1],[1,0],[0,1],[-1,0]]){
-   const x=point.x+dx,y=point.y+dy,k=y*W+x;
-   if(x<0||y<0||x>=W||y>=H||visited[k]||isBlocked(x,y))continue;
-   visited[k]=1;queue.push({x,y});
+function updateMovement(n,elapsed){
+ if(!n.path?.length)return;
+ let budget=elapsed;
+ for(let moves=0;moves<100&&budget>0&&n.path.length;moves++){
+  const next=n.path[0];
+  if(isBlocked(next.x,next.y,next.z||0)){
+   n.path=[];n.travel=null;n.task=null;n.goal='Route invalidated';
+   n.thoughtAt=state.clock+3;break;
   }
- }
- return point=>Number.isInteger(point.x)&&Number.isInteger(point.y)&&
-  point.x>=0&&point.y>=0&&point.x<W&&point.y<H&&
-  visited[point.y*W+point.x]===1;
-}
-function availableActivities(npc){
- return AgentWorld.available(npc,state.world,state.npcs,reachability(npc));
-}
-function sceneFor(npc){
- const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
-  .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
- const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
- const bodyCues=Biology.sensation(npc.bio,npc.needs);
- const diet=Biology.nutrition(npc.bio,state.clock);
- const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=15)
-  .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
- return 'Small settlement, day '+state.day+' at '+timeString()+'. '+
-  npc.name+' is at ('+npc.x+','+npc.y+'). Personality: '+npc.personality+
-  ' Physical needs: hunger '+Math.round(npc.needs.hunger)+'/100 (high is hungry), energy '+
-  Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
-  '/100 (high is lonely), thirst '+Math.round(npc.needs.thirst)+'/100, curiosity '+
-  Math.round(npc.needs.curiosity)+'/100. Biome: '+Frontier.terrainAt(state.world,npc.x,npc.y)+
-  '. Weather: '+state.world.weather.kind+' ('+state.world.weather.temperature+
-  'C). Felt bodily state: '+bodyCues+
-  '. Diet in the last 24h: '+diet.meals+' meals, '+diet.diversity+
-  ' different foods; nutrition needs may affect future recovery. Inventory: '+
-  Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
-  '. Earned experience: '+Object.entries(npc.skills).map(([k,v])=>k+' '+v).join(', ')+
-  ' (practice increases gathering yield). Current intention: '+npc.goal+
-  (npc.plan?' [longer-term intention '+npc.plan.key+', '+npc.plan.steps+' completed steps]':'')+
-  '. Other residents within earshot: '+around+
-  '. Observed usable resources: '+nearby+'. Personal memories: '+memories+
-  '. Nobody has been assigned a profession, destination or routine. You choose one available action; '+
-  'the environment validates it and supplies consequences.';
-}
-function backgroundOptions(npc){
- // Rein's trained choice tokens allow at most A-J. Every character receives
- // urgent survival choices PLUS social and exploration opportunities when legal.
- const all=availableActivities(npc).filter(o=>o.key!=='none');
- const urgency=new Map([
-  ['drink',npc.needs.thirst>55||npc.bio.hydrationBudgetMl<650?115:35],
-  ['fill_water',npc.needs.thirst>50?95:25],
-  ['eat',npc.needs.hunger>55||Biology.appetiteDrive(npc.bio)>68?105:35],
-  ['forage',npc.needs.hunger>50?90:30],
-  ['rest',npc.energy<30||npc.bio.sleepDebt>72?100:20],
-  ['socialize',npc.needs.social>48?70:38],
-  ['share_food',npc.needs.social>50?61:32],
-  ['explore',npc.needs.curiosity>45?65:28],
-  ['make_shelter',state.world.weather.kind!=='clear'?65:41],
-  ['build_shelter',65],['make_campfire',34],['build_fire',47],
-  ['craft_hatchet',49],['collect_wood',33],['collect_stone',28],['collect_fiber',31]
- ]);
- const score=o=>(urgency.get(o.key)||10)+
-  (Frontier.hash(npc.x,npc.y,Math.floor(state.clock/35)+npc.id.length*37+
-    o.key.length*17)-.5)*22;
- all.sort((a,b)=>score(b)-score(a));
- const options=all.slice(0,9);
- // Avoid trapping people in pure survival micromanagement. If they're able
- // to explore or socialize, maintain one such choice in the option set.
- const living=all.find(o=>o.key==='socialize'&&npc.needs.social>=35)||
-  all.find(o=>o.key==='explore');
- if(living&&!options.some(o=>o.key===living.key)&&options.length===9)
-  options[8]=living;
- options.push({key:'none',when:'Wait and observe the surroundings'});
- return options.map(({key,when})=>({key,when}));
-}
-function fallbackBackground(npc){
- return AgentWorld.fallback(npc,backgroundOptions(npc));
-}
-function completeActivity(npc){
- if(!npc.task)return;
- if(npc.task.key==='socialize'){
-  if(npc.peerPending || state.backgroundBusy || state.conversationBusy || state.paused ||
-     state.clock<(npc.peerRetryAt||0))return;
-  if(!state.connected){
-   record(npc.name+': peer conversation requires Rein; no simulated dialogue','routine');
-   npc.task=null;npc.action='none';npc.thoughtAt=state.clock+12;
-   return;
+  if(!n.travel){
+   const terrain=Frontier.terrainAt(state.world,next.x,next.y);
+   const minutes=terrain==='ridge'?0.14:terrain==='marsh'?0.12:0.07;
+   n.travel={remaining:minutes,total:minutes};
   }
-  const peer=state.npcs.find(other=>other.id===npc.task.ref);
-  if(!peer || manhattan(npc,peer)>2){
-   npc.task=null;npc.action='none';npc.thoughtAt=state.clock+3;
-   record(npc.name+': could not start conversation; participant moved away','warning');
-   return;
+  if(budget<n.travel.remaining){
+   n.travel.remaining-=budget;break;
   }
-  void peerExchange(npc,peer);
-  return;
- }
- const previous=npc.task;
- const outcome=AgentWorld.complete(npc,state.world,state.npcs);
- if(outcome.ok){
-  remember(npc,outcome.message);
-  record(npc.name+': '+outcome.message,'social');
-  if(npc.plan){
-   npc.plan.steps++;
-   npc.goal='Working toward '+npc.plan.key.replaceAll('_',' ')+
-     ' ('+npc.plan.steps+' steps completed)';
-   npc.nextPlanAt=state.clock+1;
-   if(npc.plan.steps>=8)finishPlan(npc,'Stopped after eight steps','warning');
-  }else{
-   npc.goal='Considering what to do next';
-   npc.thoughtAt=state.clock+2;
+  budget-=n.travel.remaining;
+  if(state.npcs.some(other=>other!==n&&other.x===next.x&&other.y===next.y&&
+    (other.z||0)===(next.z||0))){
+   n.blockedFor=(n.blockedFor||0)+elapsed;
+   n.travel=null;
+   if(n.blockedFor>5){
+    n.path=[];n.task=null;n.goal='Route blocked by another inhabitant';
+    n.thoughtAt=state.clock+3;n.blockedFor=0;
+   }
+   break;
   }
- }else{
-  record(npc.name+': '+outcome.message+' [world rejected]','warning');
-  if(npc.plan)finishPlan(npc,'Plan blocked: '+outcome.message,'warning');
-  npc.goal='Reconsidering after a failed attempt';
-  npc.thoughtAt=state.clock+4;
+  n.x=next.x;n.y=next.y;n.z=next.z||0;
+  n.path.shift();n.travel=null;n.blockedFor=0;
+  Frontier.reveal(state.world,n.x,n.y,7);
  }
- npc.action='none';
+ n.motion=n.path.length?1:0;
+ if(n.task&&!n.path.length&&n.task.readyAt===null)
+  n.task.readyAt=state.clock+(DURATIONS[n.task.key]||2);
 }
-function finishPlan(npc,reason,type='social'){
- if(!npc.plan)return;
- const name=npc.plan.key.replaceAll('_',' ');
- remember(npc,'Intention '+name+': '+reason);
- record(npc.name+' '+name+': '+reason,type);
- npc.plan=null;
- npc.action='none';npc.task=null;
- npc.goal='Considering a new intention';
- npc.thoughtAt=state.clock+4;
+function sceneFor(n){
+ const others=state.npcs.filter(p=>p!==n&&dist(n,p)<=8)
+  .map(p=>p.name+' '+dist(n,p)+' tiles away').join(', ')||'Nobody nearby';
+ const nearby=state.world.nodes.filter(v=>v.stock>0&&dist(n,v)<=7)
+  .sort((a,b)=>dist(n,a)-dist(n,b)).slice(0,8)
+  .map(v=>v.kind+' at '+v.x+','+v.y+' ('+v.stock+' units)').join('; ')||'None observed';
+ const sensations=Biology.sensation(n.bio,n.needs);
+ const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
+ const memories=n.memories.slice(-4).map(m=>m.text).join('; ')||'None';
+ return 'Year '+Civilization.stamp(state.clock).year+', '+timeString()+
+  '. Untamed procedural wilderness; no predefined community or government. '+
+  n.name+' at ('+n.x+','+n.y+','+(n.z||0)+'). Personality: '+n.personality+
+  '. Age '+Math.floor(Civilization.age(n,state.clock))+
+  ', health '+Math.round(n.health)+', energy '+Math.round(n.energy)+
+  ', hunger '+Math.round(n.needs.hunger)+', thirst '+Math.round(n.needs.thirst)+
+  ', loneliness '+Math.round(n.needs.social)+'. Bodily sensations: '+sensations+
+  '. Weather '+state.world.weather.kind+', '+state.world.weather.temperature+'C.'+
+  ' Inventory: '+Object.entries(n.inventory).map(([k,v])=>k+' '+v).join(', ')+
+  '. Skills earned by actions: '+Object.entries(n.skills).filter(([,v])=>v>0)
+   .map(([k,v])=>k+' '+v).join(', ')+
+  '. Known crafting methods: '+known+'. Near people: '+others+
+  '. Perceived resources: '+nearby+'. Recollections: '+memories+
+  '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
+  ' Others have independent beliefs, relationships and decisions.';
 }
-function advancePlan(npc){
- if(!npc.plan||npc.task||npc.peerPending||npc.action==='rest'||
-    state.clock<(npc.nextPlanAt||0))return;
- if(npc.plan.steps>=8)return finishPlan(npc,'Reached the eight-step safety limit','warning');
- const next=AgentWorld.nextPlanAction(npc,state.world,state.npcs,
-  reachability(npc));
- if(next.status==='done')return finishPlan(npc,'Completed');
- if(next.status==='blocked')return finishPlan(npc,next.reason,'warning');
- if(!setAction(npc,next.option.key,'plan',null))
-  finishPlan(npc,'Sub-action no longer available','warning');
+function backgroundOptions(n){
+ const options=availableActivities(n).filter(o=>o.key!=='none');
+ const priority={drink:100,fill_water:80,eat:90,forage:70,
+  rest:60,explore:45,experiment_tool:43,craft_hatchet:45,
+  collect_wood:35,collect_stone:33,collect_fiber:33,
+  socialize:40,share_food:35,make_shelter:42,build_shelter:50,
+  make_campfire:40,build_fire:48};
+ const urgency=o=>priority[o.key]+
+  ((o.key==='drink'||o.key==='fill_water')?n.needs.thirst*.5:0)+
+  ((o.key==='eat'||o.key==='forage')?n.needs.hunger*.4:0)+
+  (o.key==='rest'?(100-n.energy)*.5:0)+
+  (Frontier.hash(n.x,n.y,Math.floor(state.clock/33)+o.key.length*17)-.5)*22;
+ options.sort((a,b)=>urgency(b)-urgency(a));
+ const result=options.slice(0,9);
+ const social=options.find(o=>o.key==='socialize')||options.find(o=>o.key==='explore');
+ if(social&&!result.some(v=>v.key===social.key)&&result.length===9)result[8]=social;
+ result.push({key:'none',when:'Observe surroundings and reconsider'});
+ return result.map(({key,when})=>({key,when}));
 }
-async function peerExchange(npc,other){
- if(npc.peerPending||other.peerPending||state.backgroundBusy||state.conversationBusy)return;
- if(!npc.task||npc.task.key!=='socialize'||npc.task.ref!==other.id)return;
- npc.peerPending=true;other.peerPending=true;state.backgroundBusy=true;
- record(npc.name+' approached '+other.name+' — Rein generating two dialogue turns','routine');
- const wasPaused=state.paused;
- try{
-  const response=await jsonPost('/api/peer-exchange',{
-   speaker:{name:npc.name,persona:npc.personality},
-   listener:{name:other.name,persona:other.personality},
-   scene:sceneFor(npc)+'\n'+other.name+': '+sceneFor(other).slice(0,480)
-  });
-  // Validate the current world again. Never commit stale inference.
-  if(state.paused||wasPaused||state.conversationBusy || !npc.task ||
-     npc.task.key!=='socialize'||npc.task.ref!==other.id||
-     manhattan(npc,other)>2)return;
-  if(typeof response.first!=='string'||typeof response.second!=='string'||
-     !response.first.trim()||!response.second.trim())throw new Error('Empty exchange');
-  npc.task.approved=true;
-  const result=AgentWorld.complete(npc,state.world,state.npcs);
-  if(!result.ok)throw new Error(result.message);
-  const one=response.first.slice(0,240),two=response.second.slice(0,240);
-  const exchange={at:'Day '+state.day+' '+timeString(),
-   with:other.id,first:npc.name+': '+one,second:other.name+': '+two};
-  npc.peerLog.push(exchange);npc.peerLog=npc.peerLog.slice(-10);
-  other.peerLog.push({...exchange,with:npc.id});other.peerLog=other.peerLog.slice(-10);
-  remember(npc,'Spoke with '+other.name+': "'+one.slice(0,75)+
-    '" — '+other.name+' replied "'+two.slice(0,55)+'"');
-  remember(other,npc.name+' said "'+one.slice(0,75)+
-    '". I replied "'+two.slice(0,75)+'"');
-  record(npc.name+': "'+one.slice(0,80)+'"','ai');
-  record(other.name+': "'+two.slice(0,80)+'" [peer exchange '+response.durationMs+'ms]','ai');
-  npc.action='none';
-  npc.goal='Thinking about the conversation with '+other.name;
-  npc.thoughtAt=state.clock+4;
-  other.thoughtAt=Math.max(other.thoughtAt,state.clock+4);
-  updateInspector();
- }catch(error){
-  if(error.status!==429)record(npc.name+' ↔ '+other.name+': '+error.message,'warning');
-  npc.peerFailures=(npc.peerFailures||0)+1;
-  npc.peerRetryAt=state.clock+8;
-  if(npc.peerFailures>=2 || error.status!==429){
-   if(npc.task?.key==='socialize'&&npc.task.ref===other.id)npc.task=null;
-   npc.action='none';npc.thoughtAt=state.clock+8;
-  }
- }finally{
-  npc.peerPending=false;other.peerPending=false;state.backgroundBusy=false;
-  state.lastDecisionMs=performance.now();
- }
+function fallbackBackground(n){return AgentWorld.fallback(n,backgroundOptions(n));}
+function finishPlan(n,reason,type='social'){
+ if(!n.plan)return;
+ remember(n,'Plan '+n.plan.key+': '+reason);record(n.name+': '+reason,type);
+ n.plan=null;n.action='none';n.task=null;
+ n.goal='Reconsidering my next action';n.thoughtAt=state.clock+3;
 }
-function setAction(npc,action,source,scores){
- const candidate=availableActivities(npc).find(option=>option.key===action);
- if(!candidate){
-  record(npc.name+': unavailable action rejected: '+action,'warning');
-  return false;
- }
+function setAction(n,action,source='rein',scores=null){
+ if(!state.npcs.includes(n))return false;
+ const option=availableActivities(n).find(v=>v.key===action);
+ if(!option)return false;
  if(['stock_food','make_campfire','make_shelter'].includes(action)){
-  if(npc.plan)return false;
-  npc.plan={key:action,steps:0};
-  npc.nextPlanAt=state.clock;
-  npc.action='none';npc.source=source;npc.scores=scores;
-  npc.goal='Planning to '+action.replaceAll('_',' ');
-  record(npc.name+' chose a multi-step intention: '+action.replaceAll('_',' ')+
-   ' ['+source+']',source==='rein'?'ai':'routine');
-  return true;
- }
- if(action==='none'){
-  npc.action='none';npc.source=source;npc.scores=scores;npc.task=null;
-  if(!npc.goal)npc.goal='Observing the world';
+  if(n.plan)return false;
+  n.plan={key:action,steps:0};n.nextPlanAt=state.clock;
+  n.goal='Pursuing '+action;n.action='none';n.source=source;n.scores=scores;
+ }else if(action==='none'){
+  n.action='none';n.task=null;n.source=source;n.scores=scores;
  }else if(action==='rest'){
-  npc.action='rest';npc.source=source;npc.scores=scores;npc.task=null;
-  npc.path=[];npc.travel=0;npc.goal='Resting and recovering';
+  n.action='rest';n.task=null;n.path=[];n.travel=null;
+  n.source=source;n.scores=scores;n.goal='Resting';
  }else{
-  const target=candidate.target;
-  if(target&&manhattan(npc,target)>1&&
-     (action==='share_food'||action==='socialize'
-       ?!approach(npc,target):!moveTo(npc,target))){
-    record(npc.name+': could not reach chosen action','warning');
-    return false;
+  const target=option.target;
+  if(target&&dist(n,target)>1){
+   const good=(action==='share_food'||action==='socialize')
+    ?approach(n,target):moveTo(n,target);
+   if(!good)return false;
   }
-  npc.action=action;npc.source=source;npc.scores=scores;
-  npc.task={key:action,ref:candidate.ref||null};
-  if(action==='socialize')npc.peerFailures=0;
-  npc.goal=action.replaceAll('_',' ')+' (self-chosen)';
-  if(!npc.path.length && action!=='socialize')completeActivity(npc);
+  n.action=action;n.source=source;n.scores=scores;
+  n.task={key:action,ref:option.ref||null,readyAt:n.path.length?null:
+   state.clock+(DURATIONS[action]||2)};
+  n.goal=action.replaceAll('_',' ')+' (self-chosen)';
  }
- const score=scores&&Number.isFinite(scores[action])?' ('+Math.round(scores[action]*100)+'%)':'';
- record(npc.name+' chose '+action.replaceAll('_',' ')+score+' ['+source+']',
+ record(n.name+' chose '+action.replaceAll('_',' ')+' ['+source+']',
   source==='rein'?'ai':'routine');
- if(source==='rein')remember(npc,'Chose '+action+' based on current needs and local opportunities');
- updateInspector();
+ if(source==='rein')remember(n,'Chose '+action+' from perceived options');
  return true;
 }
-
-async function jsonPost(path,body){
- const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
- const data=await response.json();
- if(!response.ok){
-  const error=new Error(data.error||'HTTP '+response.status);
-  error.status=response.status;
-  throw error;
+function completeActivity(n){
+ if(!n.task||n.path.length||n.task.readyAt===null||
+  state.clock<n.task.readyAt)return;
+ if(n.task.key==='socialize'){
+  if(n.peerPending||state.backgroundBusy||state.conversationBusy||
+    state.paused||state.clock<(n.peerRetryAt||0))return;
+  const other=state.npcs.find(v=>v.id===n.task.ref);
+  if(!other||dist(n,other)>2){n.task=null;n.thoughtAt=state.clock+5;return;}
+  if(!state.connected){
+   n.task=null;n.action='none';n.thoughtAt=state.clock+15;
+   return;
+  }
+  void peerExchange(n,other);return;
  }
+ const outcome=AgentWorld.complete(n,state.world,state.npcs);
+ if(outcome.ok){
+  remember(n,outcome.message);record(n.name+': '+outcome.message,'social');
+  if(n.plan){
+   n.plan.steps++;n.nextPlanAt=state.clock+1;
+   if(n.plan.steps>=8)finishPlan(n,'Plan step limit reached','warning');
+  }else n.thoughtAt=state.clock+2;
+ }else{
+  record(n.name+': '+outcome.message+' [rejected]','warning');
+  if(n.plan)finishPlan(n,'Plan blocked: '+outcome.message,'warning');
+  n.thoughtAt=state.clock+4;
+ }
+ n.action='none';
+}
+function advancePlan(n){
+ if(!n.plan||n.task||n.path.length||n.action==='rest'||
+  state.clock<(n.nextPlanAt||0))return;
+ const result=AgentWorld.nextPlanAction(n,state.world,state.npcs,reachability(n));
+ if(result.status==='done')return finishPlan(n,'Plan completed');
+ if(result.status==='blocked')return finishPlan(n,result.reason,'warning');
+ if(!setAction(n,result.option.key,'plan'))finishPlan(n,'Subaction unavailable','warning');
+}
+async function jsonPost(route,body){
+ const response=await fetch(route,{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify(body)});
+ const data=await response.json();
+ if(!response.ok){const error=new Error(data.error||'HTTP '+response.status);
+  error.status=response.status;throw error;}
  return data;
 }
 async function checkModel(){
  try{
   const response=await fetch('/api/health',{cache:'no-store'});
-  const health=await response.json();
-  state.connected=!!health.connected;
+  state.connected=!!(await response.json()).connected;
  }catch{state.connected=false;}
- const tag=$('modelStatus');
- tag.className='chip '+(state.connected?'online':'offline');
- tag.innerHTML='<i class="status-dot"></i> '+(state.connected?'Rein connected':'Offline · simulated routines');
+ const tag=$('modelStatus');tag.className='chip '+(state.connected?'online':'offline');
+ tag.innerHTML='<i class="status-dot"></i> '+(state.connected?'Rein connected':'Offline · basic survival routines');
 }
-async function deliberate(npc){
+async function deliberate(n){
+ if(!state.npcs.includes(n))return;
  state.backgroundBusy=true;
+ const location=key(n),options=backgroundOptions(n);
  try{
-  const options=backgroundOptions(npc);
   if(state.connected){
    const data=await jsonPost('/api/decide',{
-    persona:npc.personality,scene:sceneFor(npc),
-    history:[],question:'What do you choose to do next for your own reasons, with your current needs, possessions, nearby people and resources?',options
+    persona:n.personality,scene:sceneFor(n),history:[],
+    question:'Which available action do you choose independently, and why?',options
    });
-   if(!state.paused&&!state.conversationBusy&&options.some(o=>o.key===data.action)){
-    setAction(npc,data.action,'rein',data.scores);
-    record(npc.name+' inference completed in '+data.durationMs+'ms','ai');
-   }
-  }else if(!state.paused&&!state.conversationBusy){
-   setAction(npc,fallbackBackground(npc),'offline routine',null);
-  }
- }catch(error){
-  if(error.status===429){
-   record(npc.name+': background decision deferred for conversation','routine');
-  }else{
-   record(npc.name+': inference error — '+error.message,'warning');
-   if(!state.paused&&!state.conversationBusy)
-    setAction(npc,fallbackBackground(npc),'offline routine',null);
+   if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
+      options.some(o=>o.key===data.action))
+    setAction(n,data.action,'rein',data.scores);
+  }else if(!state.paused)setAction(n,fallbackBackground(n),'offline routine');
+ }catch(e){
+  if(e.status!==429){
+   record(n.name+': Rein error '+e.message,'warning');
+   if(!state.paused&&state.npcs.includes(n))
+    setAction(n,fallbackBackground(n),'offline routine');
    void checkModel();
   }
  }finally{
-  npc.thoughtAt=state.clock+(state.connected?32:30);
-  state.lastDecisionMs=performance.now();
-  state.backgroundBusy=false;
+  n.thoughtAt=state.clock+(state.connected?25:18);
+  state.backgroundBusy=false;state.lastDecisionMs=performance.now();
  }
 }
-function selectNpc(id){
- if(!state.npcs.some(n=>n.id===id))return;
- state.selected=id;renderResidents();updateInspector();renderChat();
-}
-function selectedNpc(){return state.npcs.find(n=>n.id===state.selected);}
-function addConversation(npc,role,content,source){
- npc.chat.push({role,content,source});npc.chat=npc.chat.slice(-22);
- if(state.selected===npc.id)renderChat();
-}
-function socialOptions(npc){
- return [
-  {key:'warm',when:'Respond warmly, welcoming a friendly person and talking openly'},
-  {key:'guarded',when:'Respond politely but cautiously, giving limited information'},
-  {key:'helpful',when:'Offer practical advice or assistance within actual knowledge and abilities'},
-  {key:'refuse',when:'Decline the request or set a firm personal boundary'},
-  {key:'avoid',when:'Disengage and attempt to leave this conversation'},
-  {key:'none',when:'Stay neutral; casual conversation without extra action'}
- ];
-}
-function fallbackSocial(npc,text){
- if(/stupid|hate|idiot|shut up/i.test(text))return 'refuse';
- if(npc.trust>65)return 'warm';
- if(npc.trust<35)return 'guarded';
- return 'none';
-}
-async function sendMessage(event){
- event.preventDefault();
- const npc=selectedNpc(),input=$('messageInput');
- const message=input.value.trim();
- if(!npc||!message||state.conversationBusy)return;
- if(manhattan(state.player,npc)>4){$('chatHint').textContent='Move within 4 tiles to talk to '+npc.name+'.';return;}
- // Pause the previous plan rather than silently abandoning a gathering journey.
- // Selection may change while the shared model is generating a reply.
- const interrupted={task:npc.task,path:npc.path.slice(),action:npc.action,goal:npc.goal};
- input.value='';
- npc.path=[];npc.travel=0;npc.task=null;
- const prior=npc.chat.slice(-8).filter(item=>item.role!=='system')
-  .map(({role,content})=>({role:role==='player'?'user':'assistant',content}));
- addConversation(npc,'player',message,'pending');
- record('You spoke to '+npc.name+': '+message.slice(0,75),'social');
- state.conversationBusy=true;$('sendBtn').disabled=true;
- $('chatHint').textContent='Prioritizing your conversation…';
+async function peerExchange(n,other){
+ if(n.peerPending||other.peerPending||state.backgroundBusy||
+  state.conversationBusy||!state.npcs.includes(n)||!state.npcs.includes(other))return;
+ n.peerPending=true;other.peerPending=true;state.backgroundBusy=true;
+ const locA=key(n),locB=key(other);
  try{
-  let action,source='offline routine',scores=null,reply,durationMs=0;
-  const options=socialOptions(npc);
-  if(state.connected){
-   const response=await jsonPost('/api/interact',{
-    persona:npc.personality,scene:sceneFor(npc),
-    history:prior,message,
-    question:'How should this character respond to the visitor’s latest words, given their personality and relationship?',
-    options
-   });
-   action=response.action;scores=response.scores;reply=response.reply;
-   durationMs=response.durationMs;source='rein';
-   if(!options.some(o=>o.key===action))throw new Error('Model returned an unknown social action');
-  }else{
-   action=fallbackSocial(npc,message);
-   const phrases={
-    warm:'Good to see you! Pull up a chair and tell me what is on your mind.',
-    guarded:'Well, that depends. What exactly are you asking?',
-    helpful:'I can try to help, though I may not have all the answers.',
-    refuse:'No. I am not comfortable with that.',
-    avoid:'Sorry, I have somewhere to be right now.',
-    none:'I hear you. Things have been busy around Hearthbrook lately.'
-   };
-   reply=phrases[action];
-  }
-  // Commit state only after a complete, validated response from both Rein calls.
-  const pending=npc.chat.findLast(item=>item.role==='player'&&item.source==='pending');
-  if(pending)pending.source='player';
-  npc.action=action;npc.source=source;npc.scores=scores;
-  if(action==='warm'||action==='helpful')npc.trust=clamp(npc.trust+2);
-  if(action==='refuse'||action==='avoid')npc.trust=clamp(npc.trust-2);
-  addConversation(npc,'npc',reply,source);
-  remember(npc,'Player said: '+message.slice(0,85)+'; I replied: '+reply.slice(0,80));
-  record(npc.name+' response: '+action+(scores?' ('+Math.round(scores[action]*100)+'%)':'')+
-   ' ['+source+']'+(source==='rein'?' '+durationMs+'ms':''),source==='rein'?'ai':'social');
-  if(action==='avoid'){
-   npc.task=null;
-   moveTo(npc,locations.square);
-  }
-  npc.mood=clamp(npc.mood+(action==='warm'?2:action==='refuse'?-2:0));
- }catch(error){
-  record(npc.name+': conversation failed — '+error.message,'warning');
-  // A failed request must not poison NPC memory or grant relationship changes.
-  const index=npc.chat.findLastIndex(item=>item.role==='player'&&item.source==='pending');
-  if(index>=0)npc.chat.splice(index,1);
-  addConversation(npc,'system','No model reply was completed. Your message was not applied; please retry.','error');
-  input.value=message;
-  void checkModel();
+  const response=await jsonPost('/api/peer-exchange',{
+   speaker:{name:n.name,persona:n.personality},
+   listener:{name:other.name,persona:other.personality},
+   scene:sceneFor(n)+'\n'+sceneFor(other).slice(0,420)
+  });
+  if(state.paused||!state.npcs.includes(n)||!state.npcs.includes(other)||
+    !n.task||n.task.key!=='socialize'||n.task.ref!==other.id||
+    key(n)!==locA||key(other)!==locB||dist(n,other)>2)return;
+  if(typeof response.first!=='string'||typeof response.second!=='string'||
+    !response.first.trim()||!response.second.trim())throw Error('Empty exchange');
+  n.task.approved=true;
+  const outcome=AgentWorld.complete(n,state.world,state.npcs);
+  if(!outcome.ok)throw Error(outcome.message);
+  const first=response.first.slice(0,220),second=response.second.slice(0,220);
+  const exchange={at:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
+   with:other.id,first:n.name+': '+first,second:other.name+': '+second};
+  n.peerLog.push(exchange);n.peerLog=n.peerLog.slice(-12);
+  other.peerLog.push({...exchange,with:n.id});other.peerLog=other.peerLog.slice(-12);
+  remember(n,'Spoke with '+other.name+': '+first+'; '+second);
+  remember(other,'Spoke with '+n.name+': '+first+'; '+second);
+  record(n.name+' and '+other.name+' exchanged dialogue','ai');
+  n.action='none';n.thoughtAt=state.clock+4;other.thoughtAt=state.clock+4;
+ }catch(e){
+  record(n.name+' ↔ '+other.name+': '+e.message,'warning');
+  if(n.task?.key==='socialize')n.task=null;
+  n.action='none';n.thoughtAt=state.clock+8;
  }finally{
-  if(interrupted.action==='rest'&&npc.action!=='avoid'){
-   npc.action='rest';npc.goal=interrupted.goal;
-  }
-  if(interrupted.task&&npc.action!=='avoid'){
-   npc.task=interrupted.task;
-   npc.path=interrupted.path;
-   npc.travel=0;
-   npc.action=interrupted.action;
-   npc.goal=interrupted.goal;
-  }
-  state.conversationBusy=false;$('sendBtn').disabled=false;
-  $('chatHint').textContent='Interactions are prioritized over background decisions.';
+  n.peerPending=false;other.peerPending=false;state.backgroundBusy=false;
   state.lastDecisionMs=performance.now();
-  save();updateInspector();
  }
-}
-
-function ensureBody(actor){
- if(!actor.body)actor.body=Physics2D.create(actor.x,actor.y,actor===state.player ? .235 : .23);
- return actor.body;
-}
-function nearbyBodies(actor){
- const body=ensureBody(actor);
- return [state.player,...state.npcs].filter(other=>other!==actor&&other.body)
-  .map(other=>other.body).filter(other=>Math.abs(other.x-body.x)<2&&Math.abs(other.y-body.y)<2);
-}
-function controlVector(){
- let x=0,y=0;
- if(heldKeys.has('a')||heldKeys.has('arrowleft'))x--;
- if(heldKeys.has('d')||heldKeys.has('arrowright'))x++;
- if(heldKeys.has('w')||heldKeys.has('arrowup'))y--;
- if(heldKeys.has('s')||heldKeys.has('arrowdown'))y++;
- return {x,y};
-}
-function updateMovement(actor,dt,speed){
- const body=ensureBody(actor),others=nearbyBodies(actor);
- const input=actor===state.player?controlVector():{x:0,y:0};
- if(actor===state.player&&(input.x||input.y)){
-  actor.path=[];actor.travel=0;
-  actor.action='none';
-  Physics2D.steer(body,input,dt,isBlocked,others,speed);
-  actor.x=Math.floor(body.x);actor.y=Math.floor(body.y);
- }else if(actor.path?.length){
-  const next=actor.path[0];
-  if(isBlocked(next.x,next.y)){
-   actor.path=[];body.vx=0;body.vy=0;
-  }else{
-   const movement=Physics2D.follow(body,next,dt,isBlocked,others,speed);
-   const dx=body.vx,dy=body.vy;
-   if(Math.hypot(dx,dy)>.12)
-    actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
-   if(movement.arrived){
-    actor.x=next.x;actor.y=next.y;
-    actor.path.shift();actor.travel=0;
-    actor.blockedFor=0;
-   }else if(movement.blocked){
-    actor.blockedFor=(actor.blockedFor||0)+dt;
-    // Do not corrupt a task route. Wait briefly and let nearby bodies clear.
-    if(actor.blockedFor>6){
-     actor.path=[];
-     actor.blockedFor=0;
-     if(actor.task){actor.task=null;actor.goal='Route blocked by another resident';
-       actor.thoughtAt=state.clock+5;}
-    }
-   }else actor.blockedFor=0;
-  }
- }else{
-  Physics2D.steer(body,{x:0,y:0},dt,isBlocked,others,speed);
- }
- actor.motion=Math.hypot(body.vx,body.vy);
- if(actor.motion>.13 && !actor.path?.length && actor===state.player){
-  actor.facing=Math.abs(body.vx)>Math.abs(body.vy)
-    ?(body.vx>0?'right':'left'):(body.vy>0?'down':'up');
- }
-}
-function position(actor){
- const body=actor.body;
- return body?{x:body.x-.5,y:body.y-.5}:{x:actor.x,y:actor.y};
-}
-const fogCanvas=document.createElement('canvas');
-fogCanvas.width=W*TILE;fogCanvas.height=H*TILE;
-const fogContext=fogCanvas.getContext('2d');
-function updateFog(){
- fogContext.clearRect(0,0,fogCanvas.width,fogCanvas.height);
- fogContext.fillStyle='#080f10';
- for(let y=0;y<H;y++)for(let x=0;x<W;x++)
-  if(!Frontier.revealed(state.world,x,y))
-   fogContext.fillRect(x*TILE,y*TILE,TILE,TILE);
 }
 const staticCanvas=document.createElement('canvas');
 staticCanvas.width=W*TILE;staticCanvas.height=H*TILE;
-const staticContext=staticCanvas.getContext('2d');
-ctx.imageSmoothingEnabled=false;
-staticContext.imageSmoothingEnabled=false;
-function drawStaticWorld(){
- VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees,state.world);
+const staticCtx=staticCanvas.getContext('2d');
+const undergroundCanvas=document.createElement('canvas');
+undergroundCanvas.width=W*TILE;undergroundCanvas.height=H*TILE;
+const undergroundCtx=undergroundCanvas.getContext('2d');
+let drawnLayer=null;
+function drawStaticWorld(){VillageArt.drawWorld(staticCtx,{width:W,height:H},[],[],state.world);}
+function drawUnderground(){
+ if(drawnLayer===state.viewZ)return;
+ drawnLayer=state.viewZ;
+ undergroundCtx.clearRect(0,0,W*TILE,H*TILE);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  const m=Frontier.materialAt(state.world,x,y,state.viewZ);
+  undergroundCtx.fillStyle=m==='cave'?'#293c3c':m==='air'?'#455b60':
+   m==='water'?'#306b80':m==='stone'?'#716b64':'#414744';
+  undergroundCtx.fillRect(x*TILE,y*TILE,TILE,TILE);
+  if(m==='cave'){
+   undergroundCtx.fillStyle='#53665c';
+   undergroundCtx.fillRect(x*TILE+3,y*TILE+5,2,2);
+  }
+ }
 }
-// Optional Kenney CC0 sprites are installed locally once, never fetched at runtime
-// from a third-party host. When absent the original artwork remains usable.
 function loadTileset(){
  if(typeof Image==='undefined')return;
- const image=new Image();
- image.onload=()=>{
-  if(VillageArt.setAtlas(image)){
-   installedAtlas=image;
-   staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
-   drawStaticWorld();
-   $('artToggle').textContent='Art: CC0 Tiny Town';
-   record('Kenney Tiny Town art atlas loaded (CC0)', 'routine');
+ const img=new Image();
+ img.onload=()=>{
+  if(VillageArt.setAtlas(img)){
+   installedAtlas=img;drawStaticWorld();$('artToggle').textContent='Art: CC0 Tiny Town';
   }
  };
- image.onerror=()=>record('Using included original pixel-art fallback','routine');
- image.src='/assets/kenney-tiny-town.png';
+ img.src='/assets/kenney-tiny-town.png';
 }
 function updateCamera(force=false){
- const zoom=state.zoom;
- const viewW=canvas.width/zoom,viewH=canvas.height/zoom;
- const p=position(state.player);
- const tx=clamp((p.x+.5)*TILE-viewW/2,0,Math.max(0,W*TILE-viewW));
- const ty=clamp((p.y+.5)*TILE-viewH/2,0,Math.max(0,H*TILE-viewH));
- state.camera.x+=force?tx-state.camera.x:(tx-state.camera.x)*.26;
- state.camera.y+=force?ty-state.camera.y:(ty-state.camera.y)*.26;
+ const p=selectedNpc();
+ if(!p||!state.follow)return;
+ const point=position(p),viewW=canvas.width/state.zoom,viewH=canvas.height/state.zoom;
+ const tx=(point.x+.5)*TILE-viewW/2,ty=(point.y+.5)*TILE-viewH/2;
+ const dx=((((tx-state.camera.x)%(W*TILE))+1.5*W*TILE)%(W*TILE))-.5*W*TILE;
+ const dy=((((ty-state.camera.y)%(H*TILE))+1.5*H*TILE)%(H*TILE))-.5*H*TILE;
+ state.camera.x+=force?dx:dx*.18;state.camera.y+=force?dy:dy*.18;
 }
 function clientToTile(clientX,clientY,rect){
  const sx=(clientX-rect.left)*canvas.width/rect.width;
  const sy=(clientY-rect.top)*canvas.height/rect.height;
- return {
-  x:Math.floor((Math.round(state.camera.x)+sx/state.zoom)/TILE),
-  y:Math.floor((Math.round(state.camera.y)+sy/state.zoom)/TILE)
- };
+ return {x:wrapX(Math.floor((state.camera.x+sx/state.zoom)/TILE)),
+  y:wrapY(Math.floor((state.camera.y+sy/state.zoom)/TILE)),z:state.viewZ};
 }
 function drawWorld(){
  updateCamera();
- ctx.imageSmoothingEnabled=false;
- ctx.fillStyle='#233e30';
+ ctx.imageSmoothingEnabled=false;ctx.fillStyle='#152925';
  ctx.fillRect(0,0,canvas.width,canvas.height);
- ctx.save();
- ctx.scale(state.zoom,state.zoom);
- // Pixel-align rendered camera without snapping the underlying smooth state.
- ctx.translate(-Math.round(state.camera.x),-Math.round(state.camera.y));
- ctx.drawImage(staticCanvas,0,0);
- VillageArt.drawWorldObjects(ctx,state.world,{
-  left:state.camera.x/TILE-2,top:state.camera.y/TILE-2,
-  right:(state.camera.x+canvas.width/state.zoom)/TILE+2,
-  bottom:(state.camera.y+canvas.height/state.zoom)/TILE+2
- });
- const actors=state.npcs.map(n=>({actor:n,player:false}));
- actors.push({actor:state.player,player:true});
- actors.sort((a,b)=>position(a.actor).y-position(b.actor).y);
- const now=performance.now();
- for(const item of actors){
-  VillageArt.drawActor(ctx,item.actor,item.player,position(item.actor),
-   !item.player&&state.selected===item.actor.id,now);
- }
- VillageArt.drawAmbient(ctx,state.world,state.clock,now);
- ctx.drawImage(fogCanvas,0,0);
- if(state.debugPhysics){
-  // Debug overlay uses the same authoritative collision map as the physics engine.
-  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(isBlocked(x,y)){
-   ctx.fillStyle='rgba(223,67,89,.12)';
-   ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
-   ctx.strokeStyle='rgba(245,103,116,.45)';
-   ctx.lineWidth=.5;
-   ctx.strokeRect(x*TILE+.5,y*TILE+.5,TILE-1,TILE-1);
+ ctx.save();ctx.scale(state.zoom,state.zoom);
+ const vw=canvas.width/state.zoom,vh=canvas.height/state.zoom;
+ const layer=state.viewZ===0?staticCanvas:(drawUnderground(),undergroundCanvas);
+ for(const ox of [-W*TILE,0,W*TILE])for(const oy of [-H*TILE,0,H*TILE]){
+  const x=ox-state.camera.x,y=oy-state.camera.y;
+  if(x>vw||y>vh||x+W*TILE<0||y+H*TILE<0)continue;
+  ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.drawImage(layer,0,0);
+  if(state.viewZ===0)VillageArt.drawWorldObjects(ctx,state.world,{
+   left:-1,top:-1,right:W+1,bottom:H+1});
+  for(const n of state.npcs.filter(v=>(v.z||0)===state.viewZ)
+   .sort((a,b)=>position(a).y-position(b).y)){
+   const p=position(n);
+   VillageArt.drawActor(ctx,n,false,{x:wrapX(p.x),y:wrapY(p.y)},
+    state.selected===n.id,performance.now());
   }
-  for(const agent of [state.player,...state.npcs]){
-   const b=agent.body;if(!b)continue;
-   ctx.beginPath();ctx.arc(b.x*TILE,b.y*TILE,b.radius*TILE,0,Math.PI*2);
-   ctx.strokeStyle=agent===state.player?'#72e7ee':'#ffe4a3';
-   ctx.lineWidth=.8;ctx.stroke();
-   ctx.beginPath();ctx.moveTo(b.x*TILE,b.y*TILE);
-   ctx.lineTo((b.x+b.vx*.22)*TILE,(b.y+b.vy*.22)*TILE);
-   ctx.stroke();
+  if(state.viewZ===0)VillageArt.drawAmbient(ctx,state.world,state.clock,performance.now());
+  if(state.debugGrid){
+   ctx.strokeStyle='rgba(255,220,152,.25)';ctx.lineWidth=.5;
+   for(let i=0;i<=W;i++){ctx.beginPath();ctx.moveTo(i*TILE,0);
+    ctx.lineTo(i*TILE,H*TILE);ctx.stroke();}
+   for(let i=0;i<=H;i++){ctx.beginPath();ctx.moveTo(0,i*TILE);
+    ctx.lineTo(W*TILE,i*TILE);ctx.stroke();}
   }
+  ctx.restore();
  }
  ctx.restore();
 }
 function renderEvents(){
  const area=$('eventLog');area.replaceChildren();
- for(const e of state.events.slice(0,35)){
+ for(const e of state.events.slice(0,40)){
   const row=document.createElement('div');row.className='event '+e.type;
   const tm=document.createElement('span');tm.className='event-time';tm.textContent=e.time;
   const dot=document.createElement('i');dot.className='event-dot';
@@ -688,376 +425,306 @@ function renderEvents(){
  }
 }
 function renderResidents(){
- const wrap=$('residentList');wrap.replaceChildren();
- for(const npc of state.npcs){
+ const area=$('residentList');area.replaceChildren();
+ for(const n of state.npcs){
   const btn=document.createElement('button');btn.type='button';
-  btn.className='resident'+(npc.id===state.selected?' active':'');
-  const symbol=document.createElement('i');symbol.className='symbol';symbol.style.background=npc.color;
-  btn.append(symbol,document.createTextNode(npc.name));btn.addEventListener('click',()=>selectNpc(npc.id));
-  wrap.append(btn);
+  btn.className='resident'+(n.id===state.selected?' active':'');
+  const mark=document.createElement('i');mark.className='symbol';mark.style.background=n.color;
+  btn.append(mark,document.createTextNode(n.name));
+  btn.addEventListener('click',()=>selectNpc(n.id));area.append(btn);
  }
 }
 function updateInspector(){
- const npc=selectedNpc();if(!npc)return;
- $('npcPortrait').textContent=npc.name[0];$('npcPortrait').style.background=npc.color+'44';
- $('npcName').textContent=npc.name;
- $('npcMeta').textContent=AgentWorld.focus(npc);
- for(const [prefix,value] of [['mood',npc.mood],['energy',npc.energy],['trust',npc.trust]]){
-  $(prefix+'Val').textContent=Math.round(value)+'/100';
-  $(prefix+'Meter').style.width=clamp(value)+'%';
+ const n=selectedNpc();
+ $('npcCount').textContent=state.npcs.length+' alive · '+state.dead.length+' dead';
+ if(!n){
+  $('npcName').textContent='No living inhabitants';
+  $('npcMeta').textContent='The next monthly arrival may repopulate the world.';
+  return;
  }
- $('npcGoal').textContent=npc.goal;
- $('npcPlan').textContent=npc.plan
-  ?npc.plan.key.replaceAll('_',' ')+' · '+npc.plan.steps+' steps'
-  :'No ongoing plan';
- $('thirstVal').textContent=Math.round(npc.needs.thirst)+'/100';
- $('thirstMeter').style.width=clamp(npc.needs.thirst)+'%';
- $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
- $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
- $('inventoryVal').textContent='Food '+npc.inventory.food+' · Water '+npc.inventory.water+
-  ' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone+' · Fiber '+npc.inventory.fiber+
-  (npc.inventory.hatchet?' · Hatchet':'');
- $('experienceVal').textContent=Object.entries(npc.skills).filter(([,v])=>v>0)
-   .map(([k,v])=>k+' '+v).join(' · ')||'None yet';
- $('socialVal').textContent=Math.round(npc.needs.social)+'/100';
- const diet=Biology.nutrition(npc.bio,state.clock);
- $('bioSensation').textContent=Biology.sensation(npc.bio,npc.needs);
- $('bioNutrition').textContent=diet.kcal+' kcal · '+diet.meals+
-   ' meals · '+diet.diversity+' kinds · '+diet.adequacy+'% gameplay coverage';
- $('bioHormones').textContent=Object.entries(npc.bio.hormones)
-   .map(([k,v])=>k+' '+Math.round(v)).join(' · ');
- $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
- $('talkDistance').textContent=manhattan(state.player,npc)+' tiles away';
+ $('npcPortrait').textContent=n.name[0];$('npcPortrait').style.background=n.color+'44';
+ $('npcName').textContent=n.name;
+ $('npcMeta').textContent='Age '+Math.floor(Civilization.age(n,state.clock))+
+  ' · Y'+Civilization.stamp(state.clock).year+' · '+AgentWorld.focus(n);
+ for(const [prefix,val] of [['mood',n.mood],['energy',n.energy],['health',n.health]]){
+  $(prefix+'Val').textContent=Math.round(val)+'/100';
+  $(prefix+'Meter').style.width=clamp(val)+'%';
+ }
+ $('hungerVal').textContent=Math.round(n.needs.hunger)+'/100';
+ $('hungerMeter').style.width=clamp(n.needs.hunger)+'%';
+ $('thirstVal').textContent=Math.round(n.needs.thirst)+'/100';
+ $('thirstMeter').style.width=clamp(n.needs.thirst)+'%';
+ $('socialVal').textContent=Math.round(n.needs.social)+'/100';
+ $('bioSensation').textContent=Biology.sensation(n.bio,n.needs);
+ const diet=Biology.nutrition(n.bio,state.clock);
+ $('bioNutrition').textContent=diet.kcal+' kcal · '+diet.meals+' meals · '+diet.diversity+' foods';
+ $('bioHormones').textContent=Object.entries(n.bio.hormones)
+  .map(([k,v])=>k+' '+Math.round(v)).join(' · ');
+ $('inventoryVal').textContent=Object.entries(n.inventory).map(([k,v])=>k+' '+v).join(' · ');
+ $('experienceVal').textContent=Object.entries(n.skills).filter(([,v])=>v>0)
+  .map(([k,v])=>k+' '+v).join(' · ')||'No practice yet';
+ $('knowledgeVal').textContent=(n.knowledge?.recipes||[]).join(', ')||'No learned recipes';
+ $('npcGoal').textContent=n.goal;
+ $('npcPlan').textContent=n.plan?n.plan.key+' ('+n.plan.steps+' steps)':'No active plan';
+ $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source||'Simulation';
  const scores=$('npcDecisions');scores.replaceChildren();
- if(npc.scores){
-  for(const [name,score] of Object.entries(npc.scores).sort((a,b)=>b[1]-a[1])){
-   const row=document.createElement('div');row.className='decision-row';
-   const label=document.createElement('span');label.textContent=name.replaceAll('_',' ');
-   const val=document.createElement('strong');val.textContent=(100*score).toFixed(1)+'%';
-   row.append(label,val);scores.append(row);
-  }
- }else{const msg=document.createElement('span');msg.className='empty';msg.textContent='No model decisions yet.';scores.append(msg);}
+ if(n.scores)for(const [label,val] of Object.entries(n.scores)){
+  const row=document.createElement('div');row.className='decision-row';
+  const t=document.createElement('span');t.textContent=label;
+  const v=document.createElement('strong');v.textContent=Math.round(val*100)+'%';
+  row.append(t,v);scores.append(row);
+ }
  const memories=$('npcMemories');memories.replaceChildren();
- if(!npc.memories.length){
-  const msg=document.createElement('span');msg.className='empty';msg.textContent='No memories recorded.';memories.append(msg);
- }else for(const m of npc.memories.slice(-5).reverse()){
-  const entry=document.createElement('div');entry.className='memory';entry.textContent=m.time+' — '+m.text;memories.append(entry);
+ for(const m of n.memories.slice(-7).reverse()){
+  const row=document.createElement('div');row.className='memory';
+  row.textContent=m.time+' — '+m.text;memories.append(row);
  }
- const peerArea=$('peerLog');peerArea.replaceChildren();
- if(!npc.peerLog?.length){
-  const empty=document.createElement('span');empty.className='empty';
-  empty.textContent='No completed AI conversations with other residents.';
-  peerArea.append(empty);
- }else{
-  for(const exchange of npc.peerLog.slice(-3).reverse()){
-   const entry=document.createElement('div');entry.className='memory';
-   entry.textContent=exchange.at+' · '+exchange.first+' / '+exchange.second;
-   peerArea.append(entry);
-  }
- }
+ renderChat();
 }
 function renderChat(){
- const npc=selectedNpc(),area=$('chatLog');area.replaceChildren();if(!npc)return;
- if(!npc.chat.length){
-  const el=document.createElement('div');el.className='empty';
-  el.textContent='No conversation with '+npc.name+' yet. Walk closer and introduce yourself.';area.append(el);
+ const n=selectedNpc(),area=$('chatLog');area.replaceChildren();
+ if(!n)return;
+ for(const ex of (n.peerLog||[]).slice(-8).reverse()){
+  const row=document.createElement('div');row.className='memory';
+  row.textContent=ex.at+' · '+ex.first+' / '+ex.second;area.append(row);
  }
- for(const item of npc.chat){
-  const bubble=document.createElement('div');bubble.className='chat-bubble'+(item.role==='player'?' player-msg':'');
-  const label=document.createElement('small');
-  label.textContent=item.role==='player'?'You':item.role==='system'?'System':npc.name+' · '+(item.source==='rein'?'Rein':'offline');
-  const body=document.createElement('span');body.textContent=item.content;
-  bubble.append(label,body);area.append(bubble);
+ if(!n.peerLog.length){
+  const empty=document.createElement('div');empty.className='empty';
+  empty.textContent='No witnessed conversations yet.';area.append(empty);
  }
- area.scrollTop=area.scrollHeight;
+}
+function serializePerson(n){
+ const {travel,motion,blockedFor,peerPending,peerRetryAt,...stored}=n;
+ return stored;
 }
 function save(){
  try{
-  const pack={clock:state.clock,day:state.day,
-   player:{x:state.player.x,y:state.player.y,energy:state.player.energy,
-    needs:state.player.needs,inventory:state.player.inventory,
-    skills:state.player.skills,bio:state.player.bio},
-   world:state.world,
-   npcs:state.npcs.map(n=>({
-    id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
-    source:n.source,action:n.action,scores:n.scores,facing:n.facing,
-    memories:n.memories,chat:n.chat.filter(item=>item.source!=='pending'),
-    relationships:n.relationships,path:n.path,needs:n.needs,inventory:n.inventory,
-    skills:n.skills,visited:n.visited,task:n.task,
-    plan:n.plan,peerLog:n.peerLog,lastPeerAt:n.lastPeerAt,bio:n.bio
-   }))
-  };
+  const pack={version:3,seed:state.world.seed,clock:state.clock,
+   nextPersonId:state.nextPersonId,npcs:state.npcs.map(serializePerson),
+   dead:state.dead,world:state.world,events:state.events,
+   selected:state.selected,viewZ:state.viewZ};
   localStorage.setItem(STORE,JSON.stringify(pack));
- }catch{ /* Storage disabled or quota exceeded; the live simulation continues. */ }
+ }catch{ /* No destructive reset when storage is unavailable. */ }
 }
-function validSavedPath(path, start){
- if(!Array.isArray(path)||path.length>W*H)return false;
- let previous=start;
+function validSavedPath(path,start){
+ if(!Array.isArray(path)||path.length>W*H*8)return false;
+ let prev={x:start.x,y:start.y,z:start.z||0};
  for(const tile of path){
-  if(!tile||!Number.isInteger(tile.x)||!Number.isInteger(tile.y)||
-    manhattan(previous,tile)!==1||isBlocked(tile.x,tile.y))return false;
-  previous=tile;
+  if(!tile||!Frontier.neighbors(state.world,prev).some(p=>key(p)===key(tile)))
+   return false;
+  prev=tile;
  }
  return true;
 }
 function restore(){
  try{
-  const data=JSON.parse(localStorage.getItem(STORE)||localStorage.getItem(LEGACY_STORE)||'null');if(!data)return;
-  if(Number.isFinite(data.clock)&&data.clock>=0)state.clock=data.clock;
-  if(Number.isFinite(data.day))state.day=clamp(data.day,1,9999);
-  AgentWorld.restoreWorld(state.world,data.world);
-  if(data.player&&!isBlocked(data.player.x,data.player.y)){
-   state.player.x=Math.round(data.player.x);state.player.y=Math.round(data.player.y);
+  const saved=JSON.parse(localStorage.getItem(STORE)||'null');
+  if(!saved||saved.version!==3||saved.seed!==state.world.seed||
+    !Number.isFinite(saved.clock)||saved.clock<490||
+    !Number.isInteger(saved.nextPersonId)||saved.nextPersonId<6||
+    !Array.isArray(saved.npcs)||!Array.isArray(saved.dead))return;
+  AgentWorld.restoreWorld(state.world,saved.world);
+  Frontier.restore(state.world,saved.world);
+  state.clock=saved.clock;state.world.now=saved.clock;
+  const seen=new Set();
+  state.npcs=[];
+  for(const old of saved.npcs.slice(0,5000)){
+   if(!old||typeof old.id!=='string'||!/^person_[1-9]\d*$/.test(old.id)||
+     seen.has(old.id)||!Number.isInteger(old.x)||!Number.isInteger(old.y)||
+     !Number.isInteger(old.z)||isBlocked(old.x,old.y,old.z))continue;
+   if(!Number.isFinite(old.birthAt)||!Number.isFinite(old.health)||old.health<=0)continue;
+   seen.add(old.id);
+   const n=Civilization.person(state.world,Number(old.id.slice(7)),
+    Number.isFinite(old.spawnAt)?old.spawnAt:490,old);
+   n.x=old.x;n.y=old.y;n.z=old.z;
+   n.name=String(old.name||n.name).slice(0,80);
+   n.birthAt=old.birthAt;n.health=clamp(old.health);n.alive=true;
+   for(const k of ['mood','energy','trust'])if(Number.isFinite(old[k]))n[k]=clamp(old[k]);
+   for(const k of ['goal','source','personality','facing'])
+    if(typeof old[k]==='string')n[k]=old[k].slice(0,300);
+   for(const k of Object.keys(n.needs))
+    if(Number.isFinite(old.needs?.[k]))n.needs[k]=clamp(old.needs[k]);
+   for(const k of Object.keys(n.inventory))
+    if(Number.isInteger(old.inventory?.[k])&&old.inventory[k]>=0)
+     n.inventory[k]=Math.min(old.inventory[k],1000);
+   for(const k of Object.keys(n.skills))
+    if(Number.isInteger(old.skills?.[k])&&old.skills[k]>=0)
+     n.skills[k]=Math.min(old.skills[k],100000);
+   n.bio=Biology.restore(old.bio,n.inventory.food);
+   n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
+    [...new Set(old.knowledge.recipes.filter(v=>v==='hatchet'))]:[],observations:[]};
+   if(Array.isArray(old.memories))n.memories=old.memories.slice(-24);
+   if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
+   if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
+   if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
+   if(validSavedPath(old.path,n))n.path=old.path;
+   if(AgentWorld.KEYS.includes(old.task?.key)&&
+     (old.task.ref===null||typeof old.task.ref==='string')){
+    n.task={key:old.task.key,ref:old.task.ref,
+     readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
+   }
+   n.plan=AgentWorld.validatePlan(old.plan);
+   n.action=AgentWorld.KEYS.includes(old.action)?old.action:'none';
+   n.thoughtAt=state.clock+3+state.npcs.length*2;
+   state.npcs.push(n);
   }
-  if(Number.isFinite(data.player?.energy))state.player.energy=clamp(data.player.energy);
-  for(const k of ['hunger','thirst','social','curiosity'])
-   if(Number.isFinite(data.player?.needs?.[k]))state.player.needs[k]=clamp(data.player.needs[k]);
-  for(const k of Object.keys(state.player.inventory))
-   if(Number.isInteger(data.player?.inventory?.[k])&&data.player.inventory[k]>=0)
-    state.player.inventory[k]=Math.min(1000,data.player.inventory[k]);
-  for(const k of Object.keys(state.player.skills))
-   if(Number.isInteger(data.player?.skills?.[k])&&data.player.skills[k]>=0)
-    state.player.skills[k]=Math.min(100000,data.player.skills[k]);
-  state.player.bio=Biology.restore(data.player?.bio,state.player.inventory.food);
-  Frontier.restore(state.world,data.world);
-  for(const npc of state.npcs){
-   const prev=data.npcs?.find(n=>n.id===npc.id);if(!prev)continue;
-   if(!isBlocked(prev.x,prev.y)){npc.x=prev.x;npc.y=prev.y;}
-   for(const k of ['mood','energy','trust'])if(Number.isFinite(prev[k]))npc[k]=clamp(prev[k]);
-   if(typeof prev.goal==='string')npc.goal=prev.goal.slice(0,130);
-   if(AgentWorld.KEYS.includes(prev.action))npc.action=prev.action;
-   else {npc.action='none';npc.goal='Learning about this place';}
-   if(typeof prev.source==='string')npc.source=prev.source.slice(0,40);
-   if(['up','down','left','right'].includes(prev.facing))npc.facing=prev.facing;
-   if(prev.scores&&typeof prev.scores==='object')npc.scores=prev.scores;
-   if(Array.isArray(prev.memories))npc.memories=prev.memories.slice(-16);
-   if(Array.isArray(prev.chat))npc.chat=prev.chat.filter(item=>item.source!=='pending').slice(-22);
-   if(prev.relationships&&typeof prev.relationships==='object')npc.relationships=prev.relationships;
-   if(validSavedPath(prev.path,npc))npc.path=prev.path.map(tile=>({x:tile.x,y:tile.y}));
-   for(const key of ['hunger','thirst','social','curiosity'])
-    if(Number.isFinite(prev.needs?.[key]))npc.needs[key]=clamp(prev.needs[key]);
-   for(const key of ['food','water','wood','stone','fiber','hatchet'])
-    if(Number.isInteger(prev.inventory?.[key])&&prev.inventory[key]>=0)
-     npc.inventory[key]=Math.min(prev.inventory[key],1000);
-   for(const key of Object.keys(npc.skills))
-    if(Number.isInteger(prev.skills?.[key])&&prev.skills[key]>=0)
-     npc.skills[key]=Math.min(prev.skills[key],100000);
-   npc.bio=Biology.restore(prev.bio,npc.inventory.food);
-   if(Array.isArray(prev.visited))npc.visited=prev.visited.filter(x=>typeof x==='string').slice(-32);
-   // Old job-based save files have no task. Do not resurrect their scripted routes.
-   if(prev.task&&AgentWorld.KEYS.includes(prev.task.key)&&
-       (prev.task.ref===null||typeof prev.task.ref==='string'))
-    npc.task={key:prev.task.key,ref:prev.task.ref};
-   else if(!data.world){npc.path=[];npc.action='none';}
-   npc.plan=AgentWorld.validatePlan(prev.plan);
-   if(Array.isArray(prev.peerLog))npc.peerLog=prev.peerLog
-    .filter(x=>x&&typeof x.first==='string'&&typeof x.second==='string'&&
-      typeof x.at==='string'&&typeof x.with==='string'&&
-      state.npcs.some(other=>other.id===x.with))
-    .slice(-10).map(x=>({at:x.at.slice(0,60),with:x.with,
-      first:x.first.slice(0,260),second:x.second.slice(0,260)}));
-   if(Number.isFinite(prev.lastPeerAt))npc.lastPeerAt=Math.min(state.clock,prev.lastPeerAt);
-   // A saved NPC encounter may restart, but it must earn model approval again.
-   if(npc.task?.key==='socialize')delete npc.task.approved;
-   npc.thoughtAt=state.clock+4+state.npcs.indexOf(npc)*3;
-  }
- }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
+  state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
+  const maxId=Math.max(5,...state.npcs.map(n=>Number(n.id.slice(7))),
+   ...state.dead.filter(v=>/^person_[1-9]\d*$/.test(v.id))
+    .map(v=>Number(v.id.slice(7))));
+  state.nextPersonId=Math.max(saved.nextPersonId,maxId+1);
+  state.events=Array.isArray(saved.events)?saved.events.slice(0,100):[];
+  state.selected=state.npcs.some(n=>n.id===saved.selected)
+   ?saved.selected:state.npcs[0]?.id||null;
+  if(Number.isInteger(saved.viewZ)&&saved.viewZ>=Frontier.MIN_Z&&
+   saved.viewZ<=Frontier.MAX_Z)state.viewZ=saved.viewZ;
+ }catch{ /* Damaged save is ignored; a fresh world remains available. */ }
 }
-state.world.now=state.clock;
-// Physics bodies are transient and rebuilt from the validated saved tile positions.
-ensureBody(state.player);
-for(const agent of state.npcs)ensureBody(agent);
-const heldKeys=new Set();
 function step(dt){
- if(state.paused)return;
- // Continuous keyboard steering is handled by Physics2D, not per-tile path resets.
- const elapsed=dt*state.speed;
- const beforeDay=Math.floor(state.clock/1440);
- state.clock+=elapsed;
- if(Math.floor(state.clock/1440)>beforeDay)state.day++;
- updateMovement(state.player,dt,5.2);
- state.world.now=state.clock;
+ if(state.paused||dt<=0)return;
+ const elapsed=dt*state.speed/60,before=state.clock;
+ state.clock+=elapsed;state.world.now=state.clock;
+ state.day=Math.floor(state.clock/1440)+1;
  state.world.weather=Frontier.weather(state.world,state.clock);
- AgentWorld.stepNeeds(state.player,state.world,elapsed);
- if(Frontier.reveal(state.world,state.player.x,state.player.y,8)>0)updateFog();
  AgentWorld.regenerate(state.world,elapsed);
- for(const npc of state.npcs){
-  if(!npc.peerPending)updateMovement(npc,dt,2.0);
-  const recovered=AgentWorld.stepNeeds(npc,state.world,elapsed);
-  if(recovered){
-   remember(npc,'Recovered energy after resting');
-   npc.thoughtAt=state.clock+2;
-  }
-  if(!npc.peerPending&&!state.conversationBusy){
-   if(npc.task&&!npc.path.length)completeActivity(npc);
-   else if(npc.plan&&!npc.task&&!npc.path.length)advancePlan(npc);
+ const arrivals=Civilization.advanceArrivals(state,before,state.clock);
+ for(const n of arrivals)record(n.name+' arrived in the wilderness','social');
+ for(const n of [...state.npcs]){
+  if(!n.peerPending)updateMovement(n,elapsed);
+  AgentWorld.stepNeeds(n,state.world,elapsed);
+  const death=Civilization.updateHealth(state,n,elapsed);
+  if(death){record(n.name+' died of '+death,'warning');continue;}
+  if(!n.peerPending){
+   if(n.task&&!n.path.length)completeActivity(n);
+   else if(n.plan&&!n.task&&!n.path.length)advancePlan(n);
   }
  }
- // No automatic relationship gain from simply standing nearby.
- // Characters must choose to socialize, share or help to affect each other.
+ if(!state.npcs.some(n=>n.id===state.selected)){
+  state.selected=state.npcs[0]?.id||null;renderResidents();
+ }
  if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&
-    performance.now()-state.lastDecisionMs>(state.connected?12000:3500)){
+  performance.now()-state.lastDecisionMs>(state.connected?8500:1200)){
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.peerPending&&
-    n.action!=='rest'&&state.clock>=n.thoughtAt)
-    .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
+   n.action!=='rest'&&state.clock>=n.thoughtAt)
+   .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
   if(due)void deliberate(due);
+ }
+}
+function drawMinimap(){
+ const c=$('miniMap'),m=c.getContext('2d');
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  m.fillStyle=Frontier.COLORS[Frontier.terrainAt(state.world,x,y)];
+  m.fillRect(x*2,y*2,2,2);
+ }
+ for(const n of state.npcs){
+  m.fillStyle='#f1c7ac';m.fillRect(n.x*2,n.y*2,2,2);
  }
 }
 function updateHUD(now){
  if(now<state.nextUI)return;
- state.nextUI=now+750;
+ state.nextUI=now+600;
+ const stamp=Civilization.stamp(state.clock);
  $('worldTime').textContent=timeString();
- $('worldDay').textContent='DAY '+String(state.day).padStart(2,'0');
- $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+' · '+
-   state.world.weather.temperature+'°C';
+ $('worldDay').textContent='YEAR '+stamp.year+' · MONTH '+stamp.month+' · DAY '+stamp.day;
+ $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+
+  ' · '+state.world.weather.temperature+'°C';
  $('worldSeed').textContent=String(state.world.seed);
- const p=state.player;
- $('playerStats').textContent='Hunger '+Math.round(p.needs.hunger)+
-   ' · Thirst '+Math.round(p.needs.thirst)+' · Energy '+Math.round(p.energy)+
-   ' · Food '+p.inventory.food+' · Water '+p.inventory.water+
-   ' · Wood '+p.inventory.wood+' · Stone '+p.inventory.stone+
-   ' · Fiber '+p.inventory.fiber+(p.inventory.hatchet?' · Hatchet':'')+
-   ' · Feeling: '+Biology.sensation(p.bio,p.needs);
- updatePlayerActions();drawMinimap();
- $('worldStatus').textContent=state.paused?'Simulation paused':state.conversationBusy?'Conversing with NPC…':state.backgroundBusy?'Background thinking…':'World running';
- $('footerNote').textContent=state.connected?'Model decisions are labeled Rein.':'No model connected: deterministic routines active.';
+ $('populationStats').textContent=state.npcs.length+' living · '+state.dead.length+
+  ' deaths · '+state.world.structures.length+' constructed objects · next arrivals on the 1st';
+ $('zLabel').textContent='Z '+state.viewZ;
+ $('worldStatus').textContent=state.paused?'Paused':state.backgroundBusy?
+  'Rein deliberating…':'World running';
+ $('footerNote').textContent=state.connected?
+  'One shared Rein lane · deterministic world rules':'Offline survival fallback (not AI cognition)';
  $('pauseBtn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';
- if(!state.conversationBusy)updateInspector();
+ renderResidents();updateInspector();drawMinimap();
  if(now>state.nextSave){save();state.nextSave=now+5000;}
 }
 function animate(now){
- // Cap drawing at 30 fps to leave CPU budget for inference and browser input.
- if(animate.last&&now-animate.last<33){
-  requestAnimationFrame(animate);
-  return;
- }
- const dt=Math.min(0.06,(now-(animate.last||now))/1000);
- animate.last=now;
- step(dt);drawWorld();updateHUD(now);requestAnimationFrame(animate);
+ if(animate.last&&now-animate.last<33){requestAnimationFrame(animate);return;}
+ const dt=Math.min(.06,(now-(animate.last||now))/1000);
+ animate.last=now;step(dt);drawWorld();updateHUD(now);
+ requestAnimationFrame(animate);
 }
-canvas.addEventListener('click',event=>{
- const rect=canvas.getBoundingClientRect();
- const tile=clientToTile(event.clientX,event.clientY,rect);
- const npc=state.npcs.find(n=>manhattan(position(n),tile)<=1);
- if(npc){selectNpc(npc.id);return;}
- if(!isBlocked(tile.x,tile.y)){
-  moveTo(state.player,tile);
- }else record('That tile is blocked. Click an open path to walk.','warning');
-});
+const heldKeys=new Set();
 window.addEventListener('keydown',event=>{
  const active=document.activeElement?.tagName;
  if(active==='INPUT'||active==='TEXTAREA')return;
- const key=event.key.toLowerCase();
- if(key==='+'||key==='='){event.preventDefault();setZoom(state.zoom+1);return;}
- if(key==='-'||key==='_'){event.preventDefault();setZoom(state.zoom-1);return;}
- if(key==='e'){
-  const npc=selectedNpc();if(npc&&manhattan(state.player,npc)<=4)$('messageInput').focus();
-  return;
- }
- if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)){
-  event.preventDefault();heldKeys.add(key);
- }
+ const k=event.key.toLowerCase();
+ if(['w','a','s','d','arrowleft','arrowright','arrowup','arrowdown'].includes(k)){
+  event.preventDefault();state.follow=false;heldKeys.add(k);
+ }else if(k==='+'||k==='='){event.preventDefault();setZoom(state.zoom+1);}
+ else if(k==='-'||k==='_'){event.preventDefault();setZoom(state.zoom-1);}
+ else if(k==='pageup'){event.preventDefault();setZ(state.viewZ+1);}
+ else if(k==='pagedown'){event.preventDefault();setZ(state.viewZ-1);}
+ else if(k==='f'&&selectedNpc()){state.follow=true;updateCamera(true);}
 });
-window.addEventListener('keyup',event=>heldKeys.delete(event.key.toLowerCase()));
+window.addEventListener('keyup',e=>heldKeys.delete(e.key.toLowerCase()));
 window.addEventListener('blur',()=>heldKeys.clear());
 window.addEventListener('pagehide',save);
-
-function setZoom(next){
- state.zoom=clamp(next,1,3);
- $('zoomLevel').textContent=state.zoom+'×';
- updateCamera(true);
+function pan(dt){
+ if(state.follow)return;
+ const dx=(heldKeys.has('d')||heldKeys.has('arrowright')?1:0)-
+  (heldKeys.has('a')||heldKeys.has('arrowleft')?1:0);
+ const dy=(heldKeys.has('s')||heldKeys.has('arrowdown')?1:0)-
+  (heldKeys.has('w')||heldKeys.has('arrowup')?1:0);
+ state.camera.x+=dx*220*dt/state.zoom;
+ state.camera.y+=dy*220*dt/state.zoom;
 }
+const originalStep=step;
+function frameStep(dt){pan(dt);originalStep(dt);}
+function setZoom(n){state.zoom=clamp(n,1,3);$('zoomLevel').textContent=state.zoom+'×';updateCamera(true);}
+function setZ(n){state.viewZ=clamp(n,Frontier.MIN_Z,Frontier.MAX_Z);
+ drawnLayer=null;$('zLabel').textContent='Z '+state.viewZ;}
+canvas.addEventListener('click',event=>{
+ const tile=clientToTile(event.clientX,event.clientY,canvas.getBoundingClientRect());
+ const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=1);
+ if(n)selectNpc(n.id);
+ else{state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
+  state.camera.y=tile.y*TILE-canvas.height/(2*state.zoom);}
+});
+$('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
 $('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
 $('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
+$('zUp').addEventListener('click',()=>setZ(state.viewZ+1));
+$('zDown').addEventListener('click',()=>setZ(state.viewZ-1));
+$('followBtn').addEventListener('click',()=>{state.follow=true;updateCamera(true);});
 $('physicsDebug').addEventListener('click',()=>{
- state.debugPhysics=!state.debugPhysics;
- $('physicsDebug').textContent=state.debugPhysics?'Physics: Debug on':'Physics: Debug off';
- $('physicsDebug').setAttribute('aria-pressed',String(state.debugPhysics));
+ state.debugGrid=!state.debugGrid;
+ $('physicsDebug').textContent=state.debugGrid?'Grid: On':'Grid: Off';
 });
 $('artToggle').addEventListener('click',()=>{
- if(!installedAtlas){
-  record('Optional atlas not installed; original art remains active','routine');
-  return;
- }
+ if(!installedAtlas){record('Optional CC0 atlas is not installed');return;}
  showAtlas=!showAtlas;
  VillageArt.setAtlas(showAtlas?installedAtlas:null);
- staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
  drawStaticWorld();
  $('artToggle').textContent=showAtlas?'Art: CC0 Tiny Town':'Art: Original';
 });
-$('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
-$('autoAI').addEventListener('change',event=>{state.auto=event.target.checked;record('Autonomous decisions '+(state.auto?'enabled':'disabled'));});
-for(const btn of document.querySelectorAll('[data-speed]')){
- btn.addEventListener('click',()=>{
-  state.speed=Number(btn.dataset.speed);
-  document.querySelectorAll('[data-speed]').forEach(el=>el.classList.toggle('active',el===btn));
- });
-}
+$('autoAI').addEventListener('change',e=>{state.auto=e.target.checked;});
+for(const button of document.querySelectorAll('[data-speed]'))button.addEventListener('click',()=>{
+ state.speed=Number(button.dataset.speed);
+ document.querySelectorAll('[data-speed]').forEach(el=>
+  el.classList.toggle('active',el===button));
+});
 $('clearLog').addEventListener('click',()=>{state.events=[];renderEvents();});
 $('resetBtn').addEventListener('click',()=>{
- if(!window.confirm('Reset all local NPC memory, relationships, and positions?'))return;
- localStorage.removeItem(STORE);localStorage.removeItem(LEGACY_STORE);window.location.reload();
+ if(!window.confirm('Reset this simulated world and its history?'))return;
+ localStorage.removeItem(STORE);window.location.reload();
 });
-function playerOptions(){
- return AgentWorld.available(state.player,state.world,state.npcs,
-  point=>reachableFrom(state.player,point)).filter(option=>
-   !option.target||manhattan(state.player,option.target)<=1);
-}
-function updatePlayerActions(){
- const available=new Set(playerOptions().map(option=>option.key));
- for(const button of document.querySelectorAll('[data-player-action]')){
-  const action=button.dataset.playerAction;
-  button.disabled=!available.has(action)&&action!=='rest';
- }
-}
-function playerAction(action){
- if(action==='rest'){
-  state.player.action=state.player.action==='rest'?'none':'rest';
-  record('You '+(state.player.action==='rest'?'rest to recover energy':'get back up'),'social');
-  return;
- }
- const option=playerOptions().find(o=>o.key===action);
- if(!option){record('Move closer or gather required materials first','warning');return;}
- state.player.task={key:action,ref:option.ref||null};
- const result=AgentWorld.complete(state.player,state.world,state.npcs);
- record('You: '+result.message,result.ok?'social':'warning');
- if(result.ok)save();
-}
-function drawMinimap(){
- const element=$('miniMap');
- if(!element||typeof element.getContext!=='function')return;
- const mapCtx=element.getContext('2d');if(!mapCtx)return;
- for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-  mapCtx.fillStyle=Frontier.revealed(state.world,x,y)
-   ?Frontier.COLORS[Frontier.terrainAt(state.world,x,y)]
-   :'#0a1517';
-  mapCtx.fillRect(x*2,y*2,2,2);
- }
- mapCtx.fillStyle='#ffe6a5';
- mapCtx.fillRect(state.player.x*2-1,state.player.y*2-1,4,4);
- for(const npc of state.npcs)if(Frontier.revealed(state.world,npc.x,npc.y)){
-  mapCtx.fillStyle='#e5a6b5';mapCtx.fillRect(npc.x*2,npc.y*2,2,2);
- }
-}
-for(const button of document.querySelectorAll('[data-player-action]')){
- button.addEventListener('click',()=>playerAction(button.dataset.playerAction));
-}
 $('newIsland').addEventListener('click',()=>{
- if(!window.confirm('Generate a new island? This starts a new survival world and resets current progress.'))return;
- const seed=(Math.floor(Math.random()*2147483646)+1);
- localStorage.setItem('ai-npc-cog-world-seed',String(seed));
- localStorage.removeItem(STORE);
- localStorage.removeItem(LEGACY_STORE);
- window.location.reload();
+ if(!window.confirm('Generate a new world? This discards the current local simulation.'))return;
+ localStorage.setItem('ai-npc-cog-world-seed',
+  String(Math.floor(Math.random()*2147483646)+1));
+ localStorage.removeItem(STORE);window.location.reload();
 });
-$('chatForm').addEventListener('submit',sendMessage);
-drawStaticWorld();
-loadTileset();
-restore();
-Frontier.reveal(state.world,state.player.x,state.player.y,8);
-updateFog();
-renderResidents();updateInspector();renderChat();
-record('Hearthbrook village initialized — click a resident to inspect their state.');
-checkModel();
-setInterval(checkModel,10000);
-requestAnimationFrame(animate);
+function tick(now){
+ if(tick.last&&now-tick.last<33){requestAnimationFrame(tick);return;}
+ const dt=Math.min(.06,(now-(tick.last||now))/1000);
+ tick.last=now;frameStep(dt);drawWorld();updateHUD(now);requestAnimationFrame(tick);
+}
+drawStaticWorld();restore();loadTileset();
+state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
+for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
+renderResidents();updateInspector();renderChat();renderEvents();updateCamera(true);
+record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
+checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
