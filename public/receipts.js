@@ -77,7 +77,8 @@
  }
  function execute(state,n,task,apply){
   if(typeof apply!=='function')throw Error('World effect callback is required');
-  if(!task?.commandId)throw Error('Authoritative operation requires command ID');
+  if(!task)throw Error('Authoritative operation requires a task');
+  if(!task.commandId)task.commandId='cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   const previous=committed(state,task.commandId);
   if(previous)return {ok:false,message:'Duplicate command; already resolved',
    duplicate:true,receipt:previous};
