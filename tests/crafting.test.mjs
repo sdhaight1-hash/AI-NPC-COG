@@ -70,7 +70,7 @@ test('stone knapping, cord and hafting form a nonduplicating dependency chain',(
 });
 test('workbench is a physical prerequisite for producing planks and crates',()=>{
  const {world,npc,C}=setup();
- npc.inventory.wood=9;npc.inventory.stone=1;npc.inventory.fiber=6;
+ npc.inventory.wood=6;npc.inventory.stone=1;npc.inventory.fiber=6; // Fits the actual carried bulk limit.
  assert.equal(C.begin(npc,world,'cord').ok,true);finishRemaining(C,npc,world);
  assert.equal(C.begin(npc,world,'cord').ok,true);finishRemaining(C,npc,world);
  assert.equal(C.begin(npc,world,'workbench').ok,true);finishRemaining(C,npc,world);
@@ -78,11 +78,11 @@ test('workbench is a physical prerequisite for producing planks and crates',()=>
  assert.ok(bench);
  assert.equal(bench.x,npc.x);
  assert.equal(bench.y,npc.y);
- assert.equal(npc.inventory.wood,6);
+ assert.equal(npc.inventory.wood,3);
  npc.inventory.hatchet=1; // legitimate legacy tool
  assert.equal(C.options(npc,world).some(o=>o.key==='craft_planks'),true);
  assert.equal(C.begin(npc,world,'planks',bench.id).ok,true);
- assert.equal(npc.inventory.wood,4);
+ assert.equal(npc.inventory.wood,1);
  finishRemaining(C,npc,world);
  assert.equal(npc.inventory.plank,3);
  assert.equal(C.begin(npc,world,'crate',bench.id).ok,true);
