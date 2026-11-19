@@ -64,12 +64,13 @@
   return !!last&&predicate(n,world,last);
  }
  function choose(n,world,project,available){
-  if(!project||project.status!=='ACTIVE')return {status:'blocked',reason:'PROJECT_INACTIVE'};
+  if(!project)return {status:'blocked',reason:'PROJECT_INACTIVE'};
   if(goalMet(n,world,project)){
    for(const node of project.nodes)node.state='COMPLETE';
    project.status='COMPLETE';project.blockedReason=null;
    return {status:'done'};
   }
+  if(project.status!=='ACTIVE')return {status:'blocked',reason:'PROJECT_INACTIVE'};
   for(const node of project.nodes){
    if(predicate(n,world,node)){
     node.state='COMPLETE';node.blockedReason=null;
