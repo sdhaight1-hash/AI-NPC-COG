@@ -248,7 +248,8 @@ async function deliberate(n){
    });
    activity(n).decisions++;
    WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
-    data.source==='hivemind'?'hivemind':'rein');
+    data.source==='hivemind'?'hivemind':'rein',
+    'DECIDED',null,data.durationMs);
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
       options.some(o=>o.key===data.action)){
     const selected=setAction(n,data.action,
