@@ -87,7 +87,27 @@
   }
   return v;
  }
- function snapshot(state,n,events=[]){
+ function verifiedSounds(state){
+  const source=state.receipts||[];
+  return source.filter(r=>r.status==='COMPLETED'&&
+   Number.isFinite(r.clock)&&state.clock-r.clock>=0&&
+   state.clock-r.clock<=2).slice(-32).flatMap(r=>{
+    const actor=state.npcs.find(n=>n.id===r.actorId);
+    if(!actor)return [];
+    const action=String(r.action||'');
+    let kind=null,loudness='quiet';
+    if(action==='socialize'||action==='share_food')kind='speech';
+    else if(action==='drop_wood'){kind='impact';loudness='loud';}
+    else if(action.startsWith('build_')||action.startsWith('craft_')||
+     action==='place_crate'){kind='construction';loudness='loud';}
+    else if(action.startsWith('collect_')||action==='forage'||
+     action==='explore')kind='footsteps';
+    if(!kind)return [];
+    return [{kind,loudness,x:actor.x,y:actor.y,z:actor.z||0,
+     actorId:actor.id}];
+   });
+ }
+ function snapshot(state,n,events=null){
   const world=state.world,range=visionRange(state,n);
   const people=state.npcs.filter(p=>p!==n&&canSee(state,n,p))
    .map(p=>({sense:'vision',kind:'resident',id:p.id,name:p.name,
@@ -98,7 +118,8 @@
    .map(o=>({sense:'vision',id:o.id,kind:String(o.kind||o.type||'object'),
     x:o.x,y:o.y,z:o.z||0,at:state.clock}))
    .sort((a,b)=>a.id.localeCompare(b.id));
-  const heard=events.map(e=>sound(state,n,e)).filter(Boolean);
+  const heard=(Array.isArray(events)?events:verifiedSounds(state))
+   .map(e=>sound(state,n,e)).filter(Boolean);
   const bodily={hunger:Math.round(n.needs?.hunger||0),
    thirst:Math.round(n.needs?.thirst||0),
    energy:Math.round(n.energy||0)};
