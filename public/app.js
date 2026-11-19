@@ -71,11 +71,13 @@ function position(n){
 }
 function updateMovement(n,elapsed){return WorldRuntime.move(state,n,elapsed);}
 function sceneFor(n){
- const others=state.npcs.filter(p=>p!==n&&dist(n,p)<=8)
-  .map(p=>p.name+' '+dist(n,p)+' tiles away').join(', ')||'Nobody nearby';
- const nearby=state.world.nodes.filter(v=>v.stock>0&&dist(n,v)<=7)
-  .sort((a,b)=>dist(n,a)-dist(n,b)).slice(0,8)
-  .map(v=>v.kind+' at '+v.x+','+v.y+' ('+v.stock+' units)').join('; ')||'None observed';
+ const sensed=Perception.snapshot(state,n);
+ const others=sensed.people.map(p=>p.name+' at '+p.x+','+p.y+
+  ' ('+p.activity+')').join(', ')||'Nobody visible';
+ // Vision identifies silhouettes and locations, not exact unseen resource stocks.
+ // Only inspection or touch may reveal a precise container/deposit quantity.
+ const nearby=sensed.objects.slice(0,8).map(o=>o.kind+
+  ' at '+o.x+','+o.y).join('; ')||'None visible';
  const sensations=Biology.sensation(n.bio,n.needs);
  const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
  const a=Agency.state(n),motives=Agency.drives(n);
@@ -104,7 +106,7 @@ function sceneFor(n){
   '. Finished goods: '+(n.craftedItems||[]).slice(-5).map(p=>
    p.kind+' quality '+p.quality+'/5').join(', ')+'. Personally inspected: '+
   (n.knowledge?.observations||[]).slice(-4).map(o=>o.text).join('; ')+
-  '. Near people: '+others+
+  '. Visible people: '+others+
   '. Perceived resources: '+nearby+
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
