@@ -334,7 +334,10 @@
     if(n.needs.hunger>55&&keys.has('eat'))return 'eat';
     if(n.needs.hunger>50&&keys.has('forage'))return 'forage';
     if(n.energy<30&&keys.has('rest'))return 'rest';
-    // Offline is deterministic survival simulation, not an imitation of Rein cognition.
+    // Simple survival stockpiles are mechanical routines, not invented
+    // relationships, inventions, or claims of AI deliberation.
+    if(n.inventory.water<2&&keys.has('fill_water'))return 'fill_water';
+    if(n.inventory.food<2&&keys.has('forage'))return 'forage';
     return keys.has('explore')?'explore':'none';
   }
   function restoreWorld(target,saved) {

@@ -187,6 +187,40 @@ function backgroundOptions(n){
  return result.map(({key,when})=>({key,when}));
 }
 function fallbackBackground(n){return AgentWorld.fallback(n,backgroundOptions(n));}
+// Physiological responses continue while inference is busy. They still consume
+// simulation time and inventory through the ordinary action executor.
+function survivalReflex(n){
+ if(n.task||n.plan||n.path.length||n.peerPending||n.action==='rest')return false;
+ const options=availableActivities(n);
+ const has=key=>options.some(o=>o.key===key);
+ let action=null;
+ if(n.needs.thirst>=75){
+  if(n.inventory.water>0&&has('drink'))action='drink';
+  else if(has('fill_water'))action='fill_water';
+ }else if(n.needs.hunger>=80){
+  if(n.inventory.food>0&&has('eat'))action='eat';
+  else if(has('forage'))action='forage';
+ }else if(n.energy<18&&has('rest'))action='rest';
+ return action?setAction(n,action,'survival reflex'):false;
+}
+function scheduleIdleAgents(){
+ if(!state.auto||state.conversationBusy||state.paused)return;
+ // Survival is a mechanical reaction, not a fictitious model decision.
+ for(const n of state.npcs)survivalReflex(n);
+ const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&
+  n.action!=='rest'&&state.clock>=n.thoughtAt)
+  .sort((a,b)=>a.thoughtAt-b.thoughtAt);
+ if(!state.connected){
+  // Offline world rules need no serialized model inference lane.
+  for(const n of due){
+   const success=setAction(n,fallbackBackground(n),'offline routine');
+   n.thoughtAt=state.clock+(success?18:3);
+  }
+ }else if(!state.backgroundBusy&&due.length&&
+  performance.now()-state.lastDecisionMs>=1500){
+  void deliberate(due[0]);
+ }
+}
 function finishPlan(n,reason,type='social'){
  if(!n.plan)return;
  remember(n,'Plan '+n.plan.key+': '+reason);record(n.name+': '+reason,type);
@@ -615,13 +649,7 @@ function step(dt){
  if(!state.npcs.some(n=>n.id===state.selected)){
   state.selected=state.npcs[0]?.id||null;renderResidents();
  }
- if(state.auto&&!state.backgroundBusy&&!state.conversationBusy&&
-  performance.now()-state.lastDecisionMs>(state.connected?8500:1200)){
-  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.peerPending&&
-   n.action!=='rest'&&state.clock>=n.thoughtAt)
-   .sort((a,b)=>a.thoughtAt-b.thoughtAt)[0];
-  if(due)void deliberate(due);
- }
+ scheduleIdleAgents();
 }
 function drawMinimap(){
  const c=$('miniMap'),m=c.getContext('2d');
