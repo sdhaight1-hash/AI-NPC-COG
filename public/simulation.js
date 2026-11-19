@@ -10,6 +10,11 @@
   const {Frontier,AgentWorld,Civilization}=root;
   if(!Frontier||!AgentWorld||!Civilization)
    throw Error('Simulation kernels unavailable');
+  const runtime=root.WorldRuntime;
+  const move=ports.move||(runtime&&((n,dt)=>runtime.move(state,n,dt)));
+  const complete=ports.complete||(runtime&&(n=>runtime.complete(state,n)));
+  const plan=ports.advancePlan||(runtime&&(n=>runtime.advancePlan(state,n)));
+  const schedule=ports.schedule||(runtime&&(()=>runtime.scheduleOffline(state)));
   const before=state.clock;
   state.clock+=elapsed;state.world.now=state.clock;
   state.day=Math.floor(state.clock/1440)+1;
@@ -21,18 +26,18 @@
   for(const n of [...state.npcs]){
    if(n.peerReservedFor&&!state.npcs.some(peer=>peer.id===n.peerReservedFor&&
     peer.task?.key==='socialize'&&peer.task.ref===n.id))delete n.peerReservedFor;
-   if(!n.peerPending&&!n.peerReservedFor)ports.move?.(n,elapsed);
+   if(!n.peerPending&&!n.peerReservedFor)move?.(n,elapsed);
    const recovered=AgentWorld.stepNeeds(n,state.world,elapsed);
    if(recovered==='Recovered')ports.onRecovery?.(n);
    const death=Civilization.updateHealth(state,n,elapsed);
    if(death){deaths.push({id:n.id,cause:death});ports.onDeath?.(n,death);continue;}
    if(!n.peerPending){
-    if(n.task&&!n.path.length)ports.complete?.(n);
-    else if(n.plan&&!n.task&&!n.path.length)ports.advancePlan?.(n);
+    if(n.task&&!n.path.length)complete?.(n);
+    else if(n.plan&&!n.task&&!n.path.length)plan?.(n);
    }
   }
   ports.afterActors?.(state);
-  ports.schedule?.(state);
+  schedule?.(state);
   return {advanced:true,arrivals:arrivals.map(n=>n.id),deaths};
  }
  function initial(seed){
