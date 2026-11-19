@@ -82,8 +82,11 @@
   if(action==='inspect'&&entry.certainty==='observed'){
    const kind=entry.text.match(/^Inspected (food|water|wood|stone|fiber) /)?.[1];
    for(const claim of m.claims){
-    if(claim.sourceId===receipt.targetId&&claim.status==='unverified'){
-     claim.status=kind===claim.kind?'supported':'contradicted';
+    if(claim.sourceId===receipt.targetId&&
+     ['unverified','stale'].includes(claim.status)){
+     const node=sim.world.nodes.find(x=>x.id===receipt.targetId);
+     claim.status=kind!==claim.kind?'contradicted':
+      node&&node.stock===0?'stale':'supported';
      claim.verificationReceiptId=receipt.id;
     }
    }
@@ -102,6 +105,29 @@
    m.social=m.social.slice(-80);
   }
   return entry;
+ }
+ // A failed command is evidence of depletion only if the actor actually
+ // reached the same finite source. A route failure proves nothing about stock.
+ function fromFailedReceipt(sim,n,receipt){
+  const kinds={forage:'food',fill_water:'water',collect_wood:'wood',
+   collect_stone:'stone',collect_fiber:'fiber'};
+  if(!receipt||receipt.status!=='FAILED'||receipt.actorId!==n.id||
+   !kinds[receipt.action]||!sim.receipts?.some(r=>
+    r.id===receipt.id&&r.actorId===n.id&&r.commandId===receipt.commandId&&
+    r.status==='FAILED'&&r.action===receipt.action&&
+    r.targetId===receipt.targetId))return 0;
+  const node=sim.world.nodes.find(x=>x.id===receipt.targetId&&
+   x.kind===kinds[receipt.action]);
+  if(!node||node.stock!==0||
+   root.Frontier.distance(sim.world,n,node)>1)return 0;
+  let count=0;
+  for(const claim of state(n).claims){
+   if(claim.status!=='unverified'||claim.sourceId!==node.id||
+    claim.kind!==node.kind)continue;
+   claim.status='stale';claim.failureReceiptId=receipt.id;
+   count++;
+  }
+  return count;
  }
  // A committed conversation proves only that words were exchanged in person.
  // Its contents remain reported claims, never witnessed world facts.
@@ -253,7 +279,7 @@
     .filter(c=>{
      if(!c||typeof c.sourceId!=='string'||typeof c.speakerId!=='string'||
       !['food','water','wood','stone','fiber'].includes(c.kind)||
-      !['unverified','supported','contradicted'].includes(c.status)||
+      !['unverified','supported','contradicted','stale'].includes(c.status)||
       !Number.isFinite(c.at)||c.at>clock||c.at<0||
       !Number.isInteger(c.x)||!Number.isInteger(c.y)||!Number.isInteger(c.z))return false;
      const speech=result.episodes.find(e=>e.id===c.speechEpisodeId&&
@@ -267,7 +293,9 @@
      at:c.at,sourceEpisodeId:String(c.sourceEpisodeId||'').slice(0,80),
      speechEpisodeId:c.speechEpisodeId,speechReceiptId:c.speechReceiptId,
      status:c.status,verificationReceiptId:
-      typeof c.verificationReceiptId==='string'?c.verificationReceiptId:null
+      typeof c.verificationReceiptId==='string'?c.verificationReceiptId:null,
+     ...(typeof c.failureReceiptId==='string'?
+      {failureReceiptId:c.failureReceiptId.slice(0,100)}:{})
     }));
    result.summaries=(Array.isArray(saved.summaries)?saved.summaries:[])
     .filter(s=>s&&typeof s.id==='string'&&typeof s.text==='string'&&
@@ -331,6 +359,6 @@
    remainingMinutes:n.currentActivity?
     Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
  }
- root.EvidenceMemory={state,record,fromReceipt,fromDialogue,recall,consolidate,restore,working,belief,
+ root.EvidenceMemory={state,record,fromReceipt,fromFailedReceipt,fromDialogue,recall,consolidate,restore,working,belief,
   MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES,MAX_CLAIMS};
 })(globalThis);
