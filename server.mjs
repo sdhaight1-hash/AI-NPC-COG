@@ -6,6 +6,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 5173);
 const MODEL_URL = new URL(process.env.REIN_URL || 'http://127.0.0.1:8080');
+const MODEL_BACKEND = process.env.MODEL_BACKEND || 'rein';
+if (!['rein', 'hivemind'].includes(MODEL_BACKEND)) {
+  throw new Error('MODEL_BACKEND must be rein or hivemind');
+}
+const MODEL_LABELS = { rein: 'Rein-NPC-4B', hivemind: 'Qwen3-4B Hivemind Heretic' };
 if (!['127.0.0.1', 'localhost', '[::1]'].includes(MODEL_URL.hostname)) {
   throw new Error('REIN_URL must point to a local model server');
 }
@@ -18,8 +23,7 @@ export function safeText(value, limit = 2000) {
     token.replace('<', '‹').replace('>', '›'));
 }
 
-export function buildDecisionPrompt(input) {
-  const options = input.options;
+export function validateOptions(options) {
   if (!Array.isArray(options) || options.length < 2 || options.length > 10) {
     throw new Error('Provide 2 to 10 action options');
   }
@@ -30,6 +34,11 @@ export function buildDecisionPrompt(input) {
     }
     ids.add(o.key);
   }
+  return options;
+}
+
+export function buildDecisionPrompt(input) {
+  const options = validateOptions(input.options);
   const history = Array.isArray(input.history) ? input.history.slice(-8) : [];
   const turns = history.filter(turn => ['user', 'assistant'].includes(turn.role))
     .map(turn => '<|im_start|>' + turn.role + '\n' + safeText(turn.content, 600) + '<|im_end|>')
@@ -127,12 +136,56 @@ async function callModel(endpoint, body, signal, timeoutMs = 45000) {
   return response.json();
 }
 
+// Other models lack Rein's trained tokens. Their action must match a legal key.
+export function parseHivemindAction(content, options) {
+  validateOptions(options);
+  const text = String(content ?? '').trim();
+  let action = text.replace(/^["']|["']$/g, '');
+  if (text.startsWith('{')) {
+    let parsed;
+    try { parsed = JSON.parse(text); } catch { throw new Error('Invalid Hivemind action JSON'); }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        typeof parsed.action !== 'string' || Object.keys(parsed).length !== 1)
+      throw new Error('Invalid Hivemind action payload');
+    action = parsed.action;
+  }
+  if (!options.some(o => o.key === action))
+    throw new Error('Hivemind returned an invalid action');
+  return { action, confidence: null, scores: null };
+}
+
 export async function decide(input, signal) {
-  const prompt = buildDecisionPrompt(input);
-  const raw = await callModel('/completion', {
-    prompt, n_predict: 1, n_probs: 60, temperature: 0, cache_prompt: true
+  const options = validateOptions(input.options);
+  if (MODEL_BACKEND === 'rein') {
+    const prompt = buildDecisionPrompt(input);
+    const raw = await callModel('/completion', {
+      prompt, n_predict: 1, n_probs: 60, temperature: 0, cache_prompt: true
+    }, signal, 24000);
+    return { ...scoreLetters(raw, options), source: 'rein' };
+  }
+  const history = Array.isArray(input.history) ? input.history.slice(-8) : [];
+  const messages = [{
+    role: 'system',
+    content: 'You are an autonomous NPC choosing an intention in a simulation. ' +
+      'Use the persona and observed scene. Reply with ONLY the exact key of one ' +
+      'available action. No commentary, explanation or invented action.\nPersona: ' +
+      safeText(input.persona, 1500)
+  }, {
+    role: 'user',
+    content: 'Scene: ' + safeText(input.scene, 1800) +
+      '\nConversation:\n' + history.filter(t => t && ['user','assistant'].includes(t.role))
+        .map(t => t.role + ': ' + safeText(t.content, 400)).join('\n') +
+      '\nQuestion: ' + safeText(input.question, 300) +
+      '\nAvailable actions:\n' +
+      options.map(o => o.key + ': ' + safeText(o.when, 200)).join('\n') +
+      '\nReply with the exact action key only.'
+  }];
+  const raw = await callModel('/v1/chat/completions', {
+    messages, chat_template_kwargs: { enable_thinking: false },
+    temperature: 0, max_tokens: 32
   }, signal, 24000);
-  return { ...scoreLetters(raw, input.options), source: 'rein' };
+  return { ...parseHivemindAction(raw?.choices?.[0]?.message?.content, options),
+    source: 'hivemind' };
 }
 
 export async function speak(input, signal) {
@@ -152,17 +205,19 @@ export async function speak(input, signal) {
     }
   }
   messages.push({ role: 'user', content: safeText(input.message, 700) });
-  const raw = await callModel('/v1/chat/completions', {
+  const payload = {
     messages, chat_template_kwargs: { enable_thinking: false },
-    temperature: 0.75, top_p: 0.85, max_tokens: input.short ? 56 : 120,
-    logit_bias: { '248058': -100 }
-  }, signal, 60000);
+    temperature: 0.75, top_p: 0.85, max_tokens: input.short ? 56 : 120
+  };
+  // Rein's biased token ID is not portable to other model vocabularies.
+  if (MODEL_BACKEND === 'rein') payload.logit_bias = { '248058': -100 };
+  const raw = await callModel('/v1/chat/completions', payload, signal, 60000);
   const reply = raw?.choices?.[0]?.message;
   if (reply?.tool_calls?.length) throw new Error('Unexpected tool call; no world action executed');
   const line = String(reply?.content ?? '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<\|[^>]+?\|>/g, '').trim().slice(0, 800);
   if (!line) throw new Error('Model did not return dialogue');
-  return { reply: line, source: 'rein' };
+  return { reply: line, source: MODEL_BACKEND };
 }
 
 // A two-turn NPC-to-NPC exchange is one disposable background job. Both
@@ -186,7 +241,7 @@ export async function peerExchange(input, signal) {
     message:safeText(a.name,60)+' has just said: '+first.reply+
       '\nReply naturally as yourself, in one sentence. Do not invent world actions.'
   },signal);
-  return {first:first.reply,second:second.reply,source:'rein'};
+  return {first:first.reply,second:second.reply,source:MODEL_BACKEND};
 }
 
 const STATIC = {
@@ -227,7 +282,8 @@ export function startServer(port = PORT) {
         } catch { /* Busy inference may delay /health; preserve recently confirmed status. */ }
         return json(res, 200, {
           connected: Date.now() - lastHealthyAt < 90000,
-          endpoint: MODEL_URL.origin, inference: lane.stats()
+          endpoint: MODEL_URL.origin, model: MODEL_BACKEND,
+          modelLabel: MODEL_LABELS[MODEL_BACKEND], inference: lane.stats()
         });
       }
       if (req.method === 'POST' && (route === '/api/decide' || route === '/api/speak' || route === '/api/interact' || route === '/api/peer-exchange')) {
@@ -267,7 +323,7 @@ export function startServer(port = PORT) {
   });
   server.listen(port, '127.0.0.1', () => {
     console.log('AI-NPC-COG: http://127.0.0.1:' + port);
-    console.log('Rein model endpoint: ' + MODEL_URL.origin);
+    console.log(MODEL_LABELS[MODEL_BACKEND] + ' endpoint: ' + MODEL_URL.origin);
   });
   return server;
 }

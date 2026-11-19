@@ -4,7 +4,13 @@ cd /d "%~dp0"
 title AI-NPC-COG - Launcher
 set "ROOT=%~dp0"
 set "LLAMA=%ROOT%_runtime\llama\llama-server.exe"
-set "MODEL=%ROOT%Model\Rein-NPC-4B-Q4_K_M.gguf"
+if /I "%MODEL_BACKEND%"=="hivemind" (
+    set "MODEL=%ROOT%Model\Qwen3-4B-Hivemind-Inst-Hrtic-Ablit-Uncensored-Q4_K_M-imat.gguf"
+    set "MODEL_BACKEND=hivemind"
+) else (
+    set "MODEL=%ROOT%Model\Rein-NPC-4B-Q4_K_M.gguf"
+    set "MODEL_BACKEND=rein"
+)
 set "NODE="
 
 if not exist "%LLAMA%" goto missing_server
@@ -27,7 +33,7 @@ if not exist "%ROOT%public\assets\kenney-tiny-town.png" if not exist "%ROOT%_run
 )
 
 echo.
-echo Starting Rein-NPC-4B from:
+echo Starting %MODEL_BACKEND% model from:
 echo   "%MODEL%"
 echo.
 echo Model server: http://127.0.0.1:8080
@@ -37,7 +43,7 @@ echo Two console windows will open. Keep both open.
 echo To stop the simulation, close both windows.
 echo.
 
-start "AI-NPC-COG - Rein model" /D "%ROOT%_runtime\llama" "%LLAMA%" -m "%MODEL%" --host 127.0.0.1 --port 8080 -ngl 99 -c 4096 --parallel 1
+start "AI-NPC-COG - %MODEL_BACKEND% model" /D "%ROOT%_runtime\llama" "%LLAMA%" -m "%MODEL%" --host 127.0.0.1 --port 8080 -ngl 99 -c 4096 --parallel 1
 start "AI-NPC-COG - Village web server" /D "%ROOT%" "%NODE%" "%ROOT%server.mjs"
 timeout /t 3 /nobreak >nul
 start "" "http://127.0.0.1:5173"
@@ -49,7 +55,7 @@ goto failed
 :missing_model
 echo Could not find your model file:
 echo   "%MODEL%"
-echo Put Rein-NPC-4B-Q4_K_M.gguf in the project's Model folder.
+echo Place the selected GGUF in the project's Model folder.
 goto failed
 :missing_node
 echo Node.js is not installed. Double-click install.bat first.

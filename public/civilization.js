@@ -3,7 +3,7 @@
 (function(root){
 'use strict';
 const EPOCH=Date.UTC(2000,0,1);
-const YEAR_MINUTES=365.2425*1440;
+const YEAR_MINUTES=root.Frontier.DAYS_PER_YEAR*1440;
 const GIVEN=['Asha','Mara','Jonas','Rowan','Lina','Nico','Iris','Edda','Tarin','Mina',
  'Kiran','Sel','Orin','Nara','Luca','Vera','Emil','Iona','Pia','Dara'];
 const FAMILY=['Vale','Fern','Moss','Stone','Reed','Ash','River','Briar','Hale','Wren',
@@ -103,19 +103,13 @@ function addArrival(state,atClock){
 function advanceArrivals(state,before,after){
  if(after<=before)return [];
  const newcomers=[];
- const start=dateAt(before),finish=dateAt(after);
- let year=start.getUTCFullYear(),month=start.getUTCMonth()+1;
- if(month===12){year++;month=0;}
- // Each first-of-month boundary is processed once, even when a timestep skips days.
- for(let i=0;i<2400;i++){
-  const boundary=(Date.UTC(year,month,1)-EPOCH)/60000;
-  if(boundary>after)break;
-  if(boundary>before){
-   const arrival=addArrival(state,boundary);
-   if(arrival)newcomers.push(arrival);
-  }
-  month++;
-  if(month===12){month=0;year++;}
+ const monthMinutes=root.Frontier.DAYS_PER_MONTH*1440;
+ // Each elapsed compact-month boundary creates one independent arrival.
+ const first=Math.floor(before/monthMinutes)+1;
+ const last=Math.floor(after/monthMinutes);
+ for(let month=first;month<=last&&month<2400;month++){
+  const arrival=addArrival(state,month*monthMinutes);
+  if(arrival)newcomers.push(arrival);
  }
  return newcomers;
 }
@@ -146,9 +140,9 @@ function updateHealth(state,npc,elapsed){
  return null;
 }
 function stamp(clock){
- const d=dateAt(clock);
- return {year:d.getUTCFullYear()-1999,month:d.getUTCMonth()+1,day:d.getUTCDate(),
-  hour:d.getUTCHours(),minute:d.getUTCMinutes()};
+ const d=root.Frontier.calendar(clock),minutes=((Math.floor(clock)%1440)+1440)%1440;
+ return {year:d.year,month:d.month,day:d.dayOfMonth,season:d.season,
+  dayOfYear:d.dayOfYear,hour:Math.floor(minutes/60),minute:minutes%60};
 }
 root.Civilization={founders,person,addArrival,advanceArrivals,die,updateHealth,
  spawnPosition,stamp,dateAt,age,YEAR_MINUTES};

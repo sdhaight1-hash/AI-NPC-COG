@@ -8,6 +8,7 @@ const world=AgentWorld.newWorld(WORLD_SEED);
 const founders=Civilization.founders(world,490);
 const state={clock:490,speed:60,day:1,paused:false,auto:true,connected:false,
  backgroundBusy:false,conversationBusy:false,debugGrid:false,
+ model:'rein',modelLabel:'Rein-NPC-4B',
  npcs:founders,dead:[],nextPersonId:6,world,events:[],selected:founders[0].id,
  zoom:1,viewZ:0,follow:true,camera:{x:0,y:0},nextUI:0,nextSave:0,lastDecisionMs:0};
 const $=id=>document.getElementById(id);
@@ -149,7 +150,7 @@ function sceneFor(n){
  const sensations=Biology.sensation(n.bio,n.needs);
  const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
  const memories=n.memories.slice(-4).map(m=>m.text).join('; ')||'None';
- return 'Year '+Civilization.stamp(state.clock).year+', '+timeString()+
+ return 'Year '+Civilization.stamp(state.clock).year+', '+Civilization.stamp(state.clock).season+', '+timeString()+
   '. Untamed procedural wilderness; no predefined community or government. '+
   n.name+' at ('+n.x+','+n.y+','+(n.z||0)+'). Personality: '+n.personality+
   '. Age '+Math.floor(Civilization.age(n,state.clock))+
@@ -218,8 +219,8 @@ function setAction(n,action,source='rein',scores=null){
   n.goal=action.replaceAll('_',' ')+' (self-chosen)';
  }
  record(n.name+' chose '+action.replaceAll('_',' ')+' ['+source+']',
-  source==='rein'?'ai':'routine');
- if(source==='rein')remember(n,'Chose '+action+' from perceived options');
+  ['rein','hivemind'].includes(source)?'ai':'routine');
+ if(['rein','hivemind'].includes(source))remember(n,'Chose '+action+' from perceived options');
  return true;
 }
 function completeActivity(n){
@@ -269,10 +270,16 @@ async function jsonPost(route,body){
 async function checkModel(){
  try{
   const response=await fetch('/api/health',{cache:'no-store'});
-  state.connected=!!(await response.json()).connected;
+  const health=await response.json();
+   state.connected=!!health.connected;
+   state.model=health.model==='hivemind'?'hivemind':'rein';
+   state.modelLabel=typeof health.modelLabel==='string'?health.modelLabel:'Rein-NPC-4B';
  }catch{state.connected=false;}
  const tag=$('modelStatus');tag.className='chip '+(state.connected?'online':'offline');
- tag.innerHTML='<i class="status-dot"></i> '+(state.connected?'Rein connected':'Offline · basic survival routines');
+ tag.replaceChildren();
+  const dot=document.createElement('i');dot.className='status-dot';
+  tag.append(dot,document.createTextNode(' '+(state.connected?state.modelLabel+' connected':'Offline · basic survival routines')));
+  $('modelName').textContent=state.modelLabel;
 }
 async function deliberate(n){
  if(!state.npcs.includes(n))return;
@@ -286,11 +293,11 @@ async function deliberate(n){
    });
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
       options.some(o=>o.key===data.action))
-    setAction(n,data.action,'rein',data.scores);
+    setAction(n,data.action,data.source==='hivemind'?'hivemind':'rein',data.scores);
   }else if(!state.paused)setAction(n,fallbackBackground(n),'offline routine');
  }catch(e){
   if(e.status!==429){
-   record(n.name+': Rein error '+e.message,'warning');
+   record(n.name+': '+state.modelLabel+' error '+e.message,'warning');
    if(!state.paused&&state.npcs.includes(n))
     setAction(n,fallbackBackground(n),'offline routine');
    void checkModel();
@@ -469,7 +476,7 @@ function updateInspector(){
  $('knowledgeVal').textContent=(n.knowledge?.recipes||[]).join(', ')||'No learned recipes';
  $('npcGoal').textContent=n.goal;
  $('npcPlan').textContent=n.plan?n.plan.key+' ('+n.plan.steps+' steps)':'No active plan';
- $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source||'Simulation';
+ $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source==='hivemind'?'Hivemind':n.source||'Simulation';
  const scores=$('npcDecisions');scores.replaceChildren();
  if(n.scores)for(const [label,val] of Object.entries(n.scores)){
   const row=document.createElement('div');row.className='decision-row';
@@ -631,7 +638,7 @@ function updateHUD(now){
  state.nextUI=now+600;
  const stamp=Civilization.stamp(state.clock);
  $('worldTime').textContent=timeString();
- $('worldDay').textContent='YEAR '+stamp.year+' · MONTH '+stamp.month+' · DAY '+stamp.day;
+ $('worldDay').textContent=stamp.season.toUpperCase()+' · YEAR '+stamp.year+' · MONTH '+stamp.month+' · DAY '+stamp.day;
  $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+
   ' · '+state.world.weather.temperature+'°C';
  $('worldSeed').textContent=String(state.world.seed);
@@ -639,9 +646,9 @@ function updateHUD(now){
   ' deaths · '+state.world.structures.length+' constructed objects · next arrivals on the 1st';
  $('zLabel').textContent='Z '+state.viewZ;
  $('worldStatus').textContent=state.paused?'Paused':state.backgroundBusy?
-  'Rein deliberating…':'World running';
+  state.modelLabel+' deliberating…':'World running';
  $('footerNote').textContent=state.connected?
-  'One shared Rein lane · deterministic world rules':'Offline survival fallback (not AI cognition)';
+  'One shared '+state.modelLabel+' lane · deterministic world rules':'Offline survival fallback (not AI cognition)';
  $('pauseBtn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';
  renderResidents();updateInspector();drawMinimap();
  if(now>state.nextSave){save();state.nextSave=now+5000;}
