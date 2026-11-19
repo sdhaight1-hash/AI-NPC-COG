@@ -86,6 +86,9 @@ function sceneFor(n){
  const memoryQuery=(a.goal?.key||n.goal)+' '+sensations+' '+nearby+' '+n.action;
  const memories=Cognition.recall(n,memoryQuery,state.clock,4)
   .map(m=>m.kind+': '+m.text).join('; ')||'No relevant personal recollections';
+ const evidenced=EvidenceMemory.recall(n,memoryQuery,state.clock,3)
+  .map(m=>m.certainty+' '+m.type+': '+m.text+
+   (m.receiptId?' [verified '+m.receiptId+']':'')).join('; ')||'No source-backed experiences';
  const beliefs=a.beliefs.slice(-4).map(b=>b.kind+' at '+b.x+','+b.y+
   ' ('+b.status+', last personally witnessed '+Math.floor(b.at)+')').join('; ')||'None';
  return 'Year '+Civilization.stamp(state.clock).year+', '+Civilization.stamp(state.clock).season+', '+timeString()+
@@ -98,6 +101,7 @@ function sceneFor(n){
   '. Personal drives: '+Object.entries(motives).map(([k,v])=>k+' '+Math.round(v)).join(', ')+
   '. Current intention: '+(a.goal?.key||n.plan?.key||'undecided')+
   '. My witnessed beliefs: '+beliefs+'. Relevant personal recall: '+memories+
+  '. Evidence-linked recall: '+evidenced+
   '. Weather '+state.world.weather.kind+', '+state.world.weather.temperature+'C.'+
   ' Inventory: '+Object.entries(n.inventory).map(([k,v])=>k+' '+v).join(', ')+
   '. Skills earned by actions: '+Object.entries(n.skills).filter(([,v])=>v>0)

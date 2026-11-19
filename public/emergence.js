@@ -37,6 +37,7 @@
     n.plan = null;
     n.craftedItems=[];n.workpiece=null;
     n.project=null;n.completedProjects=[];
+    n.evidenceMemory={sequence:0,episodes:[],facts:[],summaries:[],methods:[],social:[],lastDay:0};
     n.peerLog = [];
     n.memories ||= [];
     n.lastPeerAt = -100000;

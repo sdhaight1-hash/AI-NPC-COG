@@ -16,6 +16,9 @@
  }
  function serializePerson(n){
   const {motion,blockedFor,peerPending,peerReservedFor,peerRetryAt,...stored}=n;
+  // No active activity is the same state whether the field is absent or null.
+  // Keep live activity progress unchanged across save/reload.
+  if(stored.currentActivity===null)delete stored.currentActivity;
   return stored;
  }
  function save(state){
@@ -97,6 +100,7 @@ function restore(state,saved){
    Cognition.restore(n,old.memories);
    Agency.restore(n,old.agency,state.clock);
    root.Projects?.restore(state,n,old.project);
+   root.EvidenceMemory?.restore(n,old.evidenceMemory,state.clock,old.memories);
    n.completedProjects=Array.isArray(old.completedProjects)?
     old.completedProjects.filter(x=>x&&['shelter','campfire','workbench','storage'].includes(x.kind)&&
      Number.isFinite(x.startedAt)&&Number.isFinite(x.finishedAt)&&x.finishedAt<=state.clock&&

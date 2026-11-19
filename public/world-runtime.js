@@ -67,7 +67,28 @@
 
  function available(state,n){
   const options=root.AgentWorld.available(n,state.world,state.npcs,reachability(state,n));
-  return root.Perception?root.Perception.filterAffordances(state,n,options):options;
+  const scoped=root.Perception?root.Perception.filterAffordances(state,n,options):options;
+  // Past firsthand inspection is actionable knowledge, not live omniscience.
+  // Resource counts are deliberately omitted: a once-known source can fail.
+  if(root.EvidenceMemory&&n.energy>=12){
+   const known=(n.evidenceMemory?.episodes||[]).filter(e=>
+    e.certainty==='observed'&&e.type==='inspection'&&e.ref);
+   const pairs=[['food','forage'],['water','fill_water'],
+    ['wood','collect_wood'],['stone','collect_stone'],['fiber','collect_fiber']];
+   for(const [kind,key] of pairs){
+    if(scoped.some(o=>o.key===key))continue;
+    const visits=known.filter(e=>e.text.startsWith('Inspected '+kind+' '));
+    for(const previous of visits.slice().reverse()){
+     const target=state.world.nodes.find(node=>node.id===previous.ref&&node.kind===kind);
+     if(!target||distance(state,n,target)>18||
+      !reachability(state,n)(target))continue;
+     scoped.push({key,when:'Return to personally inspected '+kind+' source',
+      target,ref:target.id});
+     break;
+    }
+   }
+  }
+  return scoped;
  }
  function moveTo(state,n,target){
   const path=pathfind(state,n,target);
