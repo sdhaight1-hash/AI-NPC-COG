@@ -84,47 +84,46 @@
       rect(ctx,'#6d8372',X+11,Y+12,4,1);
     }
   }
+  // Terrain is quiet enough to read at a glance. Only physical world objects
+  // carry the large sprites; procedural decoration never masquerades as food.
   function wilderness(ctx,x,y,biome){
-    const X=x*TILE,Y=y*TILE,h=hash(x,y,41);
+    const X=x*TILE,Y=y*TILE;
+    const patch=hash(Math.floor(x/4),Math.floor(y/4),19);
+    const detail=hash(x,y,41);
     const palette={
-      meadow:['#789856','#688b4c','#567d44','#8aa45a'],
-      forest:['#335c42','#3e6c49','#45734a','#32543b'],
-      marsh:['#526b4d','#617d52','#465c48','#7b8a62'],
-      ridge:['#777b78','#898b7f','#666e6b','#9a9a8b'],
-      sand:['#c9b98d','#b7a77c','#d7c395','#a99b76'],
-      water:['#286779','#347f8c','#3b8b9b','#296f84']
+      meadow:['#789b62','#71935b','#7fa16a','#6e9158'],
+      forest:['#436b4d','#3d6448','#497350','#3a6148'],
+      marsh:['#637965','#5d735f','#69826d','#58715e'],
+      ridge:['#777c70','#72776c','#7d8276','#6c7469'],
+      sand:['#c0b48b','#b8ad85','#c7bb95','#b6ab80'],
+      water:['#346c7f','#306778','#3b7183','#2e6779']
     };
-    const set=palette[biome]||palette.meadow;
-    rect(ctx,set[h%4],X,Y,16,16);
+    rect(ctx,(palette[biome]||palette.meadow)[patch%4],X,Y,16,16);
     if(biome==='water'){
-      rect(ctx,'#4f9caa',X+2+(h%4),Y+3,8,1);
-      rect(ctx,'#255f75',X+1,Y+12,12,1);
-      if(h%5===0)rect(ctx,'#7db5b6',X+8,Y+8,5,1);
+      if(detail%5===0)rect(ctx,'#6b9ba5',X+3,Y+6,9,1);
+      if(detail%9===0)rect(ctx,'#214f63',X+6,Y+13,7,1);
     }else if(biome==='sand'){
-      rect(ctx,'#eed8a2',X+3,Y+5,5,1);
-      rect(ctx,'#a4936a',X+7,Y+12,6,1);
-      if(h%7===0)rect(ctx,'#f6e5b9',X+11,Y+3,2,2);
+      if(detail%8===0)rect(ctx,'#e0cfaa',X+5,Y+8,5,1);
     }else if(biome==='ridge'){
-      rect(ctx,'#4e6261',X+3,Y+9,12,6);
-      rect(ctx,'#afb3a4',X+5,Y+5,7,5);
-      rect(ctx,'#d2cab5',X+6,Y+6,4,1);
-      rect(ctx,'#697a73',X+10,Y+10,4,4);
-    }else if(biome==='marsh'){
-      rect(ctx,'#4c8881',X+2,Y+8,11,4);
-      rect(ctx,'#9f9d69',X+4,Y+3,2,8);
-      rect(ctx,'#b3af76',X+10,Y+1,1,7);
-      if(h%3===0)flower(ctx,X+6,Y+5,h%4);
-    }else if(biome==='forest'){
-      rect(ctx,'#234d3a',X+2,Y+10,13,4);
-      rect(ctx,'#517f48',X+3,Y+6,10,7);
-      rect(ctx,'#6c9953',X+5,Y+5,6,2);
-      if(h%6===0)flower(ctx,X+10,Y+11,h%4);
-    }else{
-      for(let i=0;i<4;i++){
-        const px=2+((h>>>(i*6))%13),py=1+((h>>>(i*4+3))%13);
-        rect(ctx,i%2?'#8cad5d':'#3f7742',X+px,Y+py,1,3);
+      // Sparse rocky seams, not a grid of identical gray blocks.
+      if(detail%9===0){
+        rect(ctx,'#555f5a',X+3,Y+10,10,2);
+        rect(ctx,'#a2a69a',X+6,Y+8,5,1);
       }
-      if(h%13===0)flower(ctx,X+8,Y+8,h%4);
+      if(detail%17===0)rect(ctx,'#8b8f81',X+10,Y+4,3,2);
+    }else if(biome==='marsh'){
+      if(detail%7===0){
+        rect(ctx,'#456e66',X+2,Y+9,11,3);
+        rect(ctx,'#a0a876',X+7,Y+3,1,9);
+      }
+    }else if(biome==='forest'){
+      if(detail%11===0){
+        rect(ctx,'#2b543d',X+3,Y+10,8,2);
+        rect(ctx,'#6b9060',X+5,Y+7,2,4);
+      }
+    }else if(detail%9===0){
+      rect(ctx,'#426f47',X+6,Y+9,1,4);
+      rect(ctx,'#a0b77b',X+7,Y+8,2,1);
     }
   }
   function pond(ctx) {
@@ -347,9 +346,12 @@
   }
   function createSprite(id, facing, stride){
     const el=document.createElement('canvas');el.width=16;el.height=24;
-    const c=el.getContext('2d');const p=outfit[id]||outfit.player;
-    const skin=id==='jonas'?'#c28c66':id==='nico'?'#d9a18b':'#edc29d';
-    const skinShade=id==='jonas'?'#916849':'#b98e73';
+    const c=el.getContext('2d');
+    const index=Number(/^person_(\d+)$/.exec(id)?.[1]||1);
+    const personalities=['mara','jonas','asha','rowan','lina','nico'];
+    const p=outfit[id]||outfit[personalities[(index-1)%personalities.length]];
+    const skin=['#edc29d','#c28c66','#d9a18b','#b68e72','#e1ac87','#a97b62'][(index-1)%6];
+    const skinShade=['#b98e73','#916849','#a57967','#87634f','#a57c5d','#765843'][(index-1)%6];
     // Feet anchor: bottom row 23; forward walking alternates legs.
     const legA=[20,22,20,19][stride%4],legB=[20,19,20,22][stride%4];
     rect(c,'#293143',4,legA,4,3);rect(c,'#293143',9,legB,3,3);
@@ -418,6 +420,10 @@
       rect(ctx,'#ffe5a4',px+7,py-3,2,3);
     }
     ctx.drawImage(sprites.get(key),px-8,py-24);
+    if(person.task?.key==='socialize'||person.peerPending){
+      rect(ctx,'#fff3d3',px+6,py-27,6,5);
+      rect(ctx,'#866a55',px+8,py-25,2,1);
+    }
     const name=isPlayer?'YOU':person.name.toUpperCase();
     ctx.font='bold 6px monospace';ctx.textAlign='center';
     const width=Math.ceil(ctx.measureText(name).width)+6;
@@ -433,11 +439,7 @@
         const biome=world.terrain[y*dimensions.width+x];
         wilderness(ctx,x,y,biome);
       }
-      // Deterministic forest vegetation, including across toroidal seams.
-      for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++){
-        if(world.terrain[y*dimensions.width+x]==='forest'&&
-          hash(x+world.seed,y)%9===0)tree(ctx,x,y,hash(x,y)%8);
-      }
+      // Trees and shrubs are drawn from real nodes in drawWorldObjects.
       return;
     }
     for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++)
@@ -458,11 +460,17 @@
         if(node.stock>0)for(let i=0;i<Math.min(4,node.stock);i++)
           rect(ctx,i%2?'#bf6270':'#d87c70',x+4+(i%2)*5,y+7+(i>>1)*3,2,2);
       }else if(node.kind==='wood'){
-        rect(ctx,'#493928',x+2,y+10,13,5);
-        rect(ctx,node.stock?'#93683f':'#6d5e43',x+3,y+7,12,5);
-        rect(ctx,'#d2a472',x+3,y+7,3,5);
-        rect(ctx,'#563e2b',x+5,y+8,1,3);
-        if(node.stock>0)rect(ctx,'#c29465',x+6,y+5,7,2);
+        if(node.stock>0){
+          rect(ctx,'#392f28',x+7,y+10,3,7);
+          rect(ctx,'#865b3c',x+8,y+9,2,7);
+          rect(ctx,'#203f31',x+2,y+5,13,9);
+          rect(ctx,'#407549',x+3,y+2,11,10);
+          rect(ctx,'#63945a',x+5,y+2,7,3);
+          rect(ctx,'#2c563a',x+2,y+11,12,2);
+        }else{
+          rect(ctx,'#493e31',x+4,y+10,10,4);
+          rect(ctx,'#93764f',x+6,y+9,7,3);
+        }
       }else if(node.kind==='fiber'){
         rect(ctx,'#305f3d',x+2,y+11,11,4);
         for(let i=0;i<4;i++){
@@ -481,6 +489,14 @@
         if(node.stock>0)rect(ctx,'#d1d1ba',x+3,y+10,3,1);
       }
     }
+    for(const item of world.items||[]){
+      const x=item.x*16,y=item.y*16;
+      if(item.kind!=='wood')continue;
+      rect(ctx,'#2b3028',x+3,y+11,11,4);
+      rect(ctx,'#ab8456',x+3,y+8,10,5);
+      rect(ctx,'#e5b77c',x+4,y+9,2,3);
+      rect(ctx,'#e5d49b',x+10,y+9,2,1);
+    }
     for(const site of world.structures||[]){
       if(view&&(site.x<view.left||site.x>view.right||
         site.y<view.top||site.y>view.bottom))continue;
@@ -492,6 +508,15 @@
         rect(ctx,'#d5af70',x-2,y-6,18,3);
         rect(ctx,'#3c342b',x+4,y+8,8,10);
         rect(ctx,'#d9bd82',x+7,y+10,2,3);
+        continue;
+      }
+      if(site.type==='cache'){
+        rect(ctx,'#302d25',x+1,y+11,15,4);
+        rect(ctx,'#7e6039',x+2,y+6,13,8);
+        rect(ctx,'#c79a59',x+3,y+6,11,3);
+        rect(ctx,'#4c3927',x+5,y+9,2,4);
+        rect(ctx,'#4c3927',x+11,y+9,2,4);
+        if(site.contents?.wood>0)rect(ctx,'#d7c48e',x+7,y+8,4,2);
         continue;
       }
       if(site.type!=='campfire')continue;
@@ -512,32 +537,6 @@
     if(night>.015){
       ctx.fillStyle='rgba(18,32,64,'+(night*.55).toFixed(3)+')';
       ctx.fillRect(0,0,world?.width*16||640,world?.height*16||416);
-      // Lamps and campfires pick out readable patches of the night scene.
-      for(const [x,y] of [[13,11],[24,11],[28,22]]){
-        const X=x*16+9,Y=y*16+5;
-        ctx.fillStyle='rgba(253,196,106,'+(night*.10).toFixed(3)+')';
-        ctx.fillRect(X-20,Y-17,40,36);
-        ctx.fillStyle='rgba(255,220,139,'+(night*.22).toFixed(3)+')';
-        ctx.fillRect(X-7,Y-6,14,11);
-        rect(ctx,'#fff2bb',X-1,Y-3,3,3);
-      }
-    }
-    // Discrete ripples across the pond; all sprites remain integer-aligned.
-    const t=Math.floor(now/600);
-    for(let i=0;i<5;i++){
-      const px=35+((i*3+t)%5),py=19+((i*2+(t>>1))%5);
-      const x=px*16+3,y=py*16+3;
-      ctx.fillStyle=i%2?'#79b6c0':'#a0cbd0';
-      ctx.fillRect(x,y,4+(t%3)*2,1);
-    }
-    // Leaves, dust motes and drifting light animate independently of the cached ground.
-    for(let i=0;i<13;i++){
-      const h=hash(i,42);
-      const sway=Math.sin(now/1400+i*2.2)*4;
-      const x=Math.floor(((h%630)+sway+640)%640);
-      const y=Math.floor((((h>>>9)%410)+(now/17000)*(i%2?1:-1)+416)%416);
-      ctx.fillStyle=i%3===0?'rgba(239,198,111,.65)':'rgba(208,227,145,.52)';
-      ctx.fillRect(x,y,2,i%3===0?2:1);
     }
     for(const fire of world?.structures||[]){
       if(fire.type!=='campfire')continue;

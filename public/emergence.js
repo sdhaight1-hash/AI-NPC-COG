@@ -7,10 +7,10 @@
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water',
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
-    'experiment_wood_stone_fiber','explore','none'];
+    'experiment_wood_stone_fiber','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink:'survival',
-    craft_hatchet:'crafting',build_shelter:'building',
+    craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
     socialize:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
@@ -19,7 +19,7 @@
       terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
       nodes:island.resources,
-      structures:[]};
+      structures:[],items:[],itemSeq:1};
   }
   function newAgent(n, index=0) {
     n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
@@ -40,6 +40,45 @@
     const entries=Object.entries(n.skills||{}).sort((a,b)=>b[1]-a[1]);
     if(!entries.length||entries[0][1]<3)return 'Still finding their interests';
     return 'Drawn toward '+entries[0][0]+' ('+entries[0][1]+' actions)';
+  }
+  const OBJECT_LABELS={food:'Berry shrub',wood:'Standing tree',
+    stone:'Stone outcrop',fiber:'Wild reeds',water:'Freshwater spring'};
+  function objectById(world,id){
+    return world.nodes.find(o=>o.id===id)||
+      world.items.find(o=>o.id===id)||
+      world.structures.find(o=>o.id===id)||null;
+  }
+  function describeObject(world,object){
+    if(!object)return null;
+    if(Object.hasOwn(OBJECT_LABELS,object.kind)&&object.max!==undefined){
+      const condition=object.stock===0?'depleted':
+        object.stock<=object.max/3?'sparse':'available';
+      return {id:object.id,name:OBJECT_LABELS[object.kind],kind:object.kind,
+        x:object.x,y:object.y,condition,stock:object.stock,max:object.max,
+        description:OBJECT_LABELS[object.kind]+', '+condition+
+          ' ('+object.stock+'/'+object.max+' units); habitat '+
+          Frontier.terrainAt(world,object.x,object.y)};
+    }
+    if(object.type==='cache')
+      return {id:object.id,name:'Material cache',kind:'cache',x:object.x,y:object.y,
+        condition:'constructed',description:'A simple storage cache with '+
+          (object.contents?.wood||0)+'/12 units of stored wood'};
+    if(object.type==='campfire'||object.type==='shelter')
+      return {id:object.id,name:object.type==='campfire'?'Campfire':'Shelter',
+        kind:object.type,x:object.x,y:object.y,condition:'constructed',
+        description:'A constructed '+object.type+' at '+object.x+','+object.y};
+    if(object.kind==='wood'&&object.count===1)
+      return {id:object.id,name:'Dropped wood',kind:'wood',x:object.x,y:object.y,
+        condition:'on ground',description:'One unit of wood lying on the ground'};
+    return null;
+  }
+  function inspectTarget(n,world,canReach){
+    const seen=new Set((n.knowledge?.observations||[]).map(o=>o.id));
+    return [...world.nodes,...world.structures,...world.items]
+      .filter(o=>!seen.has(o.id)&&distance(n,o)<=8&&
+        describeObject(world,o)&&canReach(o))
+      .sort((a,b)=>distance(n,a)-distance(n,b)||
+        a.id.localeCompare(b.id))[0]||null;
   }
   function findNode(n,world,kind,canReach) {
     const candidates=world.nodes.filter(node=>node.kind===kind&&node.stock>0&&
@@ -92,8 +131,9 @@
     const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0)
       add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
-    const other=nearestResident(n,residents);
-    if(other && world.now-(n.lastPeerAt ?? -100000)>=45)
+    const other=nearestResident(n,residents,p=>!p.task&&!p.plan&&
+      !p.path?.length&&!p.peerPending&&!p.peerReservedFor);
+    if(other && world.now-(n.lastPeerAt ?? -100000)>=90)
       add('socialize','Seek out '+other.name+' and initiate a real conversation',other,other.id);
     if(n.inventory.wood>=2&&n.inventory.stone>=1){
       if(!n.knowledge.recipes.includes('campfire'))
@@ -120,6 +160,29 @@
        (n.inventory.wood>=4||findNode(n,world,'wood',canReach))&&
        (n.inventory.fiber>=3||findNode(n,world,'fiber',canReach)))
       add('make_shelter','Form an intention to collect materials and construct a shelter');
+    if(n.knowledge.recipes.includes('shelter')&&n.inventory.wood>=2&&
+      n.inventory.fiber>=1&&n.energy>=20&&
+      !world.structures.some(site=>site.type==='cache'&&distance(n,site)<3))
+      add('build_cache','Build a small wood-and-fiber storage cache using a known method');
+    const cache=world.structures.filter(site=>site.type==='cache'&&
+      distance(n,site)<=8&&canReach(site)).sort((a,b)=>distance(n,a)-distance(n,b))[0];
+    if(cache){
+      if(n.inventory.wood>0&&(cache.contents?.wood||0)<12)
+        add('store_wood','Store one carried wood in a nearby material cache',cache,cache.id);
+      if(n.inventory.wood<2&&(cache.contents?.wood||0)>0)
+        add('retrieve_wood','Take one stored wood from a nearby cache',cache,cache.id);
+    }
+    const examine=inspectTarget(n,world,canReach);
+    if(examine&&n.energy>=10)
+      add('inspect','Examine '+describeObject(world,examine).name+
+        ' at '+examine.x+','+examine.y+' to learn its condition',examine,examine.id);
+    const loose=world.items.find(item=>item.count===1&&item.kind==='wood'&&
+      distance(n,item)<=8&&canReach(item));
+    if(loose&&n.inventory.wood<1000)
+      add('pickup_item','Pick up one piece of wood lying on the ground',loose,loose.id);
+    if(n.inventory.wood>=4&&world.items.length<120&&
+      !world.items.some(item=>distance(n,item)<=1))
+      add('drop_wood','Place one unit of carried wood on the ground');
     const destination=exploreTarget(n,canReach,world);
     if(destination&&n.energy>=10)
       add('explore','Explore an unfamiliar reachable area ('+distance(n,destination)+' tiles)',destination);
@@ -153,6 +216,32 @@
       n.inventory[node.kind]+=collected;
       n.energy=clamp(n.energy-3*collected);
       message='Collected '+collected+' '+node.kind+' (source '+node.stock+'/'+node.max+' remaining)';
+    }else if(task.key==='inspect'){
+      const target=objectById(world,task.ref);
+      if(!target||distance(n,target)>1)return {ok:false,message:'Object is no longer nearby'};
+      const info=describeObject(world,target);
+      if(!info)return {ok:false,message:'Unknown object'};
+      n.knowledge.observations ||= [];
+      n.knowledge.observations.push({id:info.id,kind:info.kind,
+        at:world.now,text:info.description});
+      n.knowledge.observations=n.knowledge.observations.slice(-40);
+      n.needs.curiosity=clamp(n.needs.curiosity-12);
+      message='Inspected '+info.description;
+    }else if(task.key==='drop_wood'){
+      if(n.inventory.wood<1||world.items.length>=120||
+        world.items.some(item=>distance(n,item)<=1))
+        return {ok:false,message:'Unable to leave material here'};
+      const item={id:'item_'+world.itemSeq++,kind:'wood',count:1,x:n.x,y:n.y};
+      world.items.push(item);n.inventory.wood--;
+      message='Placed one wood on the ground at '+n.x+','+n.y;
+    }else if(task.key==='pickup_item'){
+      const index=world.items.findIndex(item=>item.id===task.ref);
+      const item=world.items[index];
+      if(!item||item.kind!=='wood'||item.count!==1||
+        distance(n,item)>1||n.inventory.wood>=1000)
+        return {ok:false,message:'Loose item is unavailable'};
+      world.items.splice(index,1);n.inventory.wood++;
+      message='Picked up one wood from the ground';
     }else if(task.key==='drink'){
       if(n.inventory.water<1)return {ok:false,message:'No drinkable water'};
       n.inventory.water--;n.needs.thirst=clamp(n.needs.thirst-48);
@@ -179,6 +268,32 @@
         return {ok:false,message:'Missing tool materials'};
       n.inventory.wood--;n.inventory.stone--;n.inventory.fiber--;
       n.inventory.hatchet=1;message='Crafted a stone hatchet for faster wood gathering';
+    }else if(task.key==='build_cache'){
+      if(!n.knowledge.recipes.includes('shelter')||n.inventory.wood<2||
+        n.inventory.fiber<1||n.energy<20||
+        world.structures.some(site=>site.type==='cache'&&distance(n,site)<3))
+        return {ok:false,message:'Cannot construct a cache here'};
+      n.inventory.wood-=2;n.inventory.fiber--;n.energy=clamp(n.energy-8);
+      const cache={id:'cache_'+(world.structures.length+1),type:'cache',
+        x:n.x,y:n.y,contents:{wood:0}};
+      world.structures.push(cache);
+      message='Constructed an empty material cache at '+n.x+','+n.y;
+    }else if(task.key==='store_wood'||task.key==='retrieve_wood'){
+      const cache=world.structures.find(site=>site.id===task.ref&&site.type==='cache');
+      if(!cache||distance(n,cache)>1)
+        return {ok:false,message:'Material cache not reachable'};
+      cache.contents ||= {wood:0};
+      if(task.key==='store_wood'){
+        if(n.inventory.wood<1||cache.contents.wood>=12)
+          return {ok:false,message:'No room or wood to store'};
+        n.inventory.wood--;cache.contents.wood++;
+        message='Stored one wood in cache ('+cache.contents.wood+'/12)';
+      }else{
+        if(cache.contents.wood<1||n.inventory.wood>=1000)
+          return {ok:false,message:'No stored wood available'};
+        cache.contents.wood--;n.inventory.wood++;
+        message='Retrieved one wood from cache ('+cache.contents.wood+'/12 left)';
+      }
     }else if(task.key==='build_shelter'){
       if(!n.knowledge.recipes.includes('shelter'))
         return {ok:false,message:'Shelter construction method is not known'};
@@ -334,6 +449,7 @@
     if(n.needs.hunger>55&&keys.has('eat'))return 'eat';
     if(n.needs.hunger>50&&keys.has('forage'))return 'forage';
     if(n.energy<30&&keys.has('rest'))return 'rest';
+    if(n.needs.curiosity>=45&&keys.has('inspect'))return 'inspect';
     // Simple survival stockpiles are mechanical routines, not invented
     // relationships, inventions, or claims of AI deliberation.
     if(n.inventory.water<2&&keys.has('fill_water'))return 'fill_water';
@@ -342,16 +458,31 @@
   }
   function restoreWorld(target,saved) {
     if(!saved||!Array.isArray(saved.nodes)||!Array.isArray(saved.structures))return;
+    target.items=Array.isArray(saved.items)?saved.items.filter(item=>item&&
+      /^item_[1-9]\d*$/.test(item.id)&&item.kind==='wood'&&item.count===1&&
+      Number.isInteger(item.x)&&Number.isInteger(item.y)&&
+      item.x>=0&&item.x<target.width&&item.y>=0&&item.y<target.height&&
+      Frontier.traversable(target,item.x,item.y,0)).slice(0,120):[];
+    target.itemSeq=Math.max(1,...target.items.map(item=>Number(item.id.slice(5))+1));
+    if(Number.isInteger(saved.itemSeq)&&saved.itemSeq>target.itemSeq)
+      target.itemSeq=Math.min(saved.itemSeq,1000000000);
     for(const node of target.nodes){
       const old=saved.nodes.find(v=>v.id===node.id&&v.kind===node.kind);
       if(old&&Number.isInteger(old.stock)&&old.stock>=0&&old.stock<=node.max){
         node.stock=old.stock;
       }
     }
-    target.structures=saved.structures.filter(s=>s&&['campfire','shelter'].includes(s.type)&&
+    target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache'].includes(s.type)&&
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
       s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'
-    ).slice(0,80).map((v,i)=>({id:v.type+'_'+(i+1),type:v.type,x:v.x,y:v.y}));
+    ).slice(0,80).map((v,i)=>({
+      id:typeof v.id==='string'&&/^(?:fire|campfire|shelter|cache)_[1-9]\d*$/.test(v.id)?
+        v.id:v.type+'_'+(i+1),
+      type:v.type,x:v.x,y:v.y,
+      ...(v.type==='cache'?{contents:{wood:Number.isInteger(v.contents?.wood)?
+        Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
+    }));
   }
-  root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,nextPlanAction,validatePlan,stepNeeds,regenerate,fallback,restoreWorld};
+  root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,nextPlanAction,
+    validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
 })(globalThis);

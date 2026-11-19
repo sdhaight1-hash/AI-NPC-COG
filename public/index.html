@@ -18,7 +18,7 @@
   <div class="panel simulation">
    <div class="panel-head"><div><span class="eyebrow">WORLD / GOD-MODE OBSERVER</span>
     <h1>Toroidal Wilderness · Living World</h1>
-    <p>Finite procedural world · Five independent founders · No predefined settlement</p></div>
+    <p>Finite wilderness · Physical resources · Five independent founders</p></div>
     <div class="clock-group"><strong id="worldTime">08:10</strong>
      <small id="worldDay">SPRING · YEAR 1 · MONTH 1 · DAY 1</small>
      <small id="worldWeather">CLEAR · 20°C</small></div>
@@ -48,7 +48,7 @@
    </div>
    <div class="world-frame">
     <canvas id="world" width="640" height="416" aria-label="God-mode view of a procedural toroidal world"></canvas>
-    <div class="map-hint">WASD/arrows: pan · Click a person: follow · F: follow · PgUp/PgDn: z-level · +/- zoom</div>
+    <div class="map-hint">WASD/arrows: pan · Click a person or resource: inspect · F: follow · PgUp/PgDn: z-level · +/- zoom</div>
     <div class="world-status" id="worldStatus">World running</div>
    </div>
    <div class="world-footer">
@@ -102,8 +102,17 @@
    <div class="subsection"><h4>Recent option probabilities</h4><div id="npcDecisions" class="decisions"></div></div>
    <div class="subsection"><h4>Personal recollections</h4><div id="npcMemories" class="memories"></div></div>
   </div>
+  <div class="panel object-inspector">
+   <div class="panel-head small"><div><span class="eyebrow">PHYSICAL WORLD</span>
+    <h2>Object inspection</h2></div></div>
+   <div class="object-content">
+    <strong id="objectName">Select an object on the map</strong>
+    <p id="objectDetail">Click a tree, shrub, spring, stone, dropped material or structure.</p>
+    <small id="objectLocation">No object selected</small>
+   </div>
+  </div>
   <div class="panel conversation">
-   <div class="panel-head small"><div><span class="eyebrow">OBSERVED COMMUNICATION</span><h2>NPC conversations</h2></div></div>
+   <div class="panel-head small"><div><span class="eyebrow">OBSERVED COMMUNICATION</span><h2>Live NPC conversations</h2></div></div>
    <div id="chatLog" class="chat-log"><div class="empty">No recorded conversations yet.</div></div>
   </div>
  </aside>
