@@ -482,7 +482,14 @@
     const dryness=1-clamp(n.bio.hydrationBudgetMl/3000,0,1);
     n.needs.hunger=clamp(n.needs.hunger+dt*(.035+.045*appetite));
     n.needs.thirst=clamp(n.needs.thirst+dt*(.037+.07*dryness));
-    n.needs.social=clamp(n.needs.social+dt*.025);
+    // Contact drive and voluntary solitude affect the *rate* of social
+    // pressure, not bodily survival or whether a relationship is possible.
+    const approach=Number.isFinite(n.traits?.socialApproach)?
+      clamp(n.traits.socialApproach,0,1):.5;
+    const solitude=Number.isFinite(n.traits?.solitudePreference)?
+      clamp(n.traits.solitudePreference,0,1):.5;
+    const contactRate=Math.max(.001,.008+.039*approach-.014*solitude);
+    n.needs.social=clamp(n.needs.social+dt*contactRate);
     n.needs.curiosity=clamp(n.needs.curiosity+dt*.016);
     n.energy=clamp(n.energy-dt*(.045+
       (n.bio.sleepDebt>70?.024:0)+(n.bio.stress>70?.015:0)+
