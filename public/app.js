@@ -532,6 +532,21 @@ staticContext.imageSmoothingEnabled=false;
 function drawStaticWorld(){
  VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees);
 }
+// Optional Kenney CC0 sprites are installed locally once, never fetched at runtime
+// from a third-party host. When absent the original artwork remains usable.
+function loadTileset(){
+ if(typeof Image==='undefined')return;
+ const image=new Image();
+ image.onload=()=>{
+  if(VillageArt.setAtlas(image)){
+   staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
+   drawStaticWorld();
+   record('Kenney Tiny Town art atlas loaded (CC0)', 'routine');
+  }
+ };
+ image.onerror=()=>record('Using included original pixel-art fallback','routine');
+ image.src='/assets/kenney-tiny-town.png';
+}
 function updateCamera(force=false){
  const zoom=state.zoom;
  const viewW=canvas.width/zoom,viewH=canvas.height/zoom;
@@ -567,6 +582,7 @@ function drawWorld(){
   VillageArt.drawActor(ctx,item.actor,item.player,position(item.actor),
    !item.player&&state.selected===item.actor.id,now);
  }
+ VillageArt.drawAmbient(ctx,state.world,state.clock,now);
  ctx.restore();
 }
 function renderEvents(){
@@ -838,6 +854,7 @@ $('resetBtn').addEventListener('click',()=>{
 });
 $('chatForm').addEventListener('submit',sendMessage);
 drawStaticWorld();
+loadTileset();
 restore();
 renderResidents();updateInspector();renderChat();
 record('Hearthbrook village initialized — click a resident to inspect their state.');
