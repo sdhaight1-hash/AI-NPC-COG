@@ -147,11 +147,23 @@ export function assertCraftConservation(initialFiber,finalFiber,producedCord){
 }
 export function runSoak(seed=379210,days=30){
  const state=setup(seed);state.auto=true;
- const ticks=days*1440;
+ const ticks=days*1440,deathDetails=[];
  assert.ok(Number.isInteger(ticks)&&ticks>0&&ticks<=1440*120);
  for(let i=0;i<ticks;i++){
   // Check cheaply every hour; action-specific receipts are checked separately.
-  Simulation.advance(state,1);
+  Simulation.advance(state,1,{onDeath:(actor,cause)=>{
+   const nearest=state.world.nodes.filter(s=>s.kind==='water')
+    .map(s=>({id:s.id,stock:s.stock,
+     distance:globalThis.Frontier.distance(state.world,actor,s)}))
+    .sort((a,b)=>a.distance-b.distance||a.id.localeCompare(b.id))[0]||null;
+   deathDetails.push({actorId:actor.id,clock:state.clock,cause,
+    position:{x:actor.x,y:actor.y,z:actor.z},
+    needs:{...actor.needs},energy:actor.energy,
+    hydrationMl:actor.bio?.hydrationBudgetMl??null,
+    inventory:{...actor.inventory},nearestWater:nearest,
+    recentActions:state.receipts.filter(r=>r.actorId===actor.id)
+     .slice(-12).map(r=>({clock:r.clock,action:r.action,status:r.status,reason:r.reason}))});
+  }});
   if(i%60===0)invariant(state);
  }
  invariant(state);
@@ -166,7 +178,7 @@ export function runSoak(seed=379210,days=30){
   deathCauses,firstDeathDay:firstDeathAt===null?null:1+Math.floor(firstDeathAt/1440),
   arrivals:Math.max(0,state.nextPersonId-6),worldHash:hash(state),
   retainedReceipts:state.receipts.length,completed,
-  modelCalls:0};
+  deathDetails,modelCalls:0};
 }
 if(process.argv[1]?.replaceAll('\\','/').endsWith('/scripts/benchmarks.mjs')){
  const option=process.argv.find(v=>v.startsWith('--seed='));
