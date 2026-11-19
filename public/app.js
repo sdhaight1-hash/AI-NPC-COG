@@ -630,7 +630,9 @@ function updateHUD(now){
  if(now<state.nextUI)return;
  state.nextUI=now+600;
  const stamp=Civilization.stamp(state.clock);
- $('worldTime').textContent=timeString();
+ // Display simulated seconds so 1x speed doesn't appear frozen for a full minute.
+ $('worldTime').textContent=timeString()+':'+
+  String(Math.floor((state.clock-Math.floor(state.clock))*60+1e-7)).padStart(2,'0');
  $('worldDay').textContent=stamp.season.toUpperCase()+' · YEAR '+stamp.year+' · MONTH '+stamp.month+' · DAY '+stamp.day;
  $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+
   ' · '+state.world.weather.temperature+'°C';
@@ -638,7 +640,8 @@ function updateHUD(now){
  $('populationStats').textContent=state.npcs.length+' living · '+state.dead.length+
   ' deaths · '+state.world.structures.length+' constructed objects · next arrivals on the 1st';
  $('zLabel').textContent='Z '+state.viewZ;
- $('worldStatus').textContent=state.paused?'Paused':state.backgroundBusy?
+ $('worldStatus').textContent=state.fatalFrameError?
+  'ERROR · '+state.fatalFrameError.slice(0,110):state.paused?'Paused':state.backgroundBusy?
   state.modelLabel+' deliberating…':'World running';
  $('footerNote').textContent=state.connected?
   'One shared '+state.modelLabel+' lane · deterministic world rules':'Offline survival fallback (not AI cognition)';
@@ -720,20 +723,54 @@ $('newIsland').addEventListener('click',()=>{
  localStorage.removeItem(STORE);window.location.reload();
 });
 function tick(now){
- // Fixed 50 ms logical steps prevent frame jitter from changing action ordering.
- // Long browser suspensions do not silently fast-forward a year of AI actions.
- const dt=tick.last===undefined?0:Math.max(0,Math.min(.25,(now-tick.last)/1000));
- tick.last=now;tick.accumulator=(tick.accumulator||0)+dt;
- let ticks=0;
- while(tick.accumulator>=.05&&ticks<5){
-  frameStep(.05);tick.accumulator-=.05;ticks++;
+ try{
+ // A synchronous exception must not silently terminate requestAnimationFrame.
+ let failure=null;
+ try{
+  // Fixed 50 ms steps avoid variable-length physics and prevent long
+  // background-tab suspensions from silently fast-forwarding simulation.
+  const dt=tick.last===undefined?0:Math.max(0,Math.min(.25,(now-tick.last)/1000));
+  tick.last=now;tick.accumulator=(tick.accumulator||0)+dt;
+  let ticks=0;
+  while(tick.accumulator>=.05&&ticks<5){
+   frameStep(.05);tick.accumulator-=.05;ticks++;
+  }
+  if(tick.accumulator>=.05)tick.accumulator=0;
+ }catch(error){
+  // A failed simulation transition may have partial world effects.
+  state.paused=true;tick.accumulator=0;
+  failure={phase:'simulation',error};
  }
- if(tick.accumulator>=.05)tick.accumulator=0;
- drawWorld();updateHUD(now);requestAnimationFrame(tick);
+ try{drawWorld();}catch(error){failure ||= {phase:'render',error};}
+ try{updateHUD(now);}catch(error){failure ||= {phase:'HUD',error};}
+ if(failure){
+  const message=failure.phase+': '+String(failure.error?.message||failure.error);
+  if(tick.lastError!==message){
+   console.error('AI-NPC-COG frame failure:',message,failure.error);
+   tick.lastError=message;
+  }
+  if(failure.phase==='simulation')state.fatalFrameError=message;
+  const status=$('worldStatus');
+  if(status)status.textContent='ERROR · '+message.slice(0,110);
+ }else if(!state.fatalFrameError)tick.lastError=null;
+ }finally{
+  // Required even if a new unanticipated exception escapes diagnostics.
+  requestAnimationFrame(tick);
+ }
 }
-drawStaticWorld();restore();loadTileset();
-state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
-for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
-renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
-record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
-checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
+try{
+ // Restore before rendering the terrain, so saved worlds paint the right map.
+ restore();
+ drawStaticWorld();loadTileset();
+ state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
+ for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
+ renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
+ record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
+}catch(error){
+ // A transient startup canvas/UI failure must not prevent clock startup.
+ console.error('AI-NPC-COG startup failure:',error);
+ const status=$('worldStatus');
+ if(status)status.textContent='STARTUP ERROR · '+String(error?.message||error).slice(0,100);
+}finally{
+ checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
+}

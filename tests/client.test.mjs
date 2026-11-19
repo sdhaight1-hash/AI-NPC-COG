@@ -5,10 +5,19 @@ import vm from 'node:vm';
 function makeBrowser(options={}){
  const events=new Map(),saved=options.saved||new Map();
  const counters={staticRects:0,screenImages:0};
+ const frames=[];
+ let failScreenDraw=!!options.failScreenDrawOnce;
+ let failStaticDraw=!!options.failStaticDrawOnce;
  const fakeCtx=kind=>new Proxy({
   measureText:s=>({width:String(s).length*8}),
-  fillRect(){if(kind==='static')counters.staticRects++;},
-  drawImage(){if(kind==='screen')counters.screenImages++;}
+  fillRect(){if(kind==='static'){
+   if(failStaticDraw){failStaticDraw=false;throw Error('Startup background drawing failed');}
+   counters.staticRects++;
+  }},
+  drawImage(){if(kind==='screen'){
+   if(failScreenDraw){failScreenDraw=false;throw Error('Canvas temporarily unavailable');}
+   counters.screenImages++;
+  }}
  },{get(obj,key){return obj[key]??(()=>{});},set(obj,k,v){obj[k]=v;return true;}});
  const screen=fakeCtx('screen'),staticCtx=fakeCtx('static');
  const canvas={width:640,height:416,getContext:()=>screen,
@@ -27,7 +36,7 @@ function makeBrowser(options={}){
   }};
  const window={addEventListener(type,fn){events.set('window:'+type,fn);},
   confirm:()=>true,location:{reload(){}}};
- const context={document,window,console,requestAnimationFrame(){},setInterval(){},
+ const context={document,window,console,requestAnimationFrame(fn){frames.push(fn);},setInterval(){},
   performance:{now:()=>0},
   localStorage:{
    getItem:k=>saved.get(k)||null,
@@ -41,7 +50,7 @@ function makeBrowser(options={}){
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
   'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity};',context);
- return {...context.exposed,saved,events,elements,counters};
+ return {...context.exposed,saved,events,elements,counters,frames};
 }
 test('fresh start contains five distinct independent founders, no player, no village',()=>{
  const b=makeBrowser();
@@ -427,4 +436,76 @@ test('personally ranked decisions and witnessed beliefs enter the model context 
  assert.match(text,/Current intention: stock_water/);
  assert.match(text,/My witnessed beliefs: water at/);
  assert.doesNotMatch(b.sceneFor(other),/My witnessed beliefs: water at/);
+});
+
+test('real browser frame loop advances the displayed clock across scheduled offline work',()=>{
+ const b=makeBrowser();
+ b.state.connected=false;
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=16100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>=start+14,
+  'Simulation clock must advance even during NPC scheduling and world rendering');
+ assert.match(b.elements.get('worldTime').textContent,/^\d{2}:\d{2}:\d{2}$/);
+ assert.ok(b.frames.length>250,'Every browser frame must schedule its successor');
+ assert.match(b.elements.get('worldStatus').textContent,/World running|Offline|deliberating/);
+});
+test('browser clock advances with social demand and never requires an LLM',()=>{
+ const b=makeBrowser();
+ b.state.connected=false;
+ for(const n of b.state.npcs){
+  n.needs.social=95;n.energy=98;n.thoughtAt=b.state.clock;
+  n.task=null;n.plan=null;n.path=[];n.action='none';
+ }
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=7100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>start+5);
+ assert.notEqual(b.elements.get('worldTime').textContent,'');
+});
+
+test('transient canvas failure cannot permanently stop the simulation frame loop',()=>{
+ const b=makeBrowser({failScreenDrawOnce:true});
+ const first=b.state.clock,initialFrames=b.frames.length;
+ b.tick(1000);
+ assert.equal(b.frames.length,initialFrames+1,
+  'A render error must not kill requestAnimationFrame scheduling');
+ for(let ms=1050;ms<=2100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>first,
+  'After a rendering error, the world clock still advances');
+ assert.ok(b.frames.length>initialFrames+10);
+});
+
+test('at 1x speed the HUD shows advancing seconds even before the minute changes',()=>{
+ const b=makeBrowser();
+ b.state.speed=1;
+ b.tick(1000);
+ const initial=b.elements.get('worldTime').textContent;
+ for(let ms=1050;ms<=4100;ms+=50)b.tick(ms);
+ const after=b.elements.get('worldTime').textContent;
+ assert.match(after,/^\d{2}:\d{2}:\d{2}$/);
+ assert.notEqual(after,initial,'Visible seconds distinguish slow time from a freeze');
+ assert.equal(after.slice(0,5),initial.slice(0,5),
+  'A few seconds should not advance an entire simulated minute at 1x');
+});
+
+test('transient startup rendering failure cannot prevent the first browser frame',()=>{
+ const b=makeBrowser({failStaticDrawOnce:true});
+ assert.equal(b.frames.length,1,'Startup must always schedule the first frame');
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=2100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>start,'World simulation can run after a startup-art failure');
+});
+
+test('fast-forward browser frames keep time advancing with active offline agents',()=>{
+ const b=makeBrowser();
+ b.state.speed=3600;b.state.connected=false;
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=4100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>start+150,
+  'Fast-forward world clock must advance despite AI scheduling and HUD rendering');
+ assert.ok(b.frames.length>60);
+ assert.equal(b.state.paused,false);
 });
