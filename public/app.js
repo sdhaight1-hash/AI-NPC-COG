@@ -799,32 +799,21 @@ function restore(){
 }
 function step(dt){
  if(state.paused||dt<=0)return;
- const elapsed=dt*state.speed/60,before=state.clock;
- state.clock+=elapsed;state.world.now=state.clock;
- state.day=Math.floor(state.clock/1440)+1;
- state.world.weather=Frontier.weather(state.world,state.clock);
- AgentWorld.regenerate(state.world,elapsed);
- const arrivals=Civilization.advanceArrivals(state,before,state.clock);
- for(const n of arrivals)record(n.name+' arrived in the wilderness','social');
- for(const n of [...state.npcs]){
-  if(n.peerReservedFor&&!state.npcs.some(peer=>peer.id===n.peerReservedFor&&
-   peer.task?.key==='socialize'&&peer.task.ref===n.id))delete n.peerReservedFor;
-  if(!n.peerPending&&!n.peerReservedFor)updateMovement(n,elapsed);
-  const recovery=AgentWorld.stepNeeds(n,state.world,elapsed);
-  if(recovery==='Recovered'){
-   activity(n).completed++;activityNote(n,'Finished resting and recovered');
-  }
-  const death=Civilization.updateHealth(state,n,elapsed);
-  if(death){record(n.name+' died of '+death,'warning');continue;}
-  if(!n.peerPending){
-   if(n.task&&!n.path.length)completeActivity(n);
-   else if(n.plan&&!n.task&&!n.path.length)advancePlan(n);
-  }
- }
- if(!state.npcs.some(n=>n.id===state.selected)){
-  state.selected=state.npcs[0]?.id||null;renderResidents();
- }
- scheduleIdleAgents();
+ const elapsed=dt*state.speed/60;
+ Simulation.advance(state,elapsed,{
+  onArrival:n=>record(n.name+' arrived in the wilderness','social'),
+  move:updateMovement,
+  onRecovery:n=>{activity(n).completed++;activityNote(n,'Finished resting and recovered');},
+  onDeath:(n,death)=>record(n.name+' died of '+death,'warning'),
+  complete:completeActivity,
+  advancePlan,
+  afterActors:()=>{
+   if(!state.npcs.some(n=>n.id===state.selected)){
+    state.selected=state.npcs[0]?.id||null;renderResidents();
+   }
+  },
+  schedule:scheduleIdleAgents
+ });
 }
 function drawMinimap(){
  const c=$('miniMap'),m=c.getContext('2d');
