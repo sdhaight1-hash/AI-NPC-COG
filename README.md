@@ -56,6 +56,10 @@ material-property, process, ecology, wear, logistics and workshop expansion gate
 
 - [Emergent world roadmap](docs/emergent-world-roadmap.md) — the full set of design invariants, future phases, acceptance gates, and honest omissions.
 - [Architecture and physiology research](docs/architecture-and-physiology.md) — the previous documented biology research and world/AI authority separation. Sections describing the older village/player layout are historical, not current features.
+- [Full repository audit and implemented-vs-planned ledger (2026-11-19)](docs/full-repository-audit-ledger-2026-11-19.md) — source-grounded module/PR/issue/CI audit; do not equate merged foundations with complete NPC autonomy.
+- [Architecture priorities and test gates (2026-11-19)](docs/full-audit-design-decisions-test-gates-2026-11-19.md) — cross-system dependency plan and exact validation questions.
+- [Top-down vector rendering, 2D chunks, WFC and space colonization research](docs/topdown-vector-chunk-worldgen-research-2026-11-19.md) — renderer-neutral world authority and procedural art comparisons.
+- [Cross-project technology transfer](docs/cross-repository-architecture-transfer-2026-11-19.md) and [ecology/time study](docs/ecology-time-and-emergent-paths-research-2026-11-19.md) — actual reused ideas versus future hypothetical systems.
 
 The future work includes a server-owned event queue and durable journal, editable multilevel geology, construction from individual components, researchable technologies and practical skill learning, population-wide plants/wildlife/monster ecology, genetic lineage, gestation and childhood, and genuinely emergent communities, ownership claims, laws, economics, treaties and conflict.
 
