@@ -88,7 +88,9 @@ function sceneFor(n){
   .map(m=>m.kind+': '+m.text).join('; ')||'No relevant personal recollections';
  const evidenced=EvidenceMemory.recall(n,memoryQuery,state.clock,3)
   .map(m=>m.certainty+' '+m.type+': '+m.text+
-   (m.receiptId?' [verified '+m.receiptId+']':'')).join('; ')||'No source-backed experiences';
+   (m.receiptId?' [verified '+m.receiptId+']':'')+
+   (m.type==='inspection'&&m.certainty==='observed'&&m.ref?
+    ' [source:'+m.ref+']':'')).join('; ')||'No source-backed experiences';
  const beliefs=a.beliefs.slice(-4).map(b=>b.kind+' at '+b.x+','+b.y+
   ' ('+b.status+', last personally witnessed '+Math.floor(b.at)+')').join('; ')||'None';
  return 'Year '+Civilization.stamp(state.clock).year+', '+Civilization.stamp(state.clock).season+', '+timeString()+
@@ -302,7 +304,7 @@ async function peerExchange(n,other){
   const response=await jsonPost('/api/peer-exchange',{
    speaker:{name:n.name,persona:n.personality},
    listener:{name:other.name,persona:other.personality},
-   scene:sceneFor(n)+'\n'+sceneFor(other).slice(0,420)
+   speakerScene:sceneFor(n),listenerScene:sceneFor(other)
   });
   if(state.paused||!state.npcs.includes(n)||!state.npcs.includes(other)||
     !n.task||n.task.key!=='socialize'||n.task.ref!==other.id||
