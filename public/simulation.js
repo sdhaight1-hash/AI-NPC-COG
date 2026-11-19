@@ -44,6 +44,12 @@
     else if(n.plan&&!n.task&&!n.path.length)plan?.(n);
    }
   }
+  if(root.Projects&&runtime){
+   for(const n of state.npcs){
+    if(n.project&&!n.task&&!n.plan&&!n.path?.length)
+     runtime.advanceProject(state,n);
+   }
+  }
   ports.afterActors?.(state);
   schedule?.(state);
   return {advanced:true,arrivals:arrivals.map(n=>n.id),deaths};

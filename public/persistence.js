@@ -96,6 +96,13 @@ function restore(state,saved){
       at:o.at,text:o.text.slice(0,240)}));
    Cognition.restore(n,old.memories);
    Agency.restore(n,old.agency,state.clock);
+   root.Projects?.restore(state,n,old.project);
+   n.completedProjects=Array.isArray(old.completedProjects)?
+    old.completedProjects.filter(x=>x&&['shelter','campfire','workbench','storage'].includes(x.kind)&&
+     Number.isFinite(x.startedAt)&&Number.isFinite(x.finishedAt)&&x.finishedAt<=state.clock&&
+     Number.isInteger(x.actions)&&x.actions>=0).slice(-12)
+     .map(x=>({kind:x.kind,startedAt:x.startedAt,finishedAt:x.finishedAt,
+      actions:Math.min(100000,x.actions)})):[];
    if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);

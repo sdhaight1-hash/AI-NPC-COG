@@ -35,7 +35,7 @@ function makeBrowser(options={}){
    removeItem(k){saved.delete(k);}
   },fetch:options.fetch||(async()=>({ok:true,json:async()=>({connected:false})}))};
  const source=['pixel-art.js','frontier.js','biology.js','crafting.js','cognition.js','agency.js','emergence.js',
-  'civilization.js','receipts.js','activities.js','reservations.js','world-runtime.js','simulation.js','persistence.js','app.js'].map(path=>
+  'civilization.js','receipts.js','activities.js','reservations.js','projects.js','world-runtime.js','simulation.js','persistence.js','app.js'].map(path=>
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
@@ -222,7 +222,7 @@ test('offline scheduling starts multiple independent NPC tasks without a wall-cl
  b.scheduleIdleAgents();
  const active=b.state.npcs.filter(n=>n.plan||n.task||n.path.length||n.action!=='none');
  assert.ok(active.length>=3,'Multiple inhabitants should choose work or a persistent purpose');
- assert.ok(active.every(n=>['offline routine','survival instinct'].includes(n.source)));
+ assert.ok(active.every(n=>['offline routine','survival instinct','project'].includes(n.source)));
  assert.ok(b.state.npcs.every(n=>n.thoughtAt>b.state.clock));
  b.step(2);
  assert.ok(b.state.npcs.some(n=>n.task||n.path.length||n.action!=='none'),

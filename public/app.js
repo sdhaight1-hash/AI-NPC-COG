@@ -169,17 +169,26 @@ function scheduleIdleAgents(){
   if(initiator)socialInitiative(initiator);
  }
  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&!n.peerReservedFor&&
+  (!n.project||n.project.status==='COMPLETED')&&
   n.action!=='rest'&&state.clock>=n.thoughtAt)
   .sort((a,b)=>a.thoughtAt-b.thoughtAt);
  if(!state.connected){
   // Offline world rules need no serialized model inference lane.
   for(const n of due){
+   if(Projects.maybeStart(state,n)){
+    WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
+    n.thoughtAt=state.clock+18;continue;
+   }
    const success=setAction(n,fallbackBackground(n),'offline routine');
    n.thoughtAt=state.clock+(success?18:3);
   }
  }else if(!state.backgroundBusy&&due.length&&
   performance.now()-state.lastDecisionMs>=1500){
-  void deliberate(due[0]);
+  const n=due[0];
+  if(Projects.maybeStart(state,n)){
+   WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
+   n.thoughtAt=state.clock+18;
+  }else void deliberate(n);
  }
 }
 function finishPlan(n,reason,type='social'){
@@ -462,7 +471,12 @@ function updateInspector(){
   .map(([k,v])=>k+' '+v).join(' · ')||'No practice yet';
  $('knowledgeVal').textContent=(n.knowledge?.recipes||[]).join(', ')||'No learned recipes';
  $('npcGoal').textContent=n.goal;
- $('npcPlan').textContent=n.plan?n.plan.key+' ('+n.plan.steps+' steps)':
+ $('npcPlan').textContent=n.project?
+  n.project.kind+' · '+n.project.status+' · '+
+  n.project.nodes.filter(x=>x.status==='DONE').length+'/'+n.project.nodes.length+
+  ' prerequisites · '+n.project.completedActions+' actions'+
+  (n.project.blockedReason?' · blocked: '+n.project.blockedReason:''):
+  n.plan?n.plan.key+' ('+n.plan.steps+' steps)':
   (n.agency?.goal?.key||'No active plan');
  const drives=Agency.drives(n);
  $('npcMotivations').textContent=Object.entries(drives).map(([k,v])=>

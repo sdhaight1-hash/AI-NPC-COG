@@ -218,6 +218,7 @@
    n.goal=action.replaceAll('_',' ')+' (self-chosen)';
   }
   root.Agency.begin(n,action,state.clock,source);
+  if(source==='project'&&n.project)n.goal='Pursuing '+n.project.goal;
   if(!resumed)root.WorldReceipts.accept(state,n,action,commandId,option.ref,source);
   if(action!=='none'&&source==='plan'&&n.plan)
    n.goal='Pursuing '+n.plan.key+' · '+action.replaceAll('_',' ');
@@ -250,7 +251,8 @@
    n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
   }
   root.Activities.progress(state,n);
-  const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId};
+  const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId,
+   source:n.source};
   const expected=n.task.reservationIds?.length||0;
   const outcome=root.WorldReceipts.execute(state,n,finished,()=>(
    root.Reservations.validCommand(state,finished.commandId,expected)?
@@ -260,6 +262,9 @@
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
+  if(finished.source==='project'||(n.project&&finished.source==='plan'&&
+    finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
+   root.Projects?.onOutcome(state,n,finished.key,outcome.ok);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
@@ -294,6 +299,18 @@
   if(!begin(state,n,result.option.key,'plan',null,hooks))
    finishPlan(state,n,'Subaction unavailable',hooks);
  }
+ function advanceProject(state,n,hooks={}){
+  if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
+  const result=root.Projects.next(state,n,available(state,n));
+  if(result.status!=='action')return false;
+  const ok=begin(state,n,result.action,'project',null,hooks);
+  if(!ok){
+   n.project.status='BLOCKED';
+   n.project.blockedReason='ACTION_START_REJECTED:'+result.action;
+   n.project.nextAt=state.clock+5;
+  }
+  return ok;
+ }
  function survival(state,n,hooks={}){
   if(n.peerPending||n.peerReservedFor)return false;
   // Avoid a full flood-fill every simulated minute when no reflex is possible.
@@ -325,9 +342,13 @@
   if(!state.auto||state.paused)return;
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
+   (!n.project||n.project.status==='COMPLETED')&&
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
+   if(root.Projects?.maybeStart(state,n)){
+    advanceProject(state,n,hooks);continue;
+   }
    const suspended=n.suspendedActivities?.at(-1);
    const canResume=suspended&&available(state,n).some(o=>o.key===suspended.key&&
     (o.ref??null)===suspended.ref);
@@ -337,7 +358,7 @@
   }
  }
  root.WorldRuntime={DURATION,stats,note,pathfind,reachability,available,moveTo,
-  approach,move,actionDuration,begin,complete,advancePlan,survival,scheduleOffline,
+  approach,move,actionDuration,begin,complete,advancePlan,advanceProject,survival,scheduleOffline,
   invalidateNavigation,
   finishPlan,remember,log};
 })(globalThis);

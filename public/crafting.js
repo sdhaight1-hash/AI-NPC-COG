@@ -3,6 +3,17 @@
 (function(root){
  'use strict';
  const RECIPES=Object.freeze({
+  shelter:{name:'Timber-and-thatch shelter',knowledge:'shelter',
+   inputs:{wood:4,fiber:3},stages:[
+    {name:'Survey and clear the building site',minutes:5},
+    {name:'Mark the footprint and foundation',minutes:6},
+    {name:'Prepare load-bearing posts',minutes:10},
+    {name:'Set and brace the frame',minutes:12},
+    {name:'Bind structural joints',minutes:10},
+    {name:'Build roof supports',minutes:12},
+    {name:'Lay and secure thatch',minutes:15},
+    {name:'Weatherproof and inspect the shelter',minutes:10}
+   ],output:{structure:'shelter'}},
   cord:{name:'Twisted plant cord',inputs:{fiber:3},stages:[
    {name:'Sort and prepare fibers',minutes:3},{name:'Twist and ply fibers',minutes:6},
    {name:'Bind and finish cord',minutes:3}],output:{kind:'cord',count:1}},
@@ -47,6 +58,7 @@
   }
   const work=Object.entries(RECIPES).flatMap(([id,spec])=>{
    if(!hasInputs(npc,spec)||npc.energy<18||
+    (spec.knowledge&&!npc.knowledge?.recipes?.includes(spec.knowledge))||
     (spec.tool&&(npc.inventory[spec.tool]||0)<1))return [];
    if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)return [];
    const station=spec.station?stationNear(npc,world,spec.station):null;
@@ -81,6 +93,7 @@
  function begin(npc,world,id,stationId=null){
   const spec=RECIPES[id];
   if(!spec||npc.workpiece||npc.energy<18||!hasInputs(npc,spec)||
+   (spec.knowledge&&!npc.knowledge?.recipes?.includes(spec.knowledge))||
    (spec.tool&&(npc.inventory[spec.tool]||0)<1))
    return {ok:false,message:'Manufacturing prerequisites are missing'};
   if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)
@@ -146,8 +159,8 @@
    (part.workmanship/spec.stages.length+part.materialQuality)/2)));
   const output=spec.output;
   if(output.structure){
-   world.structures.push({id:'workbench_'+(world.structures.length+1),
-    type:'workbench',x:npc.x,y:npc.y,craftQuality:quality,maker:npc.id});
+   world.structures.push({id:output.structure+'_'+(world.structures.length+1),
+    type:output.structure,x:npc.x,y:npc.y,craftQuality:quality,maker:npc.id});
   }else{
    npc.craftedItems ||= [];
    for(let i=0;i<output.count;i++)npc.craftedItems.push({
