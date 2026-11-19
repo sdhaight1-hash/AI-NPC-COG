@@ -506,6 +506,8 @@
   function regenerate(world,dt){
     // Gradual finite regeneration, never more than a node's starting capacity.
     for(const node of world.nodes){
+      // Ordinary seasonal weather does not create new geological stone.
+      if(node.kind==='stone'){node.regrow=0;continue;}
       if(node.stock>=node.max)continue;
       const season=world.weather?.season||'Spring';
       const growth=season==='Winter'?.08:season==='Autumn'?.50:
@@ -553,7 +555,7 @@
       if(old&&Number.isInteger(old.stock)&&old.stock>=0&&old.stock<=node.max){
         node.stock=old.stock;
         // A checkpoint must not discard partially accumulated resource growth.
-        node.regrow=Number.isFinite(old.regrow)&&
+        node.regrow=node.kind!=='stone'&&Number.isFinite(old.regrow)&&
           old.regrow>=0&&old.regrow<1?old.regrow:0;
       }
     }
