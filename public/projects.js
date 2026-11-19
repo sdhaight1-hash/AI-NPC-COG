@@ -155,15 +155,26 @@
  }
  function chooseKind(state,n){
   if(n.project||n.plan||n.task)return null;
-  if(isNear(state,n,'shelter'))return null;
   const trait=String(n.personality||'').toLowerCase();
-  // Temperament influences priority, never bypasses physical constraints.
-  if(/cautious|patient|pragmatic/.test(trait))return 'shelter';
-  if(/curious|adventurous|expressive/.test(trait)&&
-   !isNear(state,n,'campfire'))return 'campfire';
-  return 'shelter';
+  // Needs and temperament choose priority, not permission to bypass the world.
+  if(!isNear(state,n,'shelter')){
+   if(/curious|adventurous|expressive/.test(trait)&&
+    !isNear(state,n,'campfire'))return 'campfire';
+   return 'shelter';
+  }
+  if(!isNear(state,n,'campfire'))return 'campfire';
+  if(!isNear(state,n,'workbench'))return 'workbench';
+  if(!isNear(state,n,'crate'))return 'storage';
+  return null;
  }
  function maybeStart(state,n){
+  if(n.project?.status==='COMPLETED'){
+   (n.completedProjects ||= []).push({kind:n.project.kind,
+    startedAt:n.project.startedAt,finishedAt:state.clock,
+    actions:n.project.completedActions});
+   n.completedProjects=n.completedProjects.slice(-12);
+   n.project=null;
+  }
   const kind=chooseKind(state,n);
   return kind?create(state,n,kind):null;
  }
