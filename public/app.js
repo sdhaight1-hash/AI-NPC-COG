@@ -176,7 +176,8 @@ function scheduleIdleAgents(){
   // Offline world rules need no serialized model inference lane.
   for(const n of due){
    if(Projects.maybeStart(state,n)){
-    WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});continue;
+    WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
+    n.thoughtAt=state.clock+18;continue;
    }
    const success=setAction(n,fallbackBackground(n),'offline routine');
    n.thoughtAt=state.clock+(success?18:3);
