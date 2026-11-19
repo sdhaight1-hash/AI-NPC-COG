@@ -148,7 +148,9 @@ function sceneFor(npc){
  const diet=Biology.nutrition(npc.bio,state.clock);
  const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=15)
   .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
- return 'Small settlement, day '+state.day+' at '+timeString()+'. '+
+ const date=Frontier.calendar(state.clock);
+ return 'Small settlement, year '+date.year+', '+date.season+', month '+date.month+
+  ', day '+date.dayOfMonth+' (day '+date.totalDay+') at '+timeString()+'. '+
   npc.name+' is at ('+npc.x+','+npc.y+'). Personality: '+npc.personality+
   ' Physical needs: hunger '+Math.round(npc.needs.hunger)+'/100 (high is hungry), energy '+
   Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
@@ -804,7 +806,7 @@ function restore(){
  try{
   const data=JSON.parse(localStorage.getItem(STORE)||localStorage.getItem(LEGACY_STORE)||'null');if(!data)return;
   if(Number.isFinite(data.clock)&&data.clock>=0)state.clock=data.clock;
-  if(Number.isFinite(data.day))state.day=clamp(data.day,1,9999);
+  state.day=Frontier.calendar(state.clock).totalDay;
   AgentWorld.restoreWorld(state.world,data.world);
   if(data.player&&!isBlocked(data.player.x,data.player.y)){
    state.player.x=Math.round(data.player.x);state.player.y=Math.round(data.player.y);
@@ -907,7 +909,9 @@ function updateHUD(now){
  if(now<state.nextUI)return;
  state.nextUI=now+750;
  $('worldTime').textContent=timeString();
- $('worldDay').textContent='DAY '+String(state.day).padStart(2,'0');
+ const date=Frontier.calendar(state.clock);
+  $('worldDay').textContent=date.season.toUpperCase()+' · Y'+date.year+
+    ' M'+date.month+' D'+date.dayOfMonth+' · DAY '+date.totalDay;
  $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+' · '+
    state.world.weather.temperature+'°C';
  $('worldSeed').textContent=String(state.world.seed);
