@@ -52,3 +52,11 @@ body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),l
   max-width:66%;font-size:11px;line-height:1.45;text-align:right;
   overflow-wrap:anywhere;white-space:normal;
 }
+
+/* Physical world inspection: readable labels against the forest palette. */
+.object-inspector .object-content{padding:0 19px 18px;display:flex;flex-direction:column;gap:7px}
+.object-inspector #objectName{font:600 15px Georgia,serif;color:#f1d7a4}
+.object-inspector #objectDetail{margin:0;color:#e0e9d5;font-size:12px;line-height:1.55}
+.object-inspector #objectLocation{color:#9ebaa3;font:11px ui-monospace,Consolas,monospace}
+.world-status{background:#112019e8;border-color:#7d9978}
+#chatLog .memory{border-color:#c6a46d;color:#e2ebdb}
