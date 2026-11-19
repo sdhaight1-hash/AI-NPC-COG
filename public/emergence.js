@@ -8,7 +8,7 @@
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
-    'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
+    'craft_stage','make_workbench','place_crate','stash_wood','stash_stone','stash_fiber',
     'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink:'survival',
@@ -183,6 +183,9 @@
        (n.inventory.wood>=4||findNode(n,world,'wood',canReach))&&
        (n.inventory.fiber>=3||findNode(n,world,'fiber',canReach)))
       add('make_shelter','Form an intention to collect materials and construct a shelter');
+    if(!n.plan&&!n.workpiece&&n.energy>=20&&
+       !world.structures.some(site=>site.type==='workbench'&&distance(n,site)<5))
+      add('make_workbench','Commit to a primitive workbench: gather fiber, make cord, collect wood and stone, then build in stages');
     if(n.knowledge.recipes.includes('shelter')&&n.inventory.wood>=2&&
       n.inventory.fiber>=1&&n.energy>=20&&
       !world.structures.some(site=>site.type==='cache'&&distance(n,site)<3))
@@ -447,7 +450,7 @@
   }
   function validatePlan(saved){
     if(!saved || !['stock_food','stock_water','stock_wood','stock_stone','stock_fiber',
-      'make_campfire','make_shelter','craft_project'].includes(saved.key) ||
+      'make_campfire','make_shelter','make_workbench','craft_project'].includes(saved.key) ||
        !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>24)return null;
     return saved.key==='craft_project'?
       {key:saved.key,recipe:root.Crafting.getRecipe(saved.recipe)?saved.recipe:null,steps:saved.steps}:
