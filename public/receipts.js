@@ -21,6 +21,12 @@
    foodPantry:n.bio?.pantry?.length??0,hydrationMl:n.bio?.hydrationBudgetMl??0,
    nodes:Object.fromEntries(state.world.nodes.map(x=>[x.id,x.stock])),
    structures:asMap(state.world.structures),items:asMap(state.world.items),
+   observedCount:n.knowledge?.observations?.length||0,
+   learnedRecipes:[...(n.knowledge?.recipes||[])],visitedCount:n.visited?.length||0,
+   others:Object.fromEntries(state.npcs.filter(a=>a!==n).map(a=>[a.id,{
+    inventory:{...a.inventory},needs:{...a.needs},
+    foodPantry:a.bio?.pantry?.length||0,lastPeerAt:a.lastPeerAt??null
+   }])),
    workpiece:plain(n.workpiece),craftedItems:plain(n.craftedItems||[])
   };
  }
@@ -47,6 +53,22 @@
     {energy:after.energy,health:after.health,
      foodPantry:after.foodPantry,hydrationMl:after.hydrationMl})
   };
+  for(const id of [...new Set([...Object.keys(before.others),...Object.keys(after.others)])].sort()){
+   const a=before.others[id],b=after.others[id];
+   if(!a||!b)continue;
+   const inventory=nums(a.inventory,b.inventory),needs=nums(a.needs,b.needs);
+   const personal=nums({foodPantry:a.foodPantry,lastPeerAt:a.lastPeerAt||0},
+    {foodPantry:b.foodPantry,lastPeerAt:b.lastPeerAt||0});
+   if(inventory.length||needs.length||personal.length)
+    (delta.otherActors ||= []).push({actorId:id,inventory,needs,personal});
+  }
+  const knowledge={
+   observations:after.observedCount-before.observedCount,
+   visited:after.visitedCount-before.visitedCount,
+   learnedMethods:after.learnedRecipes.filter(x=>!before.learnedRecipes.includes(x))
+  };
+  if(knowledge.observations||knowledge.visited||knowledge.learnedMethods.length)
+   delta.knowledge=knowledge;
   if(Object.keys(collections).length)delta.collections=collections;
   if(JSON.stringify(before.workpiece)!==JSON.stringify(after.workpiece))
    delta.workpiece={before:before.workpiece,after:after.workpiece};
