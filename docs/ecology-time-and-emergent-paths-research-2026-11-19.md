@@ -99,11 +99,11 @@ We cannot claim per-frame 100-NPC real-world scalability from a passing 5-NPC so
 
 **What we should not do:** install large general ECS, try to simulate tectonic uplift per NPC tick, write a whole Rust engine port, add speculative 50-parameter personality model, or claim Earth-like biology. The high-confidence gain is an authoritative contract with tested boundaries, not system size.
 
-## Implementation checkpoint — stone and regrowth persistence (2026-11-19)
+## Implementation checkpoint — fractional regeneration persistence (2026-11-19)
 
-Tracked in [#72](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/72) and [PR #78](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/78). This is deliberately a **small** implementation slice, not a claim of globally conserved ecology:
+Tracked in [#72](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/72) and [PR #78](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/78).
 
-- `AgentWorld.regenerate` no longer grants stone back after extraction. Stone's nonrenewable mineral stock persists with no calendar-based growth. The current temporary woody biomass growth rate is still weather/season based and does **not** yet consume water or soil nutrients.
-- `AgentWorld.restoreWorld` restores a valid fractional regrowth accumulator of renewable resource nodes, rather than silently resetting partial progress on save/reload; legacy or invalid values normalize to zero.
-- Added test fixtures: nonrenewable depleted stone across a long interval, save/reload parity for fractional wood recovery, and malformed/legacy accumulator handling.
-- **Still outstanding:** explicit water mass reservoirs (the existing water-source precipitation refill is not conserved), plant species identity, photosynthesis/soil budgets, finite biomass ecology, and multi-seed survival balancing. Do not close #72 on this patch.
+- **Implemented:** `AgentWorld.restoreWorld` restores a valid per-source fractional `regrow` accumulator instead of resetting the saved progress. Invalid or legacy missing values normalize to zero. Tests cover all existing source kinds and wood yield parity across a save/restore boundary.
+- **Important observed regression during development:** an initial code attempt stopped stone regrowing immediately. The existing seven-day viability benchmark then reported **one founder dead of dehydration** (expected zero). The mineral change was **reverted**, not the benchmark; this proves that scarcity changes the existing agents' behavior and that resource-class conservation needs a coordinated survival/planning intervention.
+- **Not implemented:** nonrenewable mineral classification, finite water mass cycles, tree species/biomass and soil budgets. Today's bounded stock refill remains a temporary gameplay rule, explicitly not long-term conservation.
+- **Next gate:** separate diagnostic mortality traces for depleted minerals and new water-seeking policies, then rerun multi-seed survival before reintroducing a physical mineral budget. Keep #72 and #63 open.
