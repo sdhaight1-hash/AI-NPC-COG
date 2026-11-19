@@ -213,3 +213,32 @@ test('individual objects can be inspected, remembered, dropped and recovered',()
  n.task={key:'pickup_item',ref:dropped.id};
  assert.equal(A.complete(n,world,[n]).ok,false,'No duplicate pickups');
 });
+
+test('a learned material cache is constructed, stores finite wood, and survives restoration',()=>{
+ const {AgentWorld:A,Civilization:C}=modules(),w=A.newWorld();
+ const n=C.founders(w)[0];n.energy=95;
+ n.inventory.wood=6;n.inventory.fiber=4;
+ n.knowledge.recipes.push('shelter');
+ const startWood=n.inventory.wood,startFiber=n.inventory.fiber;
+ n.task={key:'build_cache',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ assert.equal(n.inventory.wood,startWood-2);
+ assert.equal(n.inventory.fiber,startFiber-1);
+ const cache=w.structures.find(site=>site.type==='cache');
+ assert.ok(cache);
+ assert.equal(cache.contents.wood,0);
+ n.task={key:'store_wood',ref:cache.id};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ assert.equal(cache.contents.wood,1);
+ assert.equal(n.inventory.wood,startWood-3);
+ const saved=A.newWorld(w.seed);
+ A.restoreWorld(saved,JSON.parse(JSON.stringify(w)));
+ assert.equal(saved.structures.find(site=>site.id===cache.id)?.contents.wood,1);
+ assert.match(A.describeObject(w,cache).description,/1\/12/);
+ n.task={key:'retrieve_wood',ref:cache.id};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ assert.equal(n.inventory.wood,startWood-2);
+ assert.equal(cache.contents.wood,0);
+ n.task={key:'retrieve_wood',ref:cache.id};
+ assert.equal(A.complete(n,w,[n]).ok,false,'Empty cache cannot yield more wood');
+});
