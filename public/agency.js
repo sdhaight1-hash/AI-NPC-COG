@@ -96,7 +96,7 @@
  function begin(n,action,clock,source='simulation'){
   if(action==='none'||action==='rest')return;
   const a=state(n);
-  if(source==='plan'&&a.goal)return; // Substeps should not replace the project.
+  if((source==='plan'||source==='project')&&a.goal)return; // Substeps should not replace the project.
   if(!a.goal||a.goal.key!==action){
    a.goal={key:action,startedAt:clock,source:String(source).slice(0,32),
     reason:category(action),progress:0};
