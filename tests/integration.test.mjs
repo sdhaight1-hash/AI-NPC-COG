@@ -155,3 +155,48 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   assert.equal(js.status, 200);
   assert.match(await js.text(), /function pathfind/);
 });
+
+test('Hivemind mode uses chat decisions, rejects Rein bias, and labels health', async t => {
+  const calls = [];
+  const model = createServer(async (req,res) => {
+    if(req.url==='/health'){res.writeHead(200);return res.end('{"status":"ok"}');}
+    let body=''; for await(const chunk of req)body+=chunk;
+    calls.push({path:req.url,payload:JSON.parse(body)});
+    res.writeHead(200,{'content-type':'application/json'});
+    res.end(JSON.stringify({choices:[{message:{content:calls.length===1?'none':'Hello!'}}]}));
+  });
+  model.listen(0,'127.0.0.1');await once(model,'listening');
+  t.after(() => new Promise(resolve => model.close(resolve)));
+  const oldBackend=process.env.MODEL_BACKEND,oldUrl=process.env.REIN_URL;
+  process.env.MODEL_BACKEND='hivemind';
+  process.env.REIN_URL='http://127.0.0.1:'+model.address().port;
+  const {startServer}=await import('../server.mjs?hivemind-test');
+  if(oldBackend===undefined)delete process.env.MODEL_BACKEND;
+  else process.env.MODEL_BACKEND=oldBackend;
+  if(oldUrl===undefined)delete process.env.REIN_URL;
+  else process.env.REIN_URL=oldUrl;
+  const app=startServer(0);await once(app,'listening');
+  t.after(() => new Promise(resolve => app.close(resolve)));
+  const origin='http://127.0.0.1:'+app.address().port;
+  const health=await(await fetch(origin+'/api/health')).json();
+  assert.equal(health.model,'hivemind');
+  const decisionResponse=await fetch(origin+'/api/decide',{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({persona:'Cautious settler',scene:'Winter in a shelter',
+      question:'What next?',options:[{key:'rest',when:'Recover'},{key:'none',when:'Wait'}]})
+  });
+  assert.equal(decisionResponse.status,200);
+  const decision=await decisionResponse.json();
+  assert.equal(decision.action,'none');assert.equal(decision.source,'hivemind');
+  assert.equal(decision.scores,null);
+  assert.equal(calls[0].path,'/v1/chat/completions');
+  assert.equal(calls[0].payload.temperature,0);
+  assert.ok(!JSON.stringify(calls[0].payload).includes('<|rein_'));
+  const speechResponse=await fetch(origin+'/api/speak',{
+    method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify({persona:'Cautious settler',scene:'Winter',message:'Hello',action:'none'})
+  });
+  assert.equal(speechResponse.status,200);
+  assert.equal((await speechResponse.json()).source,'hivemind');
+  assert.equal(calls[1].payload.logit_bias,undefined);
+});
