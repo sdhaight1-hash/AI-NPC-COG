@@ -129,6 +129,9 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   const frontier = await fetch(origin + '/frontier.js');
   assert.equal(frontier.status,200);
   assert.match(await frontier.text(),/root\.Frontier=/);
+  const biology = await fetch(origin + '/biology.js');
+  assert.equal(biology.status,200);
+  assert.match(await biology.text(),/root\.Biology=/);
   const emergence = await fetch(origin + '/emergence.js');
   assert.equal(emergence.status,200);
   assert.match(await emergence.text(), /root\.AgentWorld=/);
@@ -143,6 +146,8 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
     'The art renderer must load before app.js');
   assert.ok(htmlSource.indexOf('/frontier.js') < htmlSource.indexOf('/emergence.js'),
     'Wilderness generator must load before agent world rules');
+  assert.ok(htmlSource.indexOf('/biology.js') < htmlSource.indexOf('/emergence.js'),
+    'Biological state must initialize before world rules');
   assert.ok(htmlSource.indexOf('/emergence.js') < htmlSource.indexOf('/app.js'),
     'The world rules must load before app.js');
 
