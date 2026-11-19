@@ -133,7 +133,10 @@
    ...(n.knowledge?.observations||[]).map(o=>o.id),
    ...(n.agency?.beliefs||[]).map(o=>o.ref)
   ]);
-  const known=id=>visible.has(id)||witnessed.has(id);
+  // The actor can recall the existence of infrastructure they themselves
+  // constructed; this grants no knowledge of unobserved foreign structures.
+  const built=new Set(state.world.structures.filter(s=>s.maker===n.id).map(s=>s.id));
+  const known=id=>visible.has(id)||witnessed.has(id)||built.has(id);
   const visibleKinds=new Set(packet.objects.map(o=>o.kind));
   const rememberedKinds=new Set((n.agency?.beliefs||[])
    .filter(b=>b.status!=='failed').map(b=>b.kind));
