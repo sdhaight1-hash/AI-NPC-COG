@@ -59,7 +59,7 @@ function makeBrowser(options={}) {
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
   vm.runInNewContext(art+'\n'+physics+'\n'+frontier+'\n'+biology+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions,reachability};',context);
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions,reachability,sceneFor,Biology};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
 
@@ -616,4 +616,69 @@ test('connected-region flood fill agrees with pathfinder and rejects submerged c
  }
  assert.equal(reachable({x:-1,y:3}),false);
  assert.equal(reachable({x:999,y:999}),false);
+});
+
+test('actual foraging preserves the nutritional identity of biome food',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs[0];
+ const forestFood=browser.state.world.nodes.find(node=>node.kind==='food'&&
+   node.x>=40&&browser.state.world.terrain[node.y*80+node.x]==='forest');
+ assert.ok(forestFood,'World must have edible forest resources');
+ npc.x=forestFood.x;npc.y=forestFood.y;
+ const quantity=npc.inventory.food;
+ assert.equal(browser.setAction(npc,'forage','rein',null),true);
+ assert.equal(npc.inventory.food,quantity+2);
+ assert.equal(npc.bio.pantry.length,npc.inventory.food);
+ assert.equal(npc.bio.pantry.slice(-2).join(','),'nuts,nuts');
+ const before=npc.bio.intake.length;
+ assert.equal(browser.setAction(npc,'eat','rein',null),true);
+ assert.equal(npc.bio.intake.length,before+1);
+ assert.equal(npc.bio.pantry.length,npc.inventory.food);
+});
+
+test('biology is persisted per agent and player; legacy saves without it migrate',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs[0];
+ browser.Biology.addForaged(npc.bio,'nuts',1);
+ npc.inventory.food++;
+ browser.Biology.ingest(npc.bio,browser.state.clock);
+ npc.inventory.food--;
+ npc.bio.sleepDebt=61;
+ browser.state.player.bio.hormones.cortisol=65;
+ browser.save();
+ const reloaded=makeBrowser({saved:browser.saved});
+ assert.equal(reloaded.state.npcs[0].bio.sleepDebt,61);
+ assert.equal(reloaded.state.npcs[0].bio.intake.length,1);
+ assert.equal(reloaded.state.player.bio.hormones.cortisol,65);
+ const old=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
+ delete old.player.bio;
+ for(const entry of old.npcs)delete entry.bio;
+ browser.saved.set('ai-npc-cog-v2',JSON.stringify(old));
+ const migrated=makeBrowser({saved:browser.saved});
+ assert.equal(migrated.state.npcs[0].bio.pantry.length,migrated.state.npcs[0].inventory.food);
+ assert.ok(Number.isFinite(migrated.state.player.bio.hormones.ghrelin));
+});
+test('Rein receives subjective sensations but not raw hormone proxy numbers',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs[0];
+ npc.needs.thirst=91;npc.bio.hormones.cortisol=92;
+ const scene=browser.sceneFor(npc);
+ assert.match(scene,/Felt bodily state: very thirsty/);
+ assert.doesNotMatch(scene,/cortisol 92/);
+ assert.doesNotMatch(scene,/ghrelin [0-9]+/);
+ assert.doesNotMatch(scene,/another resident.*hormones/i);
+ assert.ok(browser.backgroundOptions(npc).length<=10);
+});
+test('fixed-tick biology consumes hydration and physical fuel in both NPCs and player',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const player=browser.state.player, npc=browser.state.npcs[0];
+ const before=[player.bio.hydrationBudgetMl,npc.bio.hydrationBudgetMl,
+   player.bio.glycogenKcal,npc.bio.glycogenKcal];
+ for(let i=0;i<90;i++)browser.step(1/60);
+ assert.ok(player.bio.hydrationBudgetMl<before[0]);
+ assert.ok(npc.bio.hydrationBudgetMl<before[1]);
+ assert.ok(player.bio.glycogenKcal<before[2]);
+ assert.ok(npc.bio.glycogenKcal<before[3]);
+ assert.ok(Object.values(npc.bio.hormones).every(x=>x>=0&&x<=100));
 });
