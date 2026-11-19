@@ -127,3 +127,13 @@ test('crafting knowledge is not granted by materials or skill automatically',()=
  assert.equal(A.complete(n,w,[n]).ok,true);
  assert.equal(n.inventory.hatchet,1);
 });
+
+test('several independent random worlds have habitable founder clusters and unique ids',()=>{
+ const {AgentWorld:A,Civilization:C,Frontier:F}=modules();
+ for(const seed of [1,2,3,17,43,117,2019,98765]){
+  const w=A.newWorld(seed),people=C.founders(w);
+  assert.equal(people.length,5,'seed '+seed);
+  assert.ok(people.every(p=>F.traversable(w,p.x,p.y)),'seed '+seed);
+  assert.equal(new Set(people.map(p=>p.x+':'+p.y)).size,5,'seed '+seed);
+ }
+});
