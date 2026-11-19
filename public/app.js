@@ -21,6 +21,8 @@ locations.garden={x:36,y:13};
 locations.bench={x:12,y:14};
 const trees=[[1,2],[12,3],[26,4],[38,4],[2,9],[12,9],[26,9],[38,10],[1,16],[12,18],[27,18],[38,16],[2,23],[13,23],[26,24],[38,24],[3,13],[36,24]];
 
+let installedAtlas=null;
+let showAtlas=true;
 const initialNPCs = [
  { id:'mara', name:'Mara', x:21,y:11, mood:79, energy:84, trust:56, color:'#e9aa85',
    personality:'Mara, 32. Warm, observant, protective of friends, quietly stubborn. Values honesty and dislikes gossip.' },
@@ -539,8 +541,10 @@ function loadTileset(){
  const image=new Image();
  image.onload=()=>{
   if(VillageArt.setAtlas(image)){
+   installedAtlas=image;
    staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
    drawStaticWorld();
+   $('artToggle').textContent='Art: CC0 Tiny Town';
    record('Kenney Tiny Town art atlas loaded (CC0)', 'routine');
   }
  };
@@ -839,6 +843,17 @@ function setZoom(next){
 }
 $('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
 $('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
+$('artToggle').addEventListener('click',()=>{
+ if(!installedAtlas){
+  record('Optional atlas not installed; original art remains active','routine');
+  return;
+ }
+ showAtlas=!showAtlas;
+ VillageArt.setAtlas(showAtlas?installedAtlas:null);
+ staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
+ drawStaticWorld();
+ $('artToggle').textContent=showAtlas?'Art: CC0 Tiny Town':'Art: Original';
+});
 $('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
 $('autoAI').addEventListener('change',event=>{state.auto=event.target.checked;record('Autonomous decisions '+(state.auto?'enabled':'disabled'));});
 for(const btn of document.querySelectorAll('[data-speed]')){
