@@ -101,6 +101,11 @@
   return append(state,{actorId:n.id,commandId:null,action,
    source:String(source).slice(0,32),status,reason,inferenceMs});
  }
+ function lifecycle(state,n,activity,status,reason=null){
+  if(!['INTERRUPTED','RESUMED'].includes(status))throw Error('Invalid lifecycle status');
+  return append(state,{actorId:n.id,commandId:activity.commandId,
+   action:activity.key,targetId:activity.ref,status,reason});
+ }
  function committed(state,commandId){
   return state.receipts?.find(r=>r.commandId===commandId&&
    (r.status==='COMPLETED'||r.status==='FAILED'))||null;
@@ -125,5 +130,5 @@
    delta});
   return {...outcome,receipt};
  }
- root.WorldReceipts={MAX,accept,decision,execute,snapshot,change,committed};
+ root.WorldReceipts={MAX,accept,decision,lifecycle,execute,snapshot,change,committed};
 })(globalThis);
