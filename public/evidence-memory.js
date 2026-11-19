@@ -94,6 +94,39 @@
   }
   return entry;
  }
+ // A committed conversation proves only that words were exchanged in person.
+ // Its contents remain reported claims, never witnessed world facts.
+ function fromDialogue(sim,speaker,listener,receipt,first,second){
+  const verified=receipt&&speaker&&sourceReceipt(sim,speaker,receipt.id);
+  if(!verified||verified.action!==receipt.action||
+   verified.targetId!==receipt.targetId||verified.clock!==receipt.clock)return null;
+  if(!speaker||!listener||speaker===listener||
+   !sim.npcs?.includes(speaker)||!sim.npcs?.includes(listener)||
+   !receipt||receipt.actorId!==speaker.id||receipt.targetId!==listener.id||
+   receipt.action!=='socialize'||receipt.status!=='COMPLETED'||
+   receipt.clock!==sim.clock||
+   !sourceReceipt(sim,speaker,receipt.id)||
+   typeof first!=='string'||typeof second!=='string'||
+   !first.trim()||!second.trim())return null;
+  const participants=[speaker,listener];
+  if(participants.some(n=>state(n).episodes.some(e=>
+   e.type==='interaction'&&e.receiptId===receipt.id)))return null;
+  const utterances=[{actorId:speaker.id,text:first.trim().slice(0,220)},
+   {actorId:listener.id,text:second.trim().slice(0,220)}];
+  return participants.map((n,i)=>{
+   const memory=state(n);
+   const entry={id:'ev_'+(++memory.sequence),type:'interaction',
+    text:('Spoke with '+participants[1-i].name+': '+
+     utterances.map(u=>u.actorId+': '+u.text).join('; ')).slice(0,180),
+    at:sim.clock,ref:participants[1-i].id,receiptId:receipt.id,
+    certainty:'reported',salience:3,
+    location:{x:n.x,y:n.y,z:n.z||0},
+    utterances:clone(utterances)};
+   memory.episodes.push(entry);
+   memory.episodes=memory.episodes.slice(-MAX_EPISODES);
+   return clone(entry);
+  });
+ }
  function recall(n,query,clock,limit=5){
   const items=state(n).episodes;
   if(!items.length)return [];
@@ -158,7 +191,12 @@
      certainty:e.certainty,salience:Math.max(1,Math.min(5,Number(e.salience)||2)),
      location:{x:Number.isInteger(e.location?.x)?e.location.x:n.x,
       y:Number.isInteger(e.location?.y)?e.location.y:n.y,
-      z:Number.isInteger(e.location?.z)?e.location.z:(n.z||0)}});
+      z:Number.isInteger(e.location?.z)?e.location.z:(n.z||0)},
+     ...(e.type==='interaction'&&Array.isArray(e.utterances)&&
+      e.utterances.length===2&&e.utterances.every(u=>
+       u&&typeof u.actorId==='string'&&typeof u.text==='string')?
+      {utterances:e.utterances.map(u=>({
+       actorId:u.actorId.slice(0,100),text:u.text.slice(0,220)}))}:{})});
    }
    result.sequence=Math.max(0,...result.episodes.map(e=>Number(e.id.slice(3))),
     Number.isSafeInteger(saved.sequence)?saved.sequence:0);
@@ -233,6 +271,6 @@
    remainingMinutes:n.currentActivity?
     Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
  }
- root.EvidenceMemory={state,record,fromReceipt,recall,consolidate,restore,working,belief,
+ root.EvidenceMemory={state,record,fromReceipt,fromDialogue,recall,consolidate,restore,working,belief,
   MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES};
 })(globalThis);
