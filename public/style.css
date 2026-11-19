@@ -46,3 +46,9 @@ body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),l
 .action-set button:hover:not(:disabled){background:#547448;border-color:#ddc48b}
 .action-set button:disabled{color:#819183;background:#1c2d26;border-color:#354c3c;cursor:not-allowed}
 .clock-group small#worldWeather{color:#c9dcad;letter-spacing:.1em;font-size:10px}
+
+/* Biological state inspector: debug-only normalized hormone proxies. */
+#bioSensation,#bioNutrition,#bioHormones{
+  max-width:66%;font-size:11px;line-height:1.45;text-align:right;
+  overflow-wrap:anywhere;white-space:normal;
+}
