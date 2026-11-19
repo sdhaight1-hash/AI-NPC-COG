@@ -381,7 +381,8 @@ test('activity diagnostics distinguish decisions, abstentions, accepted work and
  assert.equal(stats.started,2);
  b.step(2);
  assert.equal(stats.completed,1);
- assert.match(stats.last,/Completed/);
+ assert.ok(b.state.receipts.some(r=>r.action==='drink'&&r.status==='COMPLETED'&&
+  r.actorId===n.id),'A subsequent plan step may already have started');
 });
 test('per-NPC activity diagnostics persist safely across save reloads',()=>{
  const saved=new Map(),b=makeBrowser({saved}),n=b.state.npcs[0];
