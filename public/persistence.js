@@ -24,7 +24,9 @@
    dead:state.dead,world:state.world,events:state.events,
    selected:state.selected,viewZ:state.viewZ,
    commandSeq:state.commandSeq||0,receiptSeq:state.receiptSeq||0,
-   effectRevision:state.effectRevision||0,receipts:(state.receipts||[]).slice(-4096)};
+   effectRevision:state.effectRevision||0,receipts:(state.receipts||[]).slice(-4096),
+   reservationSeq:state.reservationSeq||0,
+   reservations:(state.reservations||[]).filter(x=>x.status==='ACTIVE').slice(-5000)};
  }
 
 function restore(state,saved){
@@ -107,6 +109,9 @@ function restore(state,saved){
    if(AgentWorld.KEYS.includes(old.task?.key)&&
      (old.task.ref===null||typeof old.task.ref==='string')){
     n.task={key:old.task.key,ref:old.task.ref,
+     reservationIds:Array.isArray(old.task.reservationIds)?
+      old.task.reservationIds.filter(x=>typeof x==='string'&&
+       /^res_[1-9]\d*$/.test(x)).slice(0,40):[],
      commandId:typeof old.task.commandId==='string'&&/^cmd_[1-9]\d*$/.test(old.task.commandId)?old.task.commandId:null,
      readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
    }
@@ -129,6 +134,7 @@ function restore(state,saved){
     old.thoughtAt:state.clock+3+state.npcs.length*2;
    state.npcs.push(n);
   }
+  root.Reservations.restore(state,saved);
   state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
   const maxId=Math.max(5,...state.npcs.map(n=>Number(n.id.slice(7))),
    ...state.dead.filter(v=>/^person_[1-9]\d*$/.test(v.id))
