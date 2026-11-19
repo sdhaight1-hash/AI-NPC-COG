@@ -70,7 +70,8 @@ test('stone knapping, cord and hafting form a nonduplicating dependency chain',(
 });
 test('workbench is a physical prerequisite for producing planks and crates',()=>{
  const {world,npc,C}=setup();
- npc.inventory.wood=9;npc.inventory.stone=1;npc.inventory.fiber=3;
+ npc.inventory.wood=9;npc.inventory.stone=1;npc.inventory.fiber=6;
+ assert.equal(C.begin(npc,world,'cord').ok,true);finishRemaining(C,npc,world);
  assert.equal(C.begin(npc,world,'cord').ok,true);finishRemaining(C,npc,world);
  assert.equal(C.begin(npc,world,'workbench').ok,true);finishRemaining(C,npc,world);
  const bench=world.structures.find(x=>x.type==='workbench');
