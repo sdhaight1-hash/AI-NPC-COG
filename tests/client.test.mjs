@@ -363,7 +363,6 @@ test('critical thirst interrupts a crafting stage but keeps its committed workpi
  b.step(2);
  assert.equal(n.inventory.water,1,'Real hydration consumes a carried water unit');
  assert.equal(n.needs.thirst<96,true);
- b.state.auto=true;
  for(let i=0;i<80;i++)b.step(1);
  assert.equal(n.inventory.cord,1,'The paused workpiece must eventually finish');
  assert.equal(n.workpiece,null);
