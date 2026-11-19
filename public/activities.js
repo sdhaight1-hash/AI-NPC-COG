@@ -74,6 +74,21 @@
   // Completed/interrupted work has an explicit empty active slot in saves.
   // Preserve its shape across a checkpoint for canonical replay equality.
   n.currentActivity=null;
+  if(source?.lastActivity&&typeof source.lastActivity.id==='string'&&
+   /^act_cmd_[1-9]\d*$/.test(source.lastActivity.id)&&
+   typeof source.lastActivity.key==='string'&&
+   root.AgentWorld.KEYS.includes(source.lastActivity.key)&&
+   ['COMPLETED','CANCELLED'].includes(source.lastActivity.state)&&
+   Number.isFinite(source.lastActivity.workRequired)&&
+   source.lastActivity.workRequired>0&&source.lastActivity.workRequired<=1440&&
+   Number.isFinite(source.lastActivity.workDone)&&
+   source.lastActivity.workDone>=0&&
+   source.lastActivity.workDone<=source.lastActivity.workRequired)
+   n.lastActivity={id:source.lastActivity.id,key:source.lastActivity.key,
+    state:source.lastActivity.state,workDone:source.lastActivity.workDone,
+    workRequired:source.lastActivity.workRequired,
+    reason:typeof source.lastActivity.reason==='string'?
+     source.lastActivity.reason.slice(0,48):null};
   const copy=a=>({
    id:'act_'+a.commandId,commandId:a.commandId,key:a.key,
    ref:typeof a.ref==='string'?a.ref:null,state:a.state,
