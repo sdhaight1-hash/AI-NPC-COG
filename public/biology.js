@@ -161,6 +161,14 @@ function advance(body,dt,context={}){
  return {energyShortfallKcal:expenditure,hydration:body.hydrationBudgetMl,
    sleepDebt:body.sleepDebt,stress:body.stress};
 }
+function appetiteDrive(body){
+ const h=body?.hormones;
+ if(!h)return 50;
+ // Opposing signals influence game hunger pressure. No serum concentration or
+ // clinical appetite predictions are inferred from these simplified indices.
+ return clamp(12+h.ghrelin*.65+(100-h.leptin)*.22+
+   h.cortisol*.10-h.insulin*.12);
+}
 function sensation(body,needs){
  if(!body)return 'No physiological data';
  const sensations=[];
@@ -203,5 +211,5 @@ function restore(saved,foodCount=1){
  return body;
 }
 root.Biology={FOOD,TARGET,create,foodForBiome,countFood,addForaged,
- transferFood,ingest,drink,nutrition,advance,sensation,restore};
+ transferFood,ingest,drink,nutrition,advance,appetiteDrive,sensation,restore};
 })(globalThis);
