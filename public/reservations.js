@@ -46,7 +46,8 @@
    const skills=n.skills?.gathering||0;
    const quality=n.craftedItems?.find(x=>x.kind==='hatchet')?.quality||2;
    const axe=n.inventory.hatchet&&kind==='wood'?(quality>=4?2:1):0;
-   const intended=Math.min(target.stock,2+Math.min(2,Math.floor(skills/3))+axe);
+   const intended=Math.min(target.stock,2+Math.min(2,Math.floor(skills/3))+axe,
+    root.AgentWorld?.roomFor(n,kind)??1000);
    return intended>0?[node(kind,intended)]:[];
   }
   const recipe=action.startsWith('craft_')?
@@ -63,13 +64,19 @@
   if(action==='eat'||action==='share_food')return [npc('food',1)];
   if(action==='drink')return [npc('water',1)];
   if(action==='place_crate')return [npc('crate',1)];
-  if(action==='drop_wood'||action==='store_wood')return [npc('wood',1)];
+  if(action==='store_wood')return [npc('wood',1)];
+  const drop=/^drop_(wood|stone|fiber)$/.exec(action);
+  if(drop)return [npc(drop[1],1)];
   const stash=/^stash_(wood|stone|fiber)$/.exec(action);
   if(stash)return [npc(stash[1],1)];
   const withdraw=/^withdraw_(wood|stone|fiber)$/.exec(action);
   if(withdraw)return [site(withdraw[1],1)];
   if(action==='retrieve_wood')return [site('wood',1)];
-  if(action==='pickup_item')return [{type:'item',id:ref,kind:'wood',quantity:1}];
+  if(action==='pickup_item'){
+   const item=state.world.items.find(x=>x.id===ref&&
+    ['wood','stone','fiber'].includes(x.kind));
+   return item?[{type:'item',id:ref,kind:item.kind,quantity:1}]:[];
+  }
   return [];
  }
  function claim(state,actorId,commandId,specs,ttl=180){
