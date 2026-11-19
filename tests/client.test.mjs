@@ -73,6 +73,10 @@ test('cached static map is painted once, while dynamic frames reuse it',()=>{
 
 test('held WASD moves continuously rather than resetting movement paths',()=>{
   const browser=makeBrowser();
+  // Physical NPC collisions are real: start in the unobstructed lane instead of
+  // running directly into Mara, who begins immediately north of the player.
+  browser.state.player.x=23;browser.state.player.y=12;
+  browser.state.player.body.x=23.5;browser.state.player.body.y=12.5;
   browser.events.get('window:keydown')({key:'w',preventDefault(){}});
   for(let i=0;i<5;i++)browser.step(0.2);
   assert.ok(browser.state.player.y < 11,
