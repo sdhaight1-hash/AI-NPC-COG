@@ -1,3 +1,24 @@
+## Optional NPC model selection (one GGUF at a time)
+
+**Rein-NPC-4B remains the default.** Double-click `start.bat` to run Rein.
+For Hivemind, place the GGUF named
+`Qwen3-4B-Hivemind-Inst-Hrtic-Ablit-Uncensored-Q4_K_M-imat.gguf`
+in the `Model` directory and double-click `start-hivemind.bat`.
+Close both running server windows before switching models. Only **one** GGUF
+is loaded at a time; changing models does not reset saved world progress.
+
+The `MODEL_BACKEND=rein|hivemind` setting selects the inference adapter.
+Rein retains the original 64-token action scoring. Hivemind uses deterministic
+chat-based action selection with strict legal-action validation, without
+invented probability estimates. Both use the same world simulation, memory,
+dialogue and foreground-priority inference lane. The UI labels the active model.
+
+Hivemind remains experimental: it is not benchmarked against Rein on our NPC
+decisions, and the launchers assume the specified filenames. The installer
+still supports the original Rein setup workflow.
+
+---
+
 # AI-NPC-COG — a living 2D NPC sandbox
 
 An experimental, local-first 2D village for testing autonomous NPC behavior with **Rein-NPC-4B-Q4_K_M.gguf**. The 2D renderer and simulation keep moving even during local model inference. Every decision is observable, labeled, and constrained by the world engine.
