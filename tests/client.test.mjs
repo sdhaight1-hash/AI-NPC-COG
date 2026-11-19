@@ -68,8 +68,8 @@ test('cached static map is painted once, while dynamic frames reuse it',()=>{
   assert.ok(before>100,'Map should be initialized');
   browser.drawWorld();browser.drawWorld();
   assert.equal(browser.counters.staticRects,before,'Static tiles should not be redrawn each frame');
-  assert.equal(browser.counters.screenImages,16,
-    'Each frame draws one cached map and seven pixel-art residents');
+  assert.equal(browser.counters.screenImages,18,
+    'Each frame draws one cached map, seven residents and the fog overlay');
 });
 
 test('held WASD moves continuously rather than resetting movement paths',()=>{
