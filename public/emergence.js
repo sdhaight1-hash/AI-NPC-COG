@@ -226,7 +226,8 @@
       const result=root.Crafting.interact(n,world,task.key,task.ref);
       if(!result.ok)return result;
       message=result.message;
-    }else if(task.key==='craft_stage'||root.Crafting.getRecipe(task.key.slice(6))){
+    }else if(task.key==='craft_stage'||(task.key.startsWith('craft_')&&
+      root.Crafting.getRecipe(task.key.slice(6)))){
       let outcome;
       if(task.key==='craft_stage'){
         outcome=root.Crafting.advance(n,world);
