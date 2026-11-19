@@ -4,6 +4,8 @@
 
 **Current research update:** [2026-11-19 code-grounded cognitive audit](embodied-cognition-research-agenda-2026-11-19.md) and [follow-up implementation/paper investigation](cognitive-executive-followup-research-2026-11-19.md). The November 18 code references in this document are historical; check current `main` before implementing a ticket.
 
+**Additional evidence (2026-11-19):** [Intention governance, curiosity and cooperation research](agent-autonomy-deep-investigation-2026-11-19.md), [causal evaluation gates](agent-autonomy-benchmark-contract-2026-11-19.md). These are research designs, not completed features.
+
 ## Baseline and scope rule
 
 The November 18 snapshot has these sources: `public/app.js` for simulation loop, movement, decision HTTP calls and save v3; `public/emergence.js` for legal actions and hard-coded goals; `public/crafting.js` for finite multi-stage workpieces; `public/biology.js` and `public/civilization.js` for physiology and death; `public/agency.js` for utilities/goals/beliefs; `public/cognition.js` for episodic memory/instinct. Keep adapters surgical; don't port the game, replace functioning crafting or add LLM-per-tick calls.
