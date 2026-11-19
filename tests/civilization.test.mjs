@@ -180,3 +180,36 @@ test('aging and monthly arrivals use the same compact calendar',()=>{
  const n=state.npcs[0],start=C.age(n,490);
  assert.ok(Math.abs(C.age(n,490+C.YEAR_MINUTES)-start-1)<1e-10);
 });
+
+test('individual objects can be inspected, remembered, dropped and recovered',()=>{
+ const {AgentWorld:A,Civilization:C}=modules(),world=A.newWorld();
+ const n=C.founders(world)[0];n.energy=95;
+ const option=A.available(n,world,[n],()=>true).find(o=>o.key==='inspect');
+ assert.ok(option,'A reachable nearby object should be inspectable');
+ const target=A.objectById(world,option.ref);
+ n.x=target.x;n.y=target.y;
+ n.task={key:'inspect',ref:target.id};
+ assert.equal(A.complete(n,world,[n]).ok,true);
+ assert.equal(n.knowledge.observations.length,1);
+ assert.equal(n.knowledge.observations[0].id,target.id);
+ assert.match(n.knowledge.observations[0].text,/units|constructed|ground/);
+ assert.notEqual(A.available(n,world,[n],()=>true).find(o=>o.key==='inspect')?.ref,target.id,
+  'Previously inspected object must not be the next novel discovery');
+ n.inventory.wood=5;
+ n.task={key:'drop_wood',ref:null};
+ assert.equal(A.complete(n,world,[n]).ok,true);
+ assert.equal(n.inventory.wood,4);
+ assert.equal(world.items.length,1);
+ const dropped=world.items[0];
+ assert.equal(A.describeObject(world,dropped).condition,'on ground');
+ const copy=A.newWorld(world.seed);
+ A.restoreWorld(copy,JSON.parse(JSON.stringify(world)));
+ assert.equal(copy.items.length,1);
+ assert.equal(copy.items[0].id,dropped.id);
+ n.task={key:'pickup_item',ref:dropped.id};
+ assert.equal(A.complete(n,world,[n]).ok,true);
+ assert.equal(world.items.length,0);
+ assert.equal(n.inventory.wood,5);
+ n.task={key:'pickup_item',ref:dropped.id};
+ assert.equal(A.complete(n,world,[n]).ok,false,'No duplicate pickups');
+});
