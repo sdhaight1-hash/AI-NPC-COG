@@ -175,3 +175,12 @@ First run code-only trait counterfactual fixtures, then add LLM deliberation. If
 - **Added test:** three delayed-response fixtures in `tests/client.test.mjs` cover depleted source target, new critical thirst while model pending, and irrelevant distant mutations.
 - **Not implemented:** a persisted cue inbox, actor-wide preference/trait model, long-horizon intention-governance state machine or a different Rein planning protocol. Those remain separate #73 / G5 research gates.
 - **Validation:** see [PR #77](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/77) for tested state and merge status.
+
+## Implementation checkpoint — G5.2 first social-trait slice (2026-11-19)
+
+[Issue #81](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/81) and [PR #82](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/82) add a deliberately small model-free distinction:
+
+- A person is created with stable seeded `traits.socialApproach` and `traits.solitudePreference` on [0,1], independently of adjective prose. V3 saves retain validated overrides; old/malformed trait saves use seed-derived defaults, preserving independent individual identities.
+- `AgentWorld.stepNeeds` varies only the rate of `needs.social` accumulation based on those two personal traits. A strongly solitary person accumulates unmet contact desire slowly but is **never mathematically unable** to form an attachment or seek help. Bodily food/water/energy survival and other world authority remain unchanged.
+- A counterfactual headless test starts two NPC clones with identical physical and social states except their trait vectors and verifies divergent social pressure after equal simulated minutes, and independently asserts hydration is identical.
+- **Still research/planned**: explicit social fatigue, valuable particular relationships, learning preferences, affection/attachment, experience-driven temperament changes, sustained goal commitments, a cue inbox, and fully autonomous social decision/governance. The numeric traits are gameplay parameters, not validated clinical psychology.
