@@ -246,3 +246,35 @@ test('urgent reflexes cannot interrupt an existing NPC task',()=>{
  b.scheduleIdleAgents();
  assert.equal(n.task,task);
 });
+
+test('socially motivated residents approach each other and complete model-generated dialogue',async()=>{
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/peer-exchange'?
+  {first:'I found fresh water near the marsh.',second:'We should collect some.',durationMs:8}:
+  {connected:true,model:'rein',modelLabel:'Rein-NPC-4B'}})});
+ const [a,other]=b.state.npcs;
+ b.state.connected=true;
+ for(const n of b.state.npcs){
+  n.thoughtAt=b.state.clock+100;n.needs.social=5;
+  n.task=null;n.plan=null;n.path=[];n.action='none';
+ }
+ a.needs.social=90;a.thoughtAt=b.state.clock;
+ other.x=a.x;other.y=a.y;other.z=a.z;
+ b.scheduleIdleAgents();
+ assert.equal(a.task?.key,'socialize','An urgent social desire should initiate a real meeting');
+ assert.equal(other.peerReservedFor,a.id,'Conversation partner must remain available');
+ b.step(4);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(a.peerLog.length,1,'Both replies were required to complete conversation');
+ assert.equal(other.peerLog.length,1);
+ assert.match(a.peerLog[0].first,/fresh water/);
+ assert.equal(a.task,null);
+ assert.equal(other.peerReservedFor,undefined);
+ assert.ok(a.needs.social<90);
+});
+test('AI context contains inspected object details without sharing them telepathically',()=>{
+ const b=makeBrowser(),[a,other]=b.state.npcs;
+ a.knowledge.observations.push({id:'observation',kind:'stone',at:b.state.clock,
+  text:'An unusual rock formation found by my own eyes'});
+ assert.match(b.sceneFor(a),/unusual rock formation/);
+ assert.doesNotMatch(b.sceneFor(other),/unusual rock formation/);
+});
