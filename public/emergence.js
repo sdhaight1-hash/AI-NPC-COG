@@ -8,7 +8,8 @@
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
-    'craft_stage','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
+    'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
+    'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
@@ -62,6 +63,12 @@
           ' ('+object.stock+'/'+object.max+' units); habitat '+
           Frontier.terrainAt(world,object.x,object.y)};
     }
+    if(object.type==='crate')
+      return {id:object.id,name:'Wooden storage crate',kind:'crate',
+       x:object.x,y:object.y,condition:'constructed',
+       description:'Quality '+object.craftQuality+'/5 storage crate by '+
+        (object.maker||'unknown')+'; '+Object.entries(object.contents||{})
+         .map(([k,v])=>k+': '+v).join(', ')+'; capacity '+object.capacity};
     if(object.type==='workbench')
       return {id:object.id,name:'Woodworking bench',kind:'workbench',
         x:object.x,y:object.y,condition:'constructed',
@@ -206,7 +213,11 @@
       return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
-    if(task.key==='craft_stage'||root.Crafting.getRecipe(task.key.slice(6))){
+    if(task.key==='place_crate'||/^(stash|withdraw)_(wood|stone|fiber)$/.test(task.key)){
+      const result=root.Crafting.interact(n,world,task.key,task.ref);
+      if(!result.ok)return result;
+      message=result.message;
+    }else if(task.key==='craft_stage'||root.Crafting.getRecipe(task.key.slice(6))){
       let outcome;
       if(task.key==='craft_stage'){
         outcome=root.Crafting.advance(n,world);
@@ -222,8 +233,11 @@
       if(!node||node.stock<1||distance(n,node)>1)return {ok:false,message:'Resource no longer available'};
       // Repeated practice gradually improves output; expertise is earned, never assigned.
       const expertise=n.skills[skillNames[task.key]]||0;
+      const hatchetQuality=n.craftedItems?.find(item=>item.kind==='hatchet')?.quality||2;
+      const axeBonus=n.inventory.hatchet&&task.key==='collect_wood'?
+       (hatchetQuality>=4?2:1):0;
       const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3))+
-        (n.inventory.hatchet&&task.key==='collect_wood'?1:0));
+        axeBonus);
       // Do not commit a food harvest unless both inventory and nutrition
       // bookkeeping can accept all gathered portions.
       if(node.kind==='food'){
@@ -502,7 +516,7 @@
         node.stock=old.stock;
       }
     }
-    target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache','workbench'].includes(s.type)&&
+    target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache','workbench','crate'].includes(s.type)&&
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
       s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'
     ).slice(0,80).map((v,i)=>({
@@ -510,7 +524,25 @@
         v.id:v.type+'_'+(i+1),
       type:v.type,x:v.x,y:v.y,
       ...(v.type==='workbench'?{craftQuality:Number.isInteger(v.craftQuality)?
-       Math.max(1,Math.min(5,v.craftQuality)):1}:{}),
+       Math.max(1,Math.min(5,v.craftQuality)):1,maker:String(v.maker||'').slice(0,64)}:{}),
+      ...(v.type==='crate'?{
+       craftQuality:Number.isInteger(v.craftQuality)?
+        Math.max(1,Math.min(5,v.craftQuality)):1,
+       maker:String(v.maker||'').slice(0,64),
+       capacity:8+(Number.isInteger(v.craftQuality)?
+        Math.max(1,Math.min(5,v.craftQuality)):1)*4,
+       contents:(()=>{
+        const quality=Number.isInteger(v.craftQuality)?
+         Math.max(1,Math.min(5,v.craftQuality)):1;
+        const capacity=8+quality*4,contents={wood:0,stone:0,fiber:0};
+        let remaining=capacity;
+        for(const kind of Object.keys(contents)){
+         const count=Number.isInteger(v.contents?.[kind])?
+          Math.max(0,Math.min(v.contents[kind],remaining)):0;
+         contents[kind]=count;remaining-=count;
+        }
+        return contents;
+       })()}:{}),
       ...(v.type==='cache'?{contents:{wood:Number.isInteger(v.contents?.wood)?
         Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
     }));
