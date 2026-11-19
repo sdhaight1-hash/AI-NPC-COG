@@ -510,6 +510,15 @@
         rect(ctx,'#d9bd82',x+7,y+10,2,3);
         continue;
       }
+      if(site.type==='cache'){
+        rect(ctx,'#302d25',x+1,y+11,15,4);
+        rect(ctx,'#7e6039',x+2,y+6,13,8);
+        rect(ctx,'#c79a59',x+3,y+6,11,3);
+        rect(ctx,'#4c3927',x+5,y+9,2,4);
+        rect(ctx,'#4c3927',x+11,y+9,2,4);
+        if(site.contents?.wood>0)rect(ctx,'#d7c48e',x+7,y+8,4,2);
+        continue;
+      }
       if(site.type!=='campfire')continue;
       rect(ctx,'#42463f',x+1,y+11,14,3);
       rect(ctx,'#b4a18a',x+3,y+9,11,3);
