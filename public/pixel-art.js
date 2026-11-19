@@ -24,6 +24,7 @@
   const sprites = new Map();
   let tinyTownAtlas=null;
   function setAtlas(image){
+    if(image===null){tinyTownAtlas=null;return true;}
     if(!image || image.width!==192 || image.height!==176) return false;
     tinyTownAtlas=image;
     return true;
