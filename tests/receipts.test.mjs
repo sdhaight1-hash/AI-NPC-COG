@@ -138,3 +138,41 @@ test('non-physical model choices and inference duration survive checkpoint witho
  assert.equal(other.receipts[1].reason,'Invalid option');
  assert.equal(other.receipts[1].commandId,null);
 });
+
+test('truncated receipt history cannot authorize a completed task to mutate again',()=>{
+ const c=load(),s=c.Simulation.initial(379210);s.auto=false;
+ const n=s.npcs[0],water=s.world.nodes.find(x=>x.kind==='water'&&x.stock>4);
+ n.x=water.x;n.y=water.y;n.z=0;n.path=[];
+ assert.equal(c.WorldRuntime.begin(s,n,'fill_water'),true);
+ const old={...n.task};
+ c.Simulation.advance(s,2);
+ const inventory=n.inventory.water,stock=water.stock;
+ for(let i=0;i<c.WorldReceipts.MAX+5;i++)
+  c.WorldReceipts.decision(s,n,'none','test');
+ assert.equal(s.receipts.some(r=>r.commandId===old.commandId),false,
+  'Deliberately evict the old physical receipt');
+ let called=false;
+ const result=c.WorldReceipts.execute(s,n,old,()=>{
+  called=true;water.stock--;n.inventory.water++;return {ok:true};
+ });
+ assert.equal(result.duplicate,true);
+ assert.equal(called,false,'No stale callback may run after the log rolls over');
+ assert.equal(water.stock,stock);
+ assert.equal(n.inventory.water,inventory);
+});
+
+test('a valid still-running command can finish despite an evicted ACCEPTED receipt',()=>{
+ const c=load(),s=c.Simulation.initial(379210);s.auto=false;
+ const n=s.npcs[0],water=s.world.nodes.find(x=>x.kind==='water'&&x.stock>3);
+ n.x=water.x;n.y=water.y;n.z=0;n.path=[];
+ assert.equal(c.WorldRuntime.begin(s,n,'fill_water'),true);
+ const id=n.task.commandId;
+ for(let i=0;i<c.WorldReceipts.MAX+5;i++)
+  c.WorldReceipts.decision(s,n,'none','test');
+ assert.equal(s.receipts.some(r=>r.commandId===id),false);
+ const stock=water.stock,inventory=n.inventory.water;
+ c.Simulation.advance(s,2);
+ assert.equal(water.stock<stock,true);
+ assert.equal(n.inventory.water>inventory,true);
+ assert.ok(s.receipts.some(r=>r.commandId===id&&r.status==='COMPLETED'));
+});
