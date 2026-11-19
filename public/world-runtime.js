@@ -166,6 +166,19 @@
     a.workpieceStage===n.workpiece?.stage))):null;
   const commandId=resumeCandidate?.commandId||
    'cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
+  // A crate withdrawal claims existing stock before travel or timed work.
+  // Two actors must not independently promise the same finite units.
+  if(action.startsWith('withdraw_')&&root.Reservations){
+   const kind=action.slice('withdraw_'.length);
+   const reservation=root.Reservations.reserve(state,{
+    actorId:n.id,commandId,sourceId:option.ref,kind,quantity:1,
+    expiresAt:state.clock+60
+   });
+   if(!reservation.ok){
+    stats(n).rejected++;note(n,'Withdrawal blocked: '+reservation.reason);
+    return false;
+   }
+  }
   if(GOALS.has(action)){
    if(n.plan)return false;
    n.plan={key:action,steps:0,commandId};n.nextPlanAt=state.clock;
@@ -184,6 +197,7 @@
      stats(n).rejected++;note(n,'No reachable path for '+action);
      remember(state,n,'Failed to reach a destination for '+action,
       {kind:'failure',action,ref:option.ref,salience:3});
+     root.Reservations?.release(state,commandId);
      return false;
     }
    }
@@ -231,8 +245,15 @@
   }
   root.Activities.progress(state,n);
   const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId};
-  const outcome=root.WorldReceipts.execute(state,n,finished,()=>
-   root.AgentWorld.complete(n,state.world,state.npcs));
+  const outcome=root.WorldReceipts.execute(state,n,finished,()=>{
+   if(finished.key.startsWith('withdraw_')&&root.Reservations){
+    const haul=root.Reservations.collect(state,finished.commandId);
+    return haul.ok?{ok:true,message:'Retrieved one '+haul.kind+
+     ' from reserved crate stock'}:{ok:false,message:'Haul blocked: '+haul.reason};
+   }
+   return root.AgentWorld.complete(n,state.world,state.npcs);
+  });
+  if(!outcome.ok)root.Reservations?.release(state,finished.commandId);
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
