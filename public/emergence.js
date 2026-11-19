@@ -296,7 +296,7 @@
     n.energy=clamp(n.energy-dt*(.045+
       (n.bio.sleepDebt>70?.024:0)+(n.bio.stress>70?.015:0)+
       (phys?.energyShortfallKcal>0?.1:0)));
-    if((world.weather?.kind==='storm'||world.weather?.kind==='rain')&&!sheltered)
+    if(['storm','rain','snow'].includes(world.weather?.kind)&&!sheltered)
       n.energy=clamp(n.energy-dt*.055);
     if(n.action==='rest'){
       // Nutrition influences recovery only modestly; an early-game unbalanced
@@ -316,8 +316,14 @@
     // Gradual finite regeneration, never more than a node's starting capacity.
     for(const node of world.nodes){
       if(node.stock>=node.max)continue;
-      node.regrow=(node.regrow||0)+dt*(node.kind==='water'?.027:
-        node.kind==='food'?.018:node.kind==='fiber'?.012:.008);
+      const season=world.weather?.season||'Spring';
+      const growth=season==='Winter'?.08:season==='Autumn'?.50:
+        season==='Summer'?1.25:1;
+      const precipitation=['rain','storm','snow'].includes(world.weather?.kind);
+      const rate=node.kind==='water'?.027*(precipitation?1.5:.8):
+        node.kind==='food'?.018*growth:
+        node.kind==='fiber'?.012*growth:.008;
+      node.regrow=(node.regrow||0)+dt*rate;
       while(node.regrow>=1&&node.stock<node.max){node.stock++;node.regrow--;}
     }
   }
