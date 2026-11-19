@@ -82,3 +82,25 @@ test('identical snapshots are deterministic and reference-isolated',()=>{
  assert.equal(other.bodily.thirst,92);
  assert.equal(first.bodily.thirst,30);
 });
+
+test('model options cannot disclose obscured source stocks or hidden targets',()=>{
+ const {P,state,a,world}=setup();
+ world.nodes.push({id:'deposit_hidden',x:7,y:5,z:0,
+  kind:'wood',stock:17,max:20});
+ world.edits['6:5:0']='wall';
+ const options=[
+  {key:'collect_wood',ref:'deposit_hidden',
+   when:'Collect wood from a visible source (17 remaining, 2 tiles away)'},
+  {key:'none',ref:null,when:'Observe surroundings'}
+ ];
+ const hidden=P.filterAffordances(state,a,options);
+ assert.equal(hidden.some(x=>x.key==='collect_wood'),false);
+ delete world.edits['6:5:0'];
+ const visible=P.filterAffordances(state,a,options);
+ assert.equal(visible.some(x=>x.key==='collect_wood'),true);
+ assert.equal(JSON.stringify(visible).includes('17 remaining'),false);
+ a.agency={beliefs:[{ref:'deposit_hidden',kind:'wood',status:'available'}]};
+ world.edits['6:5:0']='wall';
+ assert.equal(P.filterAffordances(state,a,options).some(x=>
+  x.key==='collect_wood'),true,'Earlier firsthand evidence may guide retrieval');
+});
