@@ -207,3 +207,22 @@ test('a lost manufactured tool is replaced and the earlier workbench is preserve
   x.action==='craft_hafted_hatchet');
  assert.equal(starts.length,2,'An actual second hatchet must be physically made');
 });
+
+test('completed projects are archived before an NPC chooses a different ambition',()=>{
+ const {c,s,n}=setup();
+ n.personality='curious and adventurous';
+ assert.equal(c.Projects.maybeStart(s,n).kind,'campfire');
+ s.world.structures.push({id:'test_fire',type:'campfire',maker:n.id,x:n.x,y:n.y});
+ c.Projects.sync(s,n);
+ assert.equal(n.project.status,'COMPLETED');
+ const next=c.Projects.maybeStart(s,n);
+ assert.equal(next.kind,'shelter','Curiosity does not replace the need for shelter');
+ assert.equal(n.completedProjects.length,1);
+ assert.equal(n.completedProjects[0].kind,'campfire');
+ const pack=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ const replica=c.Simulation.initial(379210);replica.auto=false;
+ assert.equal(c.Persistence.restore(replica,pack),true);
+ const saved=replica.npcs.find(x=>x.id===n.id);
+ assert.equal(saved.project.kind,'shelter');
+ assert.equal(saved.completedProjects[0].kind,'campfire');
+});
