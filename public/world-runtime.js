@@ -145,7 +145,9 @@
   }
   const resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
   const resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
-   a.key===action&&a.ref===(option.ref??null)):null;
+   a.key===action&&a.ref===(option.ref??null)&&
+   (action!=='craft_stage'||(a.workpieceRecipe===n.workpiece?.recipe&&
+    a.workpieceStage===n.workpiece?.stage))):null;
   const commandId=resumeCandidate?.commandId||
    'cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   if(GOALS.has(action)){
@@ -208,6 +210,7 @@
   if(!n.task||n.path.length||n.task.readyAt===null||state.clock<n.task.readyAt)return;
   if(n.task.key==='socialize'){
    if(hooks.social)return hooks.social(n);
+   root.Activities.finish(state,n,false,'No connected conversation');
    n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
   }
   root.Activities.progress(state,n);
