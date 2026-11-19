@@ -497,3 +497,15 @@ test('transient startup rendering failure cannot prevent the first browser frame
  for(let ms=1050;ms<=2100;ms+=50)b.tick(ms);
  assert.ok(b.state.clock>start,'World simulation can run after a startup-art failure');
 });
+
+test('fast-forward browser frames keep time advancing with active offline agents',()=>{
+ const b=makeBrowser();
+ b.state.speed=3600;b.state.connected=false;
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=4100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>start+150,
+  'Fast-forward world clock must advance despite AI scheduling and HUD rendering');
+ assert.ok(b.frames.length>60);
+ assert.equal(b.state.paused,false);
+});
