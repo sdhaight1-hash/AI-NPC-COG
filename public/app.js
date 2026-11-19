@@ -310,10 +310,38 @@ async function checkModel(){
   tag.append(dot,document.createTextNode(' '+(state.connected?state.modelLabel+' connected':'Offline · basic survival routines')));
   $('modelName').textContent=state.modelLabel;
 }
+// Bind each asynchronous decision to actor-local evidence, work and resources.
+// An unrelated global effect must not cancel somebody else's private choice.
+function modelDecisionBasis(n){
+ const options=Perception.filterAffordances(state,n,availableActivities(n));
+ const references=Object.fromEntries(options.map(o=>[o.key,o.ref??null]));
+ const agency=n.agency?.goal,hydration=n.bio?.hydrationBudgetMl??2400;
+ return {
+  action:n.action,task:n.task?.commandId??null,plan:n.plan?.key??null,
+  path:n.path?.length??0,project:n.project?.id??null,
+  goalKey:agency?.key??null,goalStartedAt:agency?.startedAt??null,
+  evidenceSequence:n.evidenceMemory?.sequence??0,
+  observations:n.knowledge?.observations?.length??0,
+  inventory:JSON.stringify(n.inventory||{}),
+  urgency:Number(n.needs.thirst>=62||hydration<1200)+
+   2*Number(n.needs.thirst>=90||hydration<200)+
+   4*Number(n.needs.hunger>=85)+8*Number(n.needs.hunger>=95)+
+   16*Number(n.energy<18),
+  references
+ };
+}
+function modelChoiceStillRelevant(n,original,choice){
+ const current=modelDecisionBasis(n);
+ for(const field of ['action','task','plan','path','project','goalKey',
+  'goalStartedAt','evidenceSequence','observations','inventory','urgency'])
+  if(original[field]!==current[field])return false;
+ return (original.references[choice]??null)===(current.references[choice]??null);
+}
 async function deliberate(n){
  if(!state.npcs.includes(n))return;
  state.backgroundBusy=true;state.modelDecisionActor=n;
- const location=key(n),options=backgroundOptions(n);
+ const location=key(n),options=backgroundOptions(n),basis=modelDecisionBasis(n);
+ let rejected=false;
  try{
   if(state.connected){
    const data=await jsonPost('/api/decide',{
@@ -325,12 +353,14 @@ async function deliberate(n){
     data.source==='hivemind'?'hivemind':'rein',
     'DECIDED',null,data.durationMs);
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
-      options.some(o=>o.key===data.action)){
+      options.some(o=>o.key===data.action)&&
+      backgroundOptions(n).some(o=>o.key===data.action)&&
+      modelChoiceStillRelevant(n,basis,data.action)){
     const selected=setAction(n,data.action,
      data.source==='hivemind'?'hivemind':'rein',data.scores);
     if(selected&&data.action==='none')autonomousPurpose(n);
    }else{
-    activity(n).rejected++;
+    rejected=true;activity(n).rejected++;
     WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
      'model','REJECTED','Stale, paused or invalid model option');
     activityNote(n,'Discarded stale, paused or invalid model selection');
@@ -345,7 +375,8 @@ async function deliberate(n){
    void checkModel();
   }
  }finally{
-  n.thoughtAt=state.clock+(state.connected?(n.action==='none'&&!n.task?3:25):18);
+  n.thoughtAt=state.clock+(rejected?3:state.connected?
+   (n.action==='none'&&!n.task?3:25):18);
   state.backgroundBusy=false;state.modelDecisionActor=null;
   state.lastDecisionMs=performance.now();
  }
