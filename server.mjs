@@ -227,16 +227,18 @@ export async function peerExchange(input, signal) {
   if(!a || !b || typeof a.name!=='string'||typeof b.name!=='string' ||
      !a.persona || !b.persona || a.name===b.name)
     throw Object.assign(new Error('Two different participants with personas are required'),{status:400});
-  const scene=safeText(input.scene,1000);
+  const speakerScene=safeText(input.speakerScene??input.scene,1000);
+  const listenerScene=safeText(input.listenerScene??input.scene,1000);
   const first=await speak({
-    persona:a.persona,scene,action:'start a voluntary conversation',
+    persona:a.persona,scene:speakerScene,action:'start a voluntary conversation',
     short:true,history:[],
     message:'You are speaking to '+safeText(b.name,60)+'. Begin a brief, natural '+
       'conversation about your present situation, needs, or recent experiences. '+
-      'Speak only as yourself in one sentence.'
+      'If you intentionally share a source you personally inspected, include its exact [source:id] citation. ' +
+      'Never invent source IDs. Speak only as yourself in one sentence.'
   },signal);
   const second=await speak({
-    persona:b.persona,scene,action:'respond in character to a nearby resident',
+    persona:b.persona,scene:listenerScene,action:'respond in character to a nearby resident',
     short:true,history:[],
     message:safeText(a.name,60)+' has just said: '+first.reply+
       '\nReply naturally as yourself, in one sentence. Do not invent world actions.'
