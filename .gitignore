@@ -4,3 +4,4 @@ node_modules/
 *.log
 data/
 _runtime/
+public/assets/kenney-tiny-town.png

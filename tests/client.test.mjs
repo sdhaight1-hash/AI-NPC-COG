@@ -53,10 +53,11 @@ function makeBrowser(options={}) {
     fetch:options.fetch || (async()=>({ok:true,json:async()=>({connected:false})}))
   };
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
+  const physics=readFileSync(new URL('../public/physics.js',import.meta.url),'utf8');
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(art+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange};',context);
+  vm.runInNewContext(art+'\n'+physics+'\n'+rules+'\n'+source +
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
 
@@ -72,6 +73,10 @@ test('cached static map is painted once, while dynamic frames reuse it',()=>{
 
 test('held WASD moves continuously rather than resetting movement paths',()=>{
   const browser=makeBrowser();
+  // Physical NPC collisions are real: start in the unobstructed lane instead of
+  // running directly into Mara, who begins immediately north of the player.
+  browser.state.player.x=23;browser.state.player.y=12;
+  browser.state.player.body.x=23.5;browser.state.player.body.y=12.5;
   browser.events.get('window:keydown')({key:'w',preventDefault(){}});
   for(let i=0;i<5;i++)browser.step(0.2);
   assert.ok(browser.state.player.y < 11,
@@ -482,4 +487,46 @@ test('a peer conversation cannot commit if the other resident walks away',async(
  assert.equal(a.relationships[b.id],undefined);
  assert.equal(a.task.key,'socialize','A stale exchange cannot complete the task');
  assert.equal(a.peerPending,false);
+});
+
+test('NPC waypoint physically converges to its grid destination',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const npc=browser.state.npcs.find(n=>n.id==='asha');
+ assert.equal(browser.moveTo(npc,{x:29,y:12}),true);
+ for(let i=0;i<240 && npc.path.length;i++)browser.updateMovement(npc,1/60,2);
+ assert.equal(npc.path.length,0,'Actor must actually reach final waypoint');
+ assert.equal(npc.x,29);
+ assert.equal(npc.y,12);
+ assert.ok(Math.abs(npc.body.x-29.5)<.01);
+ assert.ok(Math.abs(npc.body.y-12.5)<.01);
+});
+test('direct movement cannot enter building tiles',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const p=browser.state.player;
+ p.x=19;p.y=9;p.body.x=19.5;p.body.y=9.5;p.body.vx=0;p.body.vy=0;
+ browser.events.get('window:keydown')({key:'w',preventDefault(){}});
+ for(let i=0;i<100;i++)browser.step(1/60);
+ browser.events.get('window:keyup')({key:'w'});
+ assert.ok(p.body.y>=8.23,'Collision radius keeps player outside the cafe facade');
+ assert.ok(p.y>=8,'World grid and physics cannot disagree about occupying a wall');
+});
+test('resident collision bodies stop player from walking through another NPC',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const p=browser.state.player,npc=browser.state.npcs.find(n=>n.id==='asha');
+ p.x=30;p.y=13;p.body.x=30.5;p.body.y=13.5;p.body.vx=0;p.body.vy=0;
+ browser.events.get('window:keydown')({key:'w',preventDefault(){}});
+ for(let i=0;i<60;i++)browser.step(1/60);
+ browser.events.get('window:keyup')({key:'w'});
+ const separation=Math.hypot(p.body.x-npc.body.x,p.body.y-npc.body.y);
+ assert.ok(separation>=p.body.radius+npc.body.radius-.001);
+});
+test('physics diagnostic rendering can be enabled without changing world state',()=>{
+ const browser=makeBrowser();
+ const npc=browser.state.npcs[0],position={x:npc.x,y:npc.y};
+ browser.state.debugPhysics=true;
+ browser.drawWorld();
+ assert.deepEqual({x:npc.x,y:npc.y},position);
 });

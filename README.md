@@ -27,14 +27,25 @@ If llama-server.exe reports out-of-memory on an RTX 2060 6GB, close other GPU ap
 Hearthbrook now uses an **original 16×16 pixel-art rendering layer** inspired by classic top-down RPG tilesets, including [Anokolisa's Pixel Crawler free pack](https://anokolisa.itch.io/free-pixel-art-asset-pack-topdown-tileset-rpg-16x16-sprites).
 
 - Hand-authored procedural pixel tiles for grass, stone and dirt roads, flowerbeds, water, shrubs, trees, fences, lamps, well and market props.
-- Six visually distinct NPC sprites plus the player, with four facing directions and two walking frames.
+- Six visually distinct NPC sprites plus the player, with four facing directions and four-phase walking animations.
 - Buildings differentiated by roofing, windows, signs, doors, awnings, and other decorations.
 - A **nearest-neighbor/pixel-perfect Canvas renderer** at a 640×416 logical resolution, with 1×/2×/3× camera zoom. The camera follows the player when zoomed in. The original 40×26 grid, pathfinding, interaction ranges, and save-state format are preserved.
-- Static scenery remains cached for performance; only the characters and view are composited while moving. No heavy graphic library, new GPU model, or image download is required.
+- Static scenery is cached. Dynamic lighting, water ripples, drifting particles and campfire smoke are rendered over the scene without changing resource or AI state.
+- The optional **Kenney Tiny Town CC0 16×16 atlas** is downloaded automatically once to `public/assets` on Windows startup. If installation fails or you are offline, the original procedural village continues to render. Use **Art: CC0 Tiny Town / Art: Original** in the toolbar to compare either treatment.
 
-**Licensing:** This repo does **not** include Anokolisa's artwork. The linked pack is a visual reference, not a dependency, and all art in `public/pixel-art.js` is newly authored for this project. If you want the exact Pixel Crawler sprites later, obtain the pack from its creator and check the included terms before distributing them with a public repository.
+**Licensing:** The linked Anokolisa pack is a **visual reference**, not a dependency; its artwork is not redistributed here. The optional [Kenney Tiny Town](https://kenney.nl/assets/tiny-town) atlas is licensed under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) and downloaded **locally**, not committed to this repository. Original procedural graphics are authored for AI-NPC-COG. If the network was unavailable at first launch, double-click `install-art.bat` to retry once you reconnect. A failed download does not prevent the simulation from starting.
 
 **Camera:** Click `−` or `+` beside Camera, or use the minus/plus keys when the chat field isn't focused. 1× shows the complete village; 2× and 3× zoom follow the player. Click-to-move and NPC selection continue to work at all zoom levels.
+
+## Physics and collision — top-down, no rigid-body dependency
+
+The browser now uses `public/physics.js`: a small continuous **kinematic collision controller** with acceleration, deceleration, radius-aware tile collisions, swept incremental movement against walls, solid character bodies, and axis-based wall sliding. AI navigation still uses the original 40×26 integer grid, but physical bodies interpolate to each waypoint with acceleration and braking. This preserves world rules and existing NPC goals.
+
+The camera follows the physical player position smoothly instead of snapping to successive tile centers. The renderer keeps its 640×416 logical resolution, integer sprite pixels and the 30 FPS rendering cap; inference stays on the original one-instance Rein server.
+
+**Why not Matter.js or Box2D?** This is a ground-plane RPG testbed with no jumping, gravity, ropes or rigid-body piles. Adding a full physics engine would introduce a second authoritative collision model and larger integration risk without improving current gameplay. If the project adds pushable objects, vehicles or dynamic debris, a dedicated solver can be reconsidered.
+
+**Important limitations:** Collision currently uses small circular footprints and tile-based static obstacles. It does not simulate terrain height, buoyancy or accurate per-pixel sprite contours. All AI world decisions remain authoritative in the existing simulation, and neither downloaded art nor graphics effects affect character cognition.
 
 ## Emergent inhabitants — no assigned occupations
 
@@ -52,9 +63,12 @@ The existing buildings are starting scenery and communal places, not employers o
 
 **Existing save migration:** Old trust, dialogue and memories are retained if a legacy browser save exists, but obsolete job actions and their routes are discarded. If you want every inhabitant to start without history from the previous job-based prototype, click **Reset** in the simulation. Reset clears local browser state.
 
-()=>addition+marker
+## Controls
 - Click a villager to inspect their mood, goal, memories and relationships.
-- Click open ground to move the player; WASD / arrow keys also work.
+- Hold WASD or the arrow keys for continuous acceleration and friction. Diagonal movement is normalized; collision with solid tiles and residents prevents walking through them.
+- Click open ground for physically smooth, tile-navigated travel. The player can slide along obstacles while moving manually.
+- Use **Physics: Debug on** to reveal walls, circular character collision bodies, and velocity vectors.
+- **Art: CC0 Tiny Town / Art: Original** switches locally installed tiles and procedural art instantly.
 - Approach an NPC within four tiles to talk; hit E or use Talk.
 - Enter text to converse. Rein first evaluates a typed decision; only then generates a reply.
 - Pause, change simulation speed, or reset the village from the toolbar.
@@ -95,7 +109,7 @@ The app continues with explicitly marked offline routines if the model is not co
 node --test tests/*.test.mjs
 ```
 
-The test suite includes Rein's special-token scoring, HTTP end-to-end peer and player dialogue with a fake local model, foreground cancellation, stale-result rejection, bounded multi-step intentions, save validation, static scene caching and held-key movement. CI also runs the Windows installer checks. Real-GGUF speed and visual polish still need evaluation on your own hardware.
+The test suite includes accelerated motion, collision sliding and anti-tunneling, plus Rein's special-token scoring, HTTP end-to-end peer and player dialogue with a fake local model, foreground cancellation, stale-result rejection, bounded multi-step intentions, save validation, static scene caching and held-key movement. CI also runs the Windows installer checks. Real-GGUF speed and visual polish still need evaluation on your own hardware.
 
 ## How to evaluate
 

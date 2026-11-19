@@ -21,6 +21,8 @@ locations.garden={x:36,y:13};
 locations.bench={x:12,y:14};
 const trees=[[1,2],[12,3],[26,4],[38,4],[2,9],[12,9],[26,9],[38,10],[1,16],[12,18],[27,18],[38,16],[2,23],[13,23],[26,24],[38,24],[3,13],[36,24]];
 
+let installedAtlas=null;
+let showAtlas=true;
 const initialNPCs = [
  { id:'mara', name:'Mara', x:21,y:11, mood:79, energy:84, trust:56, color:'#e9aa85',
    personality:'Mara, 32. Warm, observant, protective of friends, quietly stubborn. Values honesty and dislikes gossip.' },
@@ -40,7 +42,8 @@ const initialNPCs = [
   thoughtAt:8*60+10+i*5,lastSeen:0},i));
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
-  auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0,
+  auto:true, backgroundBusy:false, conversationBusy:false, debugPhysics:false,
+  selected:'mara', lastDecisionMs:0,
   zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
   npcs:initialNPCs, world:AgentWorld.newWorld(), events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
@@ -463,24 +466,66 @@ async function sendMessage(event){
  }
 }
 
-function updateMovement(actor,dt,tilesPerSec){
- if(!actor.path?.length)return;
- actor.travel+=dt*tilesPerSec;
- while(actor.travel>=1&&actor.path.length){
-  const next=actor.path.shift();
-  if(isBlocked(next.x,next.y)){actor.path=[];break;}
-  const dx=next.x-actor.x,dy=next.y-actor.y;
-  actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
-  actor.x=next.x;actor.y=next.y;actor.travel-=1;
+function ensureBody(actor){
+ if(!actor.body)actor.body=Physics2D.create(actor.x,actor.y,actor===state.player ? .235 : .23);
+ return actor.body;
+}
+function nearbyBodies(actor){
+ const body=ensureBody(actor);
+ return [state.player,...state.npcs].filter(other=>other!==actor&&other.body)
+  .map(other=>other.body).filter(other=>Math.abs(other.x-body.x)<2&&Math.abs(other.y-body.y)<2);
+}
+function controlVector(){
+ let x=0,y=0;
+ if(heldKeys.has('a')||heldKeys.has('arrowleft'))x--;
+ if(heldKeys.has('d')||heldKeys.has('arrowright'))x++;
+ if(heldKeys.has('w')||heldKeys.has('arrowup'))y--;
+ if(heldKeys.has('s')||heldKeys.has('arrowdown'))y++;
+ return {x,y};
+}
+function updateMovement(actor,dt,speed){
+ const body=ensureBody(actor),others=nearbyBodies(actor);
+ const input=actor===state.player?controlVector():{x:0,y:0};
+ if(actor===state.player&&(input.x||input.y)){
+  actor.path=[];actor.travel=0;
+  Physics2D.steer(body,input,dt,isBlocked,others,speed);
+  actor.x=Math.floor(body.x);actor.y=Math.floor(body.y);
+ }else if(actor.path?.length){
+  const next=actor.path[0];
+  if(isBlocked(next.x,next.y)){
+   actor.path=[];body.vx=0;body.vy=0;
+  }else{
+   const movement=Physics2D.follow(body,next,dt,isBlocked,others,speed);
+   const dx=body.vx,dy=body.vy;
+   if(Math.hypot(dx,dy)>.12)
+    actor.facing=Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up');
+   if(movement.arrived){
+    actor.x=next.x;actor.y=next.y;
+    actor.path.shift();actor.travel=0;
+    actor.blockedFor=0;
+   }else if(movement.blocked){
+    actor.blockedFor=(actor.blockedFor||0)+dt;
+    // Do not corrupt a task route. Wait briefly and let nearby bodies clear.
+    if(actor.blockedFor>6){
+     actor.path=[];
+     actor.blockedFor=0;
+     if(actor.task){actor.task=null;actor.goal='Route blocked by another resident';
+       actor.thoughtAt=state.clock+5;}
+    }
+   }else actor.blockedFor=0;
+  }
+ }else{
+  Physics2D.steer(body,{x:0,y:0},dt,isBlocked,others,speed);
  }
- if(!actor.path.length)actor.travel=0;
+ actor.motion=Math.hypot(body.vx,body.vy);
+ if(actor.motion>.13 && !actor.path?.length && actor===state.player){
+  actor.facing=Math.abs(body.vx)>Math.abs(body.vy)
+    ?(body.vx>0?'right':'left'):(body.vy>0?'down':'up');
+ }
 }
 function position(actor){
- if(actor.path?.length){
-  const n=actor.path[0],t=Math.min(1,actor.travel);
-  return {x:actor.x+(n.x-actor.x)*t,y:actor.y+(n.y-actor.y)*t};
- }
- return {x:actor.x,y:actor.y};
+ const body=actor.body;
+ return body?{x:body.x-.5,y:body.y-.5}:{x:actor.x,y:actor.y};
 }
 const staticCanvas=document.createElement('canvas');
 staticCanvas.width=W*TILE;staticCanvas.height=H*TILE;
@@ -490,19 +535,38 @@ staticContext.imageSmoothingEnabled=false;
 function drawStaticWorld(){
  VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees);
 }
-function updateCamera(){
+// Optional Kenney CC0 sprites are installed locally once, never fetched at runtime
+// from a third-party host. When absent the original artwork remains usable.
+function loadTileset(){
+ if(typeof Image==='undefined')return;
+ const image=new Image();
+ image.onload=()=>{
+  if(VillageArt.setAtlas(image)){
+   installedAtlas=image;
+   staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
+   drawStaticWorld();
+   $('artToggle').textContent='Art: CC0 Tiny Town';
+   record('Kenney Tiny Town art atlas loaded (CC0)', 'routine');
+  }
+ };
+ image.onerror=()=>record('Using included original pixel-art fallback','routine');
+ image.src='/assets/kenney-tiny-town.png';
+}
+function updateCamera(force=false){
  const zoom=state.zoom;
  const viewW=canvas.width/zoom,viewH=canvas.height/zoom;
  const p=position(state.player);
- state.camera.x=clamp(Math.round((p.x+.5)*TILE-viewW/2),0,W*TILE-viewW);
- state.camera.y=clamp(Math.round((p.y+.5)*TILE-viewH/2),0,H*TILE-viewH);
+ const tx=clamp((p.x+.5)*TILE-viewW/2,0,Math.max(0,W*TILE-viewW));
+ const ty=clamp((p.y+.5)*TILE-viewH/2,0,Math.max(0,H*TILE-viewH));
+ state.camera.x+=force?tx-state.camera.x:(tx-state.camera.x)*.26;
+ state.camera.y+=force?ty-state.camera.y:(ty-state.camera.y)*.26;
 }
 function clientToTile(clientX,clientY,rect){
  const sx=(clientX-rect.left)*canvas.width/rect.width;
  const sy=(clientY-rect.top)*canvas.height/rect.height;
  return {
-  x:Math.floor((state.camera.x+sx/state.zoom)/TILE),
-  y:Math.floor((state.camera.y+sy/state.zoom)/TILE)
+  x:Math.floor((Math.round(state.camera.x)+sx/state.zoom)/TILE),
+  y:Math.floor((Math.round(state.camera.y)+sy/state.zoom)/TILE)
  };
 }
 function drawWorld(){
@@ -512,7 +576,8 @@ function drawWorld(){
  ctx.fillRect(0,0,canvas.width,canvas.height);
  ctx.save();
  ctx.scale(state.zoom,state.zoom);
- ctx.translate(-state.camera.x,-state.camera.y);
+ // Pixel-align rendered camera without snapping the underlying smooth state.
+ ctx.translate(-Math.round(state.camera.x),-Math.round(state.camera.y));
  ctx.drawImage(staticCanvas,0,0);
  VillageArt.drawWorldObjects(ctx,state.world);
  const actors=state.npcs.map(n=>({actor:n,player:false}));
@@ -522,6 +587,26 @@ function drawWorld(){
  for(const item of actors){
   VillageArt.drawActor(ctx,item.actor,item.player,position(item.actor),
    !item.player&&state.selected===item.actor.id,now);
+ }
+ VillageArt.drawAmbient(ctx,state.world,state.clock,now);
+ if(state.debugPhysics){
+  // Debug overlay uses the same authoritative collision map as the physics engine.
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(isBlocked(x,y)){
+   ctx.fillStyle='rgba(223,67,89,.12)';
+   ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+   ctx.strokeStyle='rgba(245,103,116,.45)';
+   ctx.lineWidth=.5;
+   ctx.strokeRect(x*TILE+.5,y*TILE+.5,TILE-1,TILE-1);
+  }
+  for(const agent of [state.player,...state.npcs]){
+   const b=agent.body;if(!b)continue;
+   ctx.beginPath();ctx.arc(b.x*TILE,b.y*TILE,b.radius*TILE,0,Math.PI*2);
+   ctx.strokeStyle=agent===state.player?'#72e7ee':'#ffe4a3';
+   ctx.lineWidth=.8;ctx.stroke();
+   ctx.beginPath();ctx.moveTo(b.x*TILE,b.y*TILE);
+   ctx.lineTo((b.x+b.vx*.22)*TILE,(b.y+b.vy*.22)*TILE);
+   ctx.stroke();
+  }
  }
  ctx.restore();
 }
@@ -688,15 +773,13 @@ function restore(){
  }catch{ /* Ignore corrupt or obsolete saves rather than breaking the village. */ }
 }
 state.world.now=state.clock;
+// Physics bodies are transient and rebuilt from the validated saved tile positions.
+ensureBody(state.player);
+for(const agent of state.npcs)ensureBody(agent);
 const heldKeys=new Set();
 function step(dt){
  if(state.paused)return;
- if(!state.player.path.length&&heldKeys.size){
-  const key=Array.from(heldKeys).at(-1);
-  const delta={w:[0,-1],arrowup:[0,-1],s:[0,1],arrowdown:[0,1],
-   a:[-1,0],arrowleft:[-1,0],d:[1,0],arrowright:[1,0]}[key];
-  if(delta)moveTo(state.player,{x:state.player.x+delta[0],y:state.player.y+delta[1]});
- }
+ // Continuous keyboard steering is handled by Physics2D, not per-tile path resets.
  const elapsed=dt*state.speed;
  const beforeDay=Math.floor(state.clock/1440);
  state.clock+=elapsed;
@@ -777,10 +860,26 @@ window.addEventListener('pagehide',save);
 function setZoom(next){
  state.zoom=clamp(next,1,3);
  $('zoomLevel').textContent=state.zoom+'×';
- updateCamera();
+ updateCamera(true);
 }
 $('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
 $('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
+$('physicsDebug').addEventListener('click',()=>{
+ state.debugPhysics=!state.debugPhysics;
+ $('physicsDebug').textContent=state.debugPhysics?'Physics: Debug on':'Physics: Debug off';
+ $('physicsDebug').setAttribute('aria-pressed',String(state.debugPhysics));
+});
+$('artToggle').addEventListener('click',()=>{
+ if(!installedAtlas){
+  record('Optional atlas not installed; original art remains active','routine');
+  return;
+ }
+ showAtlas=!showAtlas;
+ VillageArt.setAtlas(showAtlas?installedAtlas:null);
+ staticContext.clearRect(0,0,staticCanvas.width,staticCanvas.height);
+ drawStaticWorld();
+ $('artToggle').textContent=showAtlas?'Art: CC0 Tiny Town':'Art: Original';
+});
 $('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
 $('autoAI').addEventListener('change',event=>{state.auto=event.target.checked;record('Autonomous decisions '+(state.auto?'enabled':'disabled'));});
 for(const btn of document.querySelectorAll('[data-speed]')){
@@ -796,6 +895,7 @@ $('resetBtn').addEventListener('click',()=>{
 });
 $('chatForm').addEventListener('submit',sendMessage);
 drawStaticWorld();
+loadTileset();
 restore();
 renderResidents();updateInspector();renderChat();
 record('Hearthbrook village initialized — click a resident to inspect their state.');

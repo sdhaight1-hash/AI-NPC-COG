@@ -193,6 +193,8 @@ const STATIC = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/pixel-art.js': ['public/pixel-art.js', 'text/javascript; charset=utf-8'],
+  '/physics.js': ['public/physics.js', 'text/javascript; charset=utf-8'],
+  '/assets/kenney-tiny-town.png': ['public/assets/kenney-tiny-town.png', 'image/png'],
   '/emergence.js': ['public/emergence.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8']
 };

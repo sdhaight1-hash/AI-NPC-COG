@@ -1,6 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $scriptPath = Join-Path $root 'scripts/install.ps1'
+$artScript = Join-Path $root 'scripts/install-art.ps1'
+$artTokens = $null
+$artErrors = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile($artScript,[ref]$artTokens,[ref]$artErrors)
+if(@($artErrors).Count -ne 0){throw "PowerShell syntax errors in art installer: $artErrors"}
 $tokens = $null
 $errors = $null
 [void][System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
@@ -26,4 +31,9 @@ $install = Get-Content (Join-Path $root 'install.bat') -Raw
 if ($start -notmatch 'Model\\Rein-NPC-4B-Q4_K_M[.]gguf') { throw 'Launcher must use project-local model.' }
 if ($start -notmatch 'llama-server[.]exe') { throw 'Launcher must use installed inference server.' }
 if ($install -notmatch 'scripts\\install[.]ps1') { throw 'Installer must call PowerShell helper.' }
+if ($start -notmatch 'scripts\\install-art[.]ps1') { throw 'Launcher must call optional local art installer.' }
+$artSource = Get-Content $artScript -Raw
+if ($artSource -notmatch 'kenney[.]nl' -or $artSource -notmatch 'tilemap_packed[.]png') {
+  throw 'Art installer must source official CC0 Kenney atlas and verify its PNG.'
+}
 Write-Host 'Windows installer syntax, verified-release and launcher tests passed.'
