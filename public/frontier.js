@@ -71,8 +71,8 @@ function generate(seed=DEFAULT_SEED){
  }
  // Guaranteed freshwater source and useful local materials in reachable
  // wilderness; water also exists near the old center for early survival.
- for(const [kind,x,y,max] of [['water',38,25,12],['fiber',40,22,8],
-  ['wood',42,23,8],['stone',42,26,8],['food',45,20,7]])add(kind,x,y,max);
+ for(const [kind,x,y,max] of [['water',41,22,12],['fiber',40,22,8],
+  ['wood',42,23,8],['stone',41,26,8],['food',45,20,7]])add(kind,x,y,max);
  return {width:WIDTH,height:HEIGHT,seed,terrain,resources};
 }
 function weather(map,clock){
