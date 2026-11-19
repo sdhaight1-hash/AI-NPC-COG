@@ -84,7 +84,7 @@ test('each monthly boundary creates exactly one independent newcomer, even with 
  const {AgentWorld:A,Civilization:C}=modules(),w=A.newWorld(),state={
   world:w,npcs:C.founders(w),dead:[],nextPersonId:6,clock:490
  };
- const jan30=29*1440, feb1=31*1440,mar1=60*1440;
+ const jan30=8*1440, feb1=9*1440,mar1=18*1440;
  assert.equal(C.advanceArrivals(state,490,jan30).length,0);
  assert.equal(C.advanceArrivals(state,jan30,feb1-1).length,0);
  const first=C.advanceArrivals(state,feb1-1,feb1);
@@ -105,7 +105,7 @@ test('death is permanent and extinction does not trigger a reset',()=>{
  assert.equal(C.die(state,{id:'person_1'},'test'),false);
  assert.equal(w.structures.length,1);
  assert.equal(JSON.stringify(w.terrain),originalTerrain);
- const arrivals=C.advanceArrivals(state,500,31*1440);
+ const arrivals=C.advanceArrivals(state,500,9*1440);
  assert.equal(arrivals.length,1);
  assert.equal(arrivals[0].id,'person_6');
  assert.equal(arrivals[0].knowledge.recipes.length,0);
@@ -168,4 +168,15 @@ test('primitive shelters and campfires require discoveries; actions cannot bypas
  const other=C.founders(w)[0];
  assert.deepEqual(Array.from(other.knowledge.recipes),[],
   'Independent individuals must not inherit learned methods');
+});
+
+test('aging and monthly arrivals use the same compact calendar',()=>{
+ const {AgentWorld:A,Civilization:C}=modules(),w=A.newWorld();
+ const state={world:w,npcs:C.founders(w),dead:[],nextPersonId:6,clock:490};
+ assert.equal(C.YEAR_MINUTES,108*1440);
+ assert.equal(C.stamp(27*1440).season,'Summer');
+ assert.equal(C.stamp(108*1440).year,2);
+ assert.equal(C.advanceArrivals(state,0,27*1440).length,3);
+ const n=state.npcs[0],start=C.age(n,490);
+ assert.ok(Math.abs(C.age(n,490+C.YEAR_MINUTES)-start-1)<1e-10);
 });
