@@ -528,12 +528,14 @@ function restore(){
   Frontier.restore(state.world,saved.world);
   state.clock=saved.clock;state.world.now=saved.clock;
   const seen=new Set();
+  const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
   state.npcs=[];
   for(const old of saved.npcs.slice(0,5000)){
    if(!old||typeof old.id!=='string'||!/^person_[1-9]\d*$/.test(old.id)||
-     seen.has(old.id)||!Number.isInteger(old.x)||!Number.isInteger(old.y)||
+     seen.has(old.id)||archived.has(old.id)||!Number.isInteger(old.x)||!Number.isInteger(old.y)||
      !Number.isInteger(old.z)||isBlocked(old.x,old.y,old.z))continue;
-   if(!Number.isFinite(old.birthAt)||!Number.isFinite(old.health)||old.health<=0)continue;
+   if(!Number.isFinite(old.birthAt)||old.birthAt>state.clock||
+     !Number.isFinite(old.health)||old.health<=0)continue;
    seen.add(old.id);
    const n=Civilization.person(state.world,Number(old.id.slice(7)),
     Number.isFinite(old.spawnAt)?old.spawnAt:490,old);
@@ -641,12 +643,6 @@ function updateHUD(now){
  renderResidents();updateInspector();drawMinimap();
  if(now>state.nextSave){save();state.nextSave=now+5000;}
 }
-function animate(now){
- if(animate.last&&now-animate.last<33){requestAnimationFrame(animate);return;}
- const dt=Math.min(.06,(now-(animate.last||now))/1000);
- animate.last=now;step(dt);drawWorld();updateHUD(now);
- requestAnimationFrame(animate);
-}
 const heldKeys=new Set();
 window.addEventListener('keydown',event=>{
  const active=document.activeElement?.tagName;
@@ -672,8 +668,7 @@ function pan(dt){
  state.camera.x+=dx*220*dt/state.zoom;
  state.camera.y+=dy*220*dt/state.zoom;
 }
-const originalStep=step;
-function frameStep(dt){pan(dt);originalStep(dt);}
+function frameStep(dt){pan(dt);step(dt);}
 function setZoom(n){state.zoom=clamp(n,1,3);$('zoomLevel').textContent=state.zoom+'×';updateCamera(true);}
 function setZ(n){state.viewZ=clamp(n,Frontier.MIN_Z,Frontier.MAX_Z);
  drawnLayer=null;$('zLabel').textContent='Z '+state.viewZ;}
@@ -719,9 +714,16 @@ $('newIsland').addEventListener('click',()=>{
  localStorage.removeItem(STORE);window.location.reload();
 });
 function tick(now){
- if(tick.last&&now-tick.last<33){requestAnimationFrame(tick);return;}
- const dt=Math.min(.06,(now-(tick.last||now))/1000);
- tick.last=now;frameStep(dt);drawWorld();updateHUD(now);requestAnimationFrame(tick);
+ // Fixed 50 ms logical steps prevent frame jitter from changing action ordering.
+ // Long browser suspensions do not silently fast-forward a year of AI actions.
+ const dt=tick.last===undefined?0:Math.max(0,Math.min(.25,(now-tick.last)/1000));
+ tick.last=now;tick.accumulator=(tick.accumulator||0)+dt;
+ let ticks=0;
+ while(tick.accumulator>=.05&&ticks<5){
+  frameStep(.05);tick.accumulator-=.05;ticks++;
+ }
+ if(tick.accumulator>=.05)tick.accumulator=0;
+ drawWorld();updateHUD(now);requestAnimationFrame(tick);
 }
 drawStaticWorld();restore();loadTileset();
 state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
