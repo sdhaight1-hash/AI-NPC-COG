@@ -147,9 +147,27 @@ export function assertCraftConservation(initialFiber,finalFiber,producedCord){
 }
 export function runSoak(seed=379210,days=30){
  const state=setup(seed);state.auto=true;
- const ticks=days*1440,deathDetails=[];
+ const ticks=days*1440,deathDetails=[],criticalWindows=new Map();
  assert.ok(Number.isInteger(ticks)&&ticks>0&&ticks<=1440*120);
  for(let i=0;i<ticks;i++){
+  // Keep only a small terminal window for actors approaching physiological death.
+  // This is a diagnostic snapshot, not a new gameplay source of knowledge.
+  for(const actor of state.npcs){
+   if(actor.health>=25||actor.bio?.hydrationBudgetMl>=220)continue;
+   const previous=criticalWindows.get(actor.id)||[];
+   previous.push({clock:state.clock,health:actor.health,energy:actor.energy,
+    hydration:actor.bio.hydrationBudgetMl,action:actor.action,
+    task:actor.task?.key||null,plan:actor.plan?.key||null,
+    pathLength:actor.path?.length||0,source:actor.source,
+    thoughtAt:actor.thoughtAt,notes:actor.activityStats?.last||null,
+    visibleWater:WorldRuntime.available(state,actor)
+     .filter(o=>o.key==='drink_source').map(o=>o.ref),
+    reservedWater:(state.reservations||[])
+     .filter(x=>x.actorId===actor.id&&x.kind==='water'&&x.status==='ACTIVE')
+     .map(x=>x.commandId)});
+   if(previous.length>28)previous.shift();
+   criticalWindows.set(actor.id,previous);
+  }
   // Check cheaply every hour; action-specific receipts are checked separately.
   Simulation.advance(state,1,{onDeath:(actor,cause)=>{
    const nearest=state.world.nodes.filter(s=>s.kind==='water')
@@ -170,7 +188,8 @@ export function runSoak(seed=379210,days=30){
     hydrationMl:actor.bio?.hydrationBudgetMl??null,
     inventory:{...actor.inventory},nearestWater:nearest,
     recentActions:state.receipts.filter(r=>r.actorId===actor.id)
-     .slice(-12).map(r=>({clock:r.clock,action:r.action,status:r.status,reason:r.reason}))});
+     .slice(-12).map(r=>({clock:r.clock,action:r.action,status:r.status,reason:r.reason})),
+    lastCriticalSnapshots:criticalWindows.get(actor.id)||[]});
   }});
   if(i%60===0)invariant(state);
  }
