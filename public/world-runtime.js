@@ -104,6 +104,7 @@
   for(let moves=0;moves<100&&budget>0&&n.path.length;moves++){
    const next=n.path[0];
    if(blocked(state,next)){
+    root.Activities.interrupt(state,n,'ROUTE_BLOCKED');
     n.path=[];n.travel=null;n.task=null;n.goal='Route invalidated';
     stats(n).blocked++;note(n,'Movement: destination became blocked');
     n.thoughtAt=state.clock+3;break;
@@ -119,6 +120,7 @@
     (other.z||0)===(next.z||0))){
     n.blockedFor=(n.blockedFor||0)+elapsed;n.travel=null;
     if(n.blockedFor>5){
+     root.Activities.interrupt(state,n,'ROUTE_BLOCKED');
      n.path=[];n.task=null;n.goal='Route blocked by another inhabitant';
      stats(n).blocked++;note(n,'Movement: another inhabitant blocked passage');
      n.thoughtAt=state.clock+3;n.blockedFor=0;
@@ -131,7 +133,8 @@
   }
   n.motion=n.path.length?1:0;
   if(n.task&&!n.path.length&&n.task.readyAt===null)
-   n.task.readyAt=state.clock+actionDuration(n,n.task.key);
+   n.task.readyAt=state.clock+(n.currentActivity?
+    n.currentActivity.workRequired-n.currentActivity.workDone:actionDuration(n,n.task.key));
  }
  function remember(state,n,text,meta={}){
   const memory=root.Cognition.record(n,text,state.clock,meta);
@@ -156,7 +159,13 @@
   if(!option){
    stats(n).rejected++;note(n,'Action '+action+' no longer available');return false;
   }
-  const commandId='cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
+  const resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
+  const resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
+   a.key===action&&a.ref===(option.ref??null)&&
+   (action!=='craft_stage'||(a.workpieceRecipe===n.workpiece?.recipe&&
+    a.workpieceStage===n.workpiece?.stage))):null;
+  const commandId=resumeCandidate?.commandId||
+   'cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   if(GOALS.has(action)){
    if(n.plan)return false;
    n.plan={key:action,steps:0,commandId};n.nextPlanAt=state.clock;
@@ -179,13 +188,17 @@
     }
    }
    n.action=action;n.source=source;n.scores=scores;
+   const active=resumed?root.Activities.resume(state,n,action,option.ref):null;
+   const duration=actionDuration(n,action);
+   const remaining=active?active.workRequired-active.workDone:duration;
    n.task={key:action,ref:option.ref||null,commandId,readyAt:n.path.length?null:
-    state.clock+actionDuration(n,action)};
+    state.clock+remaining};
+   if(!active)root.Activities.start(state,n,n.task,duration);
    if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
    n.goal=action.replaceAll('_',' ')+' (self-chosen)';
   }
   root.Agency.begin(n,action,state.clock,source);
-  root.WorldReceipts.accept(state,n,action,commandId,option.ref,source);
+  if(!resumed)root.WorldReceipts.accept(state,n,action,commandId,option.ref,source);
   if(action!=='none'&&source==='plan'&&n.plan)
    n.goal='Pursuing '+n.plan.key+' · '+action.replaceAll('_',' ');
   if(action==='none'){
@@ -213,11 +226,14 @@
   if(!n.task||n.path.length||n.task.readyAt===null||state.clock<n.task.readyAt)return;
   if(n.task.key==='socialize'){
    if(hooks.social)return hooks.social(n);
+   root.Activities.finish(state,n,false,'No connected conversation');
    n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
   }
+  root.Activities.progress(state,n);
   const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId};
   const outcome=root.WorldReceipts.execute(state,n,finished,()=>
    root.AgentWorld.complete(n,state.world,state.npcs));
+  root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
@@ -265,6 +281,7 @@
   if((n.task||n.path.length||n.action==='rest')&&!critical)return false;
   if(n.task?.key===urgent)return false;
   if(n.task||n.path.length||n.action==='rest'){
+   root.Activities.interrupt(state,n,'CRITICAL_NEED');
    n.task=null;n.path=[];n.travel=null;n.action='none';
    if(n.plan)n.nextPlanAt=state.clock+2;
    remember(state,n,'Interrupted work to address immediate bodily danger',
@@ -285,7 +302,11 @@
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
-   const ok=begin(state,n,chooseOffline(state,n),'offline routine',null,hooks);
+   const suspended=n.suspendedActivities?.at(-1);
+   const canResume=suspended&&available(state,n).some(o=>o.key===suspended.key&&
+    (o.ref??null)===suspended.ref);
+   const action=canResume?suspended.key:chooseOffline(state,n);
+   const ok=begin(state,n,action,canResume?'resume':'offline routine',null,hooks);
    n.thoughtAt=state.clock+(ok?18:3);
   }
  }
