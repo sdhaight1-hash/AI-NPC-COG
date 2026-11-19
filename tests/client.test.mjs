@@ -40,7 +40,7 @@ function makeBrowser(options={}){
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
-  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick};',context);
+  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex};',context);
  return {...context.exposed,saved,events,elements,counters};
 }
 test('fresh start contains five distinct independent founders, no player, no village',()=>{
@@ -211,4 +211,38 @@ test('fixed render tick batches identical logical intervals despite jitter',()=>
  b.tick(100);b.tick(200);b.tick(300);
  assert.equal(a.state.clock,b.state.clock);
  assert.equal(a.state.npcs.length,b.state.npcs.length);
+});
+
+test('offline scheduling starts multiple independent NPC tasks without a wall-clock bottleneck',()=>{
+ const b=makeBrowser();
+ b.state.connected=false;
+ for(const n of b.state.npcs){
+  n.thoughtAt=b.state.clock;n.action='none';n.task=null;n.plan=null;n.path=[];
+ }
+ b.scheduleIdleAgents();
+ const active=b.state.npcs.filter(n=>n.task||n.path.length||n.action!=='none');
+ assert.ok(active.length>=3,'Multiple inhabitants should begin tasks independently');
+ assert.ok(active.every(n=>['offline routine','survival reflex'].includes(n.source)));
+ assert.ok(b.state.npcs.every(n=>n.thoughtAt>b.state.clock));
+});
+test('urgent needs act while model inference is busy and use finite world inventory',()=>{
+ const b=makeBrowser();
+ b.state.connected=true;b.state.backgroundBusy=true;
+ const n=b.state.npcs[0];
+ n.task=null;n.plan=null;n.path=[];n.action='none';
+ n.needs.thirst=85;n.inventory.water=2;
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.action,'drink');
+ assert.equal(n.source,'survival reflex');
+ const before=n.inventory.water;
+ b.step(2);
+ assert.equal(n.inventory.water,before-1,'Physiological action must consume real water');
+});
+test('urgent reflexes cannot interrupt an existing NPC task',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0];
+ n.needs.thirst=95;n.inventory.water=3;
+ assert.equal(b.setAction(n,'drink','offline routine'),true);
+ const task=n.task;
+ b.scheduleIdleAgents();
+ assert.equal(n.task,task);
 });
