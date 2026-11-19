@@ -112,9 +112,9 @@
   const kinds={forage:'food',fill_water:'water',collect_wood:'wood',
    collect_stone:'stone',collect_fiber:'fiber'};
   if(!receipt||receipt.status!=='FAILED'||receipt.actorId!==n.id||
-   !kinds[receipt.action]||!sim.receipts?.some(r=>
+   receipt.clock!==sim.clock||!kinds[receipt.action]||!sim.receipts?.some(r=>
     r.id===receipt.id&&r.actorId===n.id&&r.commandId===receipt.commandId&&
-    r.status==='FAILED'&&r.action===receipt.action&&
+    r.clock===sim.clock&&r.status==='FAILED'&&r.action===receipt.action&&
     r.targetId===receipt.targetId))return 0;
   const node=sim.world.nodes.find(x=>x.id===receipt.targetId&&
    x.kind===kinds[receipt.action]);
