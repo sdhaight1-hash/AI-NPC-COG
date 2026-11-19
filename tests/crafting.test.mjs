@@ -181,3 +181,27 @@ test('better craftsmanship yields objectively better goods',()=>{
  assert.ok(high.quality>low.quality,
   'Skill must change the actual quality stored on the resulting item');
 });
+
+test('learned shelter project requires eight separate physical production stages',()=>{
+ const {world,npc,C}=setup();
+ npc.inventory.wood=4;npc.inventory.fiber=3;
+ assert.equal(C.options(npc,world).some(x=>x.key==='craft_shelter'),false,
+  'An NPC must not know the shelter procedure before discovery');
+ assert.equal(C.begin(npc,world,'shelter').ok,false);
+ npc.knowledge.recipes.push('shelter');
+ assert.equal(C.begin(npc,world,'shelter').ok,true);
+ assert.equal(npc.inventory.wood,0);
+ assert.equal(npc.inventory.fiber,0);
+ assert.equal(world.structures.some(x=>x.type==='shelter'),false);
+ const steps=C.getRecipe('shelter').stages;
+ assert.equal(steps.length,8);
+ for(let i=0;i<steps.length;i++){
+  npc.energy=100;
+  assert.equal(C.advance(npc,world).ok,true);
+  assert.equal(world.structures.some(x=>x.type==='shelter'),i===steps.length-1);
+ }
+ assert.equal(world.structures.filter(x=>x.type==='shelter').length,1);
+ assert.equal(npc.workpiece,null);
+ assert.equal(C.advance(npc,world).ok,false,
+  'Finalizing an already finished shelter cannot mint a second structure');
+});
