@@ -758,9 +758,19 @@ function tick(now){
   requestAnimationFrame(tick);
  }
 }
-drawStaticWorld();restore();loadTileset();
-state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
-for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
-renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
-record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
-checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
+try{
+ // Restore before rendering the terrain, so saved worlds paint the right map.
+ restore();
+ drawStaticWorld();loadTileset();
+ state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
+ for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
+ renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
+ record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
+}catch(error){
+ // A transient startup canvas/UI failure must not prevent clock startup.
+ console.error('AI-NPC-COG startup failure:',error);
+ const status=$('worldStatus');
+ if(status)status.textContent='STARTUP ERROR · '+String(error?.message||error).slice(0,100);
+}finally{
+ checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
+}
