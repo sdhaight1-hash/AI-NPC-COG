@@ -169,7 +169,7 @@
    n.goal=action.replaceAll('_',' ')+' (self-chosen)';
   }
   root.Agency.begin(n,action,state.clock,source);
-  root.WorldReceipts.accept(state,n,action,commandId,option.ref);
+  root.WorldReceipts.accept(state,n,action,commandId,option.ref,source);
   if(action!=='none'&&source==='plan'&&n.plan)
    n.goal='Pursuing '+n.plan.key+' · '+action.replaceAll('_',' ');
   if(action==='none'){
