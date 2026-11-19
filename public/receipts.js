@@ -1,0 +1,98 @@
+// Bounded, deterministic receipts for committed physical world operations.
+// No narration, private memory, persona, model prompts, or secrets are serialized.
+(function(root){
+ 'use strict';
+ const MAX=4096;
+ const plain=v=>v===undefined?null:JSON.parse(JSON.stringify(v));
+ const nums=(oldObj={},newObj={})=>{
+  const out=[];
+  for(const key of [...new Set([...Object.keys(oldObj),...Object.keys(newObj)])].sort()){
+   const a=oldObj[key]??0,b=newObj[key]??0;
+   if(Number.isFinite(a)&&Number.isFinite(b)&&a!==b)
+    out.push({key,before:a,after:b,delta:b-a});
+  }
+  return out;
+ };
+ const asMap=rows=>Object.fromEntries(rows.map(x=>[x.id,plain(x)]));
+ function snapshot(state,n){
+  return {
+   inventory:{...n.inventory},skills:{...n.skills},
+   needs:{...n.needs},energy:n.energy,health:n.health,
+   foodPantry:n.bio?.pantry?.length??0,hydrationMl:n.bio?.hydrationBudgetMl??0,
+   nodes:Object.fromEntries(state.world.nodes.map(x=>[x.id,x.stock])),
+   structures:asMap(state.world.structures),items:asMap(state.world.items),
+   workpiece:plain(n.workpiece),craftedItems:plain(n.craftedItems||[])
+  };
+ }
+ function change(before,after){
+  const collections={};
+  for(const kind of ['structures','items']){
+   const a=before[kind],b=after[kind],added=[],removed=[],updated=[];
+   for(const id of [...new Set([...Object.keys(a),...Object.keys(b)])].sort()){
+    if(!(id in a))added.push(b[id]);
+    else if(!(id in b))removed.push(a[id]);
+    else if(JSON.stringify(a[id])!==JSON.stringify(b[id]))
+     updated.push({id,before:a[id],after:b[id]});
+   }
+   if(added.length||removed.length||updated.length)
+    collections[kind]={added,removed,updated};
+  }
+  const delta={
+   inventory:nums(before.inventory,after.inventory),
+   skills:nums(before.skills,after.skills),
+   needs:nums(before.needs,after.needs),
+   nodeStock:nums(before.nodes,after.nodes),
+   body:nums({energy:before.energy,health:before.health,
+    foodPantry:before.foodPantry,hydrationMl:before.hydrationMl},
+    {energy:after.energy,health:after.health,
+     foodPantry:after.foodPantry,hydrationMl:after.hydrationMl})
+  };
+  if(Object.keys(collections).length)delta.collections=collections;
+  if(JSON.stringify(before.workpiece)!==JSON.stringify(after.workpiece))
+   delta.workpiece={before:before.workpiece,after:after.workpiece};
+  if(JSON.stringify(before.craftedItems)!==JSON.stringify(after.craftedItems))
+   delta.craftedItems={before:before.craftedItems,after:after.craftedItems};
+  return delta;
+ }
+ function hasDelta(delta){return Object.values(delta).some(v=>
+  Array.isArray(v)?v.length>0:v!==undefined);}
+ function append(state,input){
+  state.receipts ||= [];
+  state.receiptSeq=(state.receiptSeq||0)+1;
+  const receipt={id:'evt_'+state.receiptSeq,sequence:state.receiptSeq,
+   clock:state.clock,actorId:input.actorId,commandId:input.commandId,
+   action:input.action,targetId:input.targetId??null,
+   status:input.status,reason:input.reason??null,
+   effectRevision:state.effectRevision||0,delta:input.delta||{}};
+  state.receipts.push(receipt);
+  if(state.receipts.length>MAX)state.receipts.splice(0,state.receipts.length-MAX);
+  return receipt;
+ }
+ function accept(state,n,action,commandId,ref=null){
+  return append(state,{actorId:n.id,commandId,action,targetId:ref,status:'ACCEPTED'});
+ }
+ function committed(state,commandId){
+  return state.receipts?.find(r=>r.commandId===commandId&&
+   (r.status==='COMPLETED'||r.status==='FAILED'))||null;
+ }
+ function execute(state,n,task,apply){
+  if(typeof apply!=='function')throw Error('World effect callback is required');
+  if(!task?.commandId)throw Error('Authoritative operation requires command ID');
+  const previous=committed(state,task.commandId);
+  if(previous)return {ok:false,message:'Duplicate command; already resolved',
+   duplicate:true,receipt:previous};
+  const before=snapshot(state,n),revision=state.effectRevision||0;
+  const outcome=apply();
+  if(!outcome||typeof outcome.ok!=='boolean')throw Error('Invalid world result');
+  const delta=change(before,snapshot(state,n)),changed=hasDelta(delta);
+  if(!outcome.ok&&changed)
+   throw Error('Rejected operation mutated authoritative state');
+  if(changed)state.effectRevision=revision+1;
+  const receipt=append(state,{actorId:n.id,commandId:task.commandId,
+   action:task.key,targetId:task.ref,status:outcome.ok?'COMPLETED':'FAILED',
+   reason:outcome.ok?null:String(outcome.message||'Action rejected').slice(0,160),
+   delta});
+  return {...outcome,receipt};
+ }
+ root.WorldReceipts={MAX,accept,execute,snapshot,change,committed};
+})(globalThis);
