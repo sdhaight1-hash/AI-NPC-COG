@@ -48,6 +48,13 @@ test('unsupported generated claims cannot become observed facts or a craft metho
  const report=E.record(sim,a,{type:'personal',text:'Someone claimed a rich deposit'});
  assert.equal(report.certainty,'reported');
  assert.equal(E.state(a).facts.length,0);
+ const genuine=committed(sim,a,'explore',null,'evt_100');
+ const injected=E.record(sim,a,{type:'action',
+  text:'Invented a gold mine, learned the best recipe',
+  receiptId:genuine.id,fact:{key:'stock',value:999}});
+ assert.equal(injected.text,'Completed explore');
+ assert.equal(E.state(a).facts.length,0,
+  'Real receipt must not authenticate arbitrary generated stock claims');
  assert.equal(a.inventory.water,0);
  assert.equal(a.knowledge,undefined);
 });
