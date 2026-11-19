@@ -123,7 +123,9 @@ test('expired suspended freshwater reservation restarts safely instead of trappi
 test('a freshwater source occupied by another resident remains drinkable from a free adjacent tile',()=>{
  const {c,state:s,n}=create(),world=s.world;
  const spring=world.nodes.find(v=>v.kind==='water'&&v.stock>=2&&
-  c.Frontier.neighbors(world,v).length>=2);
+  c.Frontier.neighbors(world,v).length>=2&&
+  world.nodes.filter(other=>other.kind==='water'&&other.id!==v.id)
+   .every(other=>c.Frontier.distance(world,v,other)>6));
  assert.ok(spring);
  const neighbor=c.Frontier.neighbors(world,spring)[0];
  const start=c.Frontier.neighbors(world,neighbor).find(p=>
@@ -134,6 +136,8 @@ test('a freshwater source occupied by another resident remains drinkable from a 
  occupant.x=spring.x;occupant.y=spring.y;occupant.z=0;
  n.x=start.x;n.y=start.y;n.z=0;n.path=[];
  n.inventory.water=0;n.bio.hydrationBudgetMl=500;n.needs.thirst=96;
+ assert.equal(c.WorldRuntime.available(s,n).find(o=>o.key==='drink_source')?.ref,
+  spring.id,'Fixture must target the occupied isolated spring');
  const initialStock=spring.stock;
  assert.equal(c.WorldRuntime.pathfind(s,n,spring).length,0,
   'A live resident occupies the resource tile');
