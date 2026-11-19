@@ -66,7 +66,8 @@
  function invalidateNavigation(world){navCache.delete(world);}
 
  function available(state,n){
-  return root.AgentWorld.available(n,state.world,state.npcs,reachability(state,n));
+  const options=root.AgentWorld.available(n,state.world,state.npcs,reachability(state,n));
+  return root.Perception?root.Perception.filterAffordances(state,n,options):options;
  }
  function moveTo(state,n,target){
   const path=pathfind(state,n,target);

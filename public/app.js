@@ -39,7 +39,7 @@ function reachable(n,point){
  return dist(n,point)===0||pathfind(n,point).length>0;
 }
 function reachability(n){return WorldRuntime.reachability(state,n);}
-function availableActivities(n){return AgentWorld.available(n,state.world,state.npcs,reachability(n));}
+function availableActivities(n){return WorldRuntime.available(state,n);}
 function timeString(){
  const d=Civilization.stamp(state.clock);
  return String(d.hour).padStart(2,'0')+':'+String(d.minute).padStart(2,'0');
@@ -71,11 +71,15 @@ function position(n){
 }
 function updateMovement(n,elapsed){return WorldRuntime.move(state,n,elapsed);}
 function sceneFor(n){
- const others=state.npcs.filter(p=>p!==n&&dist(n,p)<=8)
-  .map(p=>p.name+' '+dist(n,p)+' tiles away').join(', ')||'Nobody nearby';
- const nearby=state.world.nodes.filter(v=>v.stock>0&&dist(n,v)<=7)
-  .sort((a,b)=>dist(n,a)-dist(n,b)).slice(0,8)
-  .map(v=>v.kind+' at '+v.x+','+v.y+' ('+v.stock+' units)').join('; ')||'None observed';
+ const sensed=Perception.snapshot(state,n);
+ const audible=sensed.heard.slice(-4).map(e=>e.kind+' '+e.proximity+
+  ' to the '+e.direction).join('; ')||'Nothing distinctive';
+ const others=sensed.people.map(p=>p.name+' at '+p.x+','+p.y+
+  ' ('+p.activity+')').join(', ')||'Nobody visible';
+ // Vision identifies silhouettes and locations, not exact unseen resource stocks.
+ // Only inspection or touch may reveal a precise container/deposit quantity.
+ const nearby=sensed.objects.slice(0,8).map(o=>o.kind+
+  ' at '+o.x+','+o.y).join('; ')||'None visible';
  const sensations=Biology.sensation(n.bio,n.needs);
  const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
  const a=Agency.state(n),motives=Agency.drives(n);
@@ -104,7 +108,7 @@ function sceneFor(n){
   '. Finished goods: '+(n.craftedItems||[]).slice(-5).map(p=>
    p.kind+' quality '+p.quality+'/5').join(', ')+'. Personally inspected: '+
   (n.knowledge?.observations||[]).slice(-4).map(o=>o.text).join('; ')+
-  '. Near people: '+others+
+  '. Heard: '+audible+'. Visible people: '+others+
   '. Perceived resources: '+nearby+
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
@@ -113,7 +117,8 @@ function actionDuration(n,key){return WorldRuntime.actionDuration(n,key);}
 function backgroundOptions(n){
  // The same legal affordances serve the model and the autonomous executor.
  // Personal need, traits, remembered outcomes and ongoing goals order them.
- const choices=Agency.ranked(n,availableActivities(n).filter(o=>o.key!=='none'),
+ const sensedOptions=Perception.filterAffordances(state,n,availableActivities(n));
+ const choices=Agency.ranked(n,sensedOptions.filter(o=>o.key!=='none'),
   state.world,state.clock).slice(0,9);
  choices.push({key:'none',when:'Observe surroundings before deciding'});
  return choices.map(({key,when})=>({key,when}));
