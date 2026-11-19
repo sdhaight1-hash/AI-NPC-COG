@@ -16,7 +16,8 @@ const dist=(a,b)=>Frontier.distance(state.world,a,b);
 const key=p=>(p.z||0)+':'+p.x+':'+p.y;
 const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
 const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
- fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_tool:15,
+ fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_wood_stone:15,
+ experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
  build_fire:20,build_shelter:75,share_food:2,socialize:3,explore:1,none:1};
 let installedAtlas=null,showAtlas=true;
 function selectedNpc(){return state.npcs.find(n=>n.id===state.selected)||null;}
@@ -167,7 +168,8 @@ function sceneFor(n){
 function backgroundOptions(n){
  const options=availableActivities(n).filter(o=>o.key!=='none');
  const priority={drink:100,fill_water:80,eat:90,forage:70,
-  rest:60,explore:45,experiment_tool:43,craft_hatchet:45,
+  rest:60,explore:45,experiment_wood_stone:43,
+  experiment_wood_fiber:43,experiment_wood_stone_fiber:43,craft_hatchet:45,
   collect_wood:35,collect_stone:33,collect_fiber:33,
   socialize:40,share_food:35,make_shelter:42,build_shelter:50,
   make_campfire:40,build_fire:48};
@@ -555,7 +557,8 @@ function restore(){
      n.skills[k]=Math.min(old.skills[k],100000);
    n.bio=Biology.restore(old.bio,n.inventory.food);
    n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
-    [...new Set(old.knowledge.recipes.filter(v=>v==='hatchet'))]:[],observations:[]};
+    [...new Set(old.knowledge.recipes.filter(v=>
+      ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
    if(Array.isArray(old.memories))n.memories=old.memories.slice(-24);
    if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
