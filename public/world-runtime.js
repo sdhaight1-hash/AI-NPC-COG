@@ -260,6 +260,7 @@
     root.AgentWorld.complete(n,state.world,state.npcs):
     {ok:false,message:'RESERVATION_EXPIRED: required materials unavailable'}
   ));
+  if(outcome.ok)root.EvidenceMemory?.fromReceipt(state,n,outcome.receipt);
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
