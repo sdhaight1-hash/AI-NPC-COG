@@ -262,7 +262,9 @@
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
-  if(finished.source==='project')root.Projects?.onOutcome(state,n,finished.key,outcome.ok);
+  if(finished.source==='project'||(n.project&&finished.source==='plan'&&
+    finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
+   root.Projects?.onOutcome(state,n,finished.key,outcome.ok);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
