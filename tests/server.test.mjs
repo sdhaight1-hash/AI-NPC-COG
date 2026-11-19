@@ -73,7 +73,7 @@ test('HTTP server serves every engine script declared by index.html', async t =>
   const page=await fetch(base+'/');
   assert.equal(page.status,200,'HTML must load');
   const html=await page.text();
-  const scripts=[...html.matchAll(/<script\\s+src="([^"]+)"[^>]*><\\/script>/g)]
+  const scripts=[...html.matchAll(/<script src="([^"]+)"/g)]
    .map(m=>m[1]);
   assert.ok(scripts.includes('/simulation.js'),'Simulation must be on the page');
   assert.ok(scripts.length>=15,'Expected physical-world engine modules');
