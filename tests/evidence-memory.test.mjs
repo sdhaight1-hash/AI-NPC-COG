@@ -99,3 +99,16 @@ test('daily summaries contain only verified episodes and remain bounded',()=>{
  E.restore(restored,saved,sim.clock);
  assert.equal(JSON.stringify(E.state(restored)),JSON.stringify(E.state(a)));
 });
+
+test('legacy v3 recollections migrate without counterfeit physical provenance',()=>{
+ const {E,sim,a}=setup();
+ const legacy=[{text:'I remember a river in the west',at:930,
+  ref:'river_2',x:4,y:6,salience:3}];
+ E.restore(a,undefined,sim.clock,legacy);
+ const migrated=E.recall(a,'river west',sim.clock,2);
+ assert.equal(migrated.length,1);
+ assert.equal(migrated[0].certainty,'reported');
+ assert.equal(migrated[0].receiptId,null);
+ assert.equal(E.state(a).facts.length,0);
+ assert.equal(E.state(a).summaries.length,0);
+});
