@@ -92,3 +92,28 @@ test('world simulation advances a legal shelter project without granting resourc
  assert.ok(s.receipts.some(x=>x.status==='COMPLETED'&&x.action==='build_shelter'));
  assert.ok(n.project.completedActions>=2);
 });
+
+test('critical thirst interrupts a physical project task and resumes remaining work',()=>{
+ const {c,s,n}=setup();
+ n.inventory.wood=4;n.inventory.fiber=4;n.inventory.water=3;
+ c.Projects.create(s,n,'shelter');
+ assert.equal(c.WorldRuntime.advanceProject(s,n),true);
+ assert.equal(n.task.key,'experiment_wood_fiber');
+ const initialCommand=n.task.commandId;
+ tick(c,s,6);
+ const progress=n.currentActivity.workDone;
+ assert.ok(progress>=6);
+ n.needs.thirst=96;n.bio.hydrationBudgetMl=100;s.auto=true;
+ assert.equal(c.WorldRuntime.survival(s,n),true);
+ assert.equal(n.task.key,'drink');
+ assert.equal(n.suspendedActivities.at(-1).commandId,initialCommand);
+ for(let i=0;i<50&&!(n.knowledge.recipes.includes('shelter'));i++){
+  n.energy=100;tick(c,s);
+ }
+ assert.equal(n.knowledge.recipes.includes('shelter'),true);
+ const completed=s.receipts.filter(r=>r.commandId===initialCommand&&r.status==='COMPLETED');
+ assert.equal(completed.length,1,'Interrupted experiment must commit at most once');
+ assert.equal(n.inventory.fiber,3,'Learning consumes its actual ingredient once');
+ assert.ok(s.receipts.some(r=>r.commandId===initialCommand&&r.status==='RESUMED'));
+ assert.equal(n.project.nodes.find(x=>x.id==='learn').status,'DONE');
+});
