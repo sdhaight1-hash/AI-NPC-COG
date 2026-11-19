@@ -60,3 +60,18 @@ body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),l
 .object-inspector #objectLocation{color:#9ebaa3;font:11px ui-monospace,Consolas,monospace}
 .world-status{background:#112019e8;border-color:#7d9978}
 #chatLog .memory{border-color:#c6a46d;color:#e2ebdb}
+
+/* Desktop observatory: independent panes prevent inspector scrolling from
+   pushing the simulation offscreen. Keep the actual canvas aspect ratio. */
+@media (min-width:1101px){
+ body{height:100dvh;overflow:hidden}
+ .layout{height:calc(100dvh - 74px);max-width:none;padding:12px 16px;
+  align-items:stretch;overflow:hidden}
+ .world-column,.sidebar{height:100%;min-height:0;overflow-y:auto;
+  overscroll-behavior:contain;scrollbar-width:thin;align-self:start}
+ .world-column{scrollbar-gutter:stable}
+ .sidebar{scrollbar-gutter:stable;display:flex}
+ .world-frame canvas{width:auto;max-width:100%;height:auto;
+  max-height:calc(100dvh - 305px);margin:0 auto}
+ .simulation{flex-shrink:0}
+}

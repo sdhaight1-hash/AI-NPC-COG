@@ -420,6 +420,36 @@
       rect(ctx,'#ffe5a4',px+7,py-3,2,3);
     }
     ctx.drawImage(sprites.get(key),px-8,py-24);
+    // Draw what an inhabitant is actually doing, not only their last receipt.
+    // This is a visual projection of an authoritative, time-costed activity.
+    const work=person.task?.key||(person.action==='rest'?'rest':null);
+    if(work){
+      const labels={forage:'FOOD',collect_wood:'WOOD',collect_stone:'STONE',
+        collect_fiber:'FIBER',fill_water:'WATER',build_fire:'FIRE',
+        build_shelter:'BUILD',build_cache:'BUILD',craft_stage:'CRAFT',
+        craft_hatchet:'CRAFT',eat:'EAT',drink:'DRINK',rest:'Zz',
+        inspect:'LOOK',explore:'WALK',socialize:'TALK',share_food:'GIVE'};
+      const label=labels[work]||(work.startsWith('craft_')?'CRAFT':
+        work.startsWith('experiment_')?'TRY':'WORK');
+      const active=person.currentActivity;
+      const movingToJob=!!person.path?.length;
+      const progress=active&&active.workRequired>0&&!movingToJob?
+        Math.max(0,Math.min(1,active.workDone/active.workRequired)):null;
+      const top=py-47;
+      rect(ctx,'#1b2b24',px-12,top,24,10);
+      rect(ctx,'#f0c786',px-12,top,24,1);
+      ctx.font='bold 6px monospace';ctx.textAlign='center';
+      ctx.fillStyle='#fff1cf';ctx.fillText(label,px,top+7);
+      if(progress!==null){
+        rect(ctx,'#1a2c29',px-12,top+10,24,3);
+        rect(ctx,'#7cddb0',px-12,top+10,Math.round(progress*24),2);
+      }
+      if(work!=='rest'&&!movingToJob){
+        // A small timed pulse makes even stationary harvesting/building legible.
+        const beat=Math.floor(clockMs/360)%2;
+        rect(ctx,'#f4d490',px+(beat?8:-10),py-17-beat*3,2,2);
+      }
+    }
     if(person.task?.key==='socialize'||person.peerPending){
       rect(ctx,'#fff3d3',px+6,py-27,6,5);
       rect(ctx,'#866a55',px+8,py-25,2,1);
