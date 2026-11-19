@@ -16,6 +16,9 @@
  }
  function serializePerson(n){
   const {motion,blockedFor,peerPending,peerReservedFor,peerRetryAt,...stored}=n;
+  // No active activity is the same state whether the field is absent or null.
+  // Keep live activity progress unchanged across save/reload.
+  if(stored.currentActivity===null)delete stored.currentActivity;
   return stored;
  }
  function save(state){
