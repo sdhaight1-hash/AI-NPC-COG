@@ -5,6 +5,8 @@
 
 **Read first:** [Full audit ledger](full-repository-audit-ledger-2026-11-19.md); [worldgen/vector/chunks study](topdown-vector-chunk-worldgen-research-2026-11-19.md); [cross-repo transfer](cross-repository-architecture-transfer-2026-11-19.md); [ecology/time research](ecology-time-and-emergent-paths-research-2026-11-19.md); [WFC/space-colonization code review](procgen-implementation-code-review-2026-11-19.md); [prior cognition designs](agent-autonomy-deep-investigation-2026-11-19.md).
 
+**Finalized research contracts (2026-11-19):** [time/causality](final-research-time-causality-contract-2026-11-19.md), [item ownership](final-research-physical-ownership-contract-2026-11-19.md), [LLM cognitive executive](final-research-cognitive-executive-contract-2026-11-19.md), and [sequenced implementation handoff](final-research-implementation-handoff-2026-11-19.md). These refine rather than replace this audit's historical evidence and are research-only.
+
 ## 1. Architectural North Star
 
 **Persistent world truth is separate from AI knowledge, procedure, visual projection and caching.**

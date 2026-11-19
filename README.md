@@ -52,6 +52,10 @@ pottery, food, textile or metallurgy system. See the
 [crafting and production architecture](docs/crafting-architecture.md) for
 material-property, process, ecology, wear, logistics and workshop expansion gates.
 
+## Final pre-code contracts (2026-11-19)
+
+The [final research and implementation handoff](docs/final-research-implementation-handoff-2026-11-19.md) fixes the architecture decisions for the next coding sequence. Read the separate [time/causality](docs/final-research-time-causality-contract-2026-11-19.md), [physical inventory and conservation](docs/final-research-physical-ownership-contract-2026-11-19.md) and [cognitive executive](docs/final-research-cognitive-executive-contract-2026-11-19.md) contracts before touching those systems. These documents are proposals, **not implemented gameplay features**.
+
 ## Roadmap and architecture
 
 - [Emergent world roadmap](docs/emergent-world-roadmap.md) — the full set of design invariants, future phases, acceptance gates, and honest omissions.
