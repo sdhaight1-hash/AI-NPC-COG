@@ -141,7 +141,7 @@
         add('craft_hatchet','Use a learned method to craft a stone hatchet');
       else add('experiment_wood_stone_fiber','Try joining wood, stone and fiber; outcome unknown');
     }
-    if(n.energy<88)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
+    if(n.energy<60)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
     const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0)
       add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
