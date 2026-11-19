@@ -2,10 +2,10 @@
 // It never changes world state, procedures, inventory or physical authority.
 (function(root){
  'use strict';
- const MAX_EPISODES=240,MAX_FACTS=120,MAX_SUMMARIES=36;
+ const MAX_EPISODES=240,MAX_FACTS=120,MAX_SUMMARIES=36,MAX_CLAIMS=80;
  const words=s=>String(s||'').toLowerCase().match(/[a-z][a-z0-9_]{2,}/g)||[];
  const unique=s=>[...new Set(words(s))];
- const empty=()=>({sequence:0,episodes:[],facts:[],summaries:[],methods:[],social:[],lastDay:0});
+ const empty=()=>({sequence:0,episodes:[],facts:[],claims:[],summaries:[],methods:[],social:[],lastDay:0});
  const state=n=>n.evidenceMemory ||=empty();
  const clone=x=>JSON.parse(JSON.stringify(x));
  const kinds=new Set(['action','inspection','interaction','sound','personal']);
@@ -79,6 +79,15 @@
    salience:action==='inspect'?4:2,fact});
   if(!entry)return null;
   const m=state(n);
+  if(action==='inspect'&&entry.certainty==='observed'){
+   const kind=entry.text.match(/^Inspected (food|water|wood|stone|fiber) /)?.[1];
+   for(const claim of m.claims){
+    if(claim.sourceId===receipt.targetId&&claim.status==='unverified'){
+     claim.status=kind===claim.kind?'supported':'contradicted';
+     claim.verificationReceiptId=receipt.id;
+    }
+   }
+  }
   for(const method of receipt.delta?.knowledge?.learnedMethods||[]){
    if(typeof method!=='string'||!n.knowledge?.recipes?.includes(method)||
     m.methods.some(x=>x.method===method))continue;
@@ -113,7 +122,7 @@
    e.type==='interaction'&&e.receiptId===receipt.id)))return null;
   const utterances=[{actorId:speaker.id,text:first.trim().slice(0,220)},
    {actorId:listener.id,text:second.trim().slice(0,220)}];
-  return participants.map((n,i)=>{
+  const entries=participants.map((n,i)=>{
    const memory=state(n);
    const entry={id:'ev_'+(++memory.sequence),type:'interaction',
     text:('Spoke with '+participants[1-i].name+': '+
@@ -126,6 +135,35 @@
    memory.episodes=memory.episodes.slice(-MAX_EPISODES);
    return clone(entry);
   });
+  // Explicit source tags are the ONLY typed claim channel in freeform speech.
+  // The speaker must possess a real firsthand inspection of that source.
+  for(let i=0;i<2;i++){
+   const sender=participants[i],receiver=participants[1-i];
+   const heard=utterances[i].text,found=new Set();
+   for(const match of heard.matchAll(/\[source:([a-z0-9_]{1,100})\]/g)){
+    const ref=match[1];
+    if(found.has(ref))continue;
+    found.add(ref);
+    const evidence=state(sender).episodes.findLast(e=>
+     e.type==='inspection'&&e.certainty==='observed'&&e.ref===ref&&
+     typeof e.receiptId==='string');
+    const kind=evidence?.text.match(/^Inspected (food|water|wood|stone|fiber) /)?.[1];
+    if(!kind)continue;
+    const target=sim.world.nodes.find(x=>x.id===ref&&x.kind===kind);
+    if(!target)continue;
+    const memory=state(receiver);
+    if(memory.claims.some(c=>c.speechReceiptId===receipt.id&&
+     c.sourceId===ref&&c.speakerId===sender.id))continue;
+    memory.claims.push({id:'claim_'+entries[1-i].id+'_'+memory.claims.length,
+     speakerId:sender.id,sourceId:ref,kind,
+     x:target.x,y:target.y,z:target.z||0,
+     at:sim.clock,sourceEpisodeId:evidence.id,
+     speechEpisodeId:entries[1-i].id,speechReceiptId:receipt.id,
+     status:'unverified',verificationReceiptId:null});
+    memory.claims=memory.claims.slice(-MAX_CLAIMS);
+   }
+  }
+  return entries;
  }
  function recall(n,query,clock,limit=5){
   const items=state(n).episodes;
@@ -209,6 +247,28 @@
     .slice(-MAX_FACTS).map(f=>({id:f.id,entityId:f.entityId.slice(0,100),
      key:f.key,value:f.value.slice(0,80),at:f.at,
      sourceEpisodeId:f.sourceEpisodeId,receiptId:f.receiptId,certainty:'observed'}));
+   // A reported claim must still have its own witnessed dialogue episode
+   // containing the explicit source citation in the named speaker's speech.
+   result.claims=(Array.isArray(saved.claims)?saved.claims:[])
+    .filter(c=>{
+     if(!c||typeof c.sourceId!=='string'||typeof c.speakerId!=='string'||
+      !['food','water','wood','stone','fiber'].includes(c.kind)||
+      !['unverified','supported','contradicted'].includes(c.status)||
+      !Number.isFinite(c.at)||c.at>clock||c.at<0||
+      !Number.isInteger(c.x)||!Number.isInteger(c.y)||!Number.isInteger(c.z))return false;
+     const speech=result.episodes.find(e=>e.id===c.speechEpisodeId&&
+      e.type==='interaction'&&e.certainty==='reported'&&
+      e.receiptId===c.speechReceiptId);
+     return !!speech&&speech.utterances?.some(u=>
+      u.actorId===c.speakerId&&u.text.includes('[source:'+c.sourceId+']'));
+    }).slice(-MAX_CLAIMS).map(c=>({
+     id:String(c.id||'').slice(0,120),speakerId:c.speakerId.slice(0,100),
+     sourceId:c.sourceId.slice(0,100),kind:c.kind,x:c.x,y:c.y,z:c.z,
+     at:c.at,sourceEpisodeId:String(c.sourceEpisodeId||'').slice(0,80),
+     speechEpisodeId:c.speechEpisodeId,speechReceiptId:c.speechReceiptId,
+     status:c.status,verificationReceiptId:
+      typeof c.verificationReceiptId==='string'?c.verificationReceiptId:null
+    }));
    result.summaries=(Array.isArray(saved.summaries)?saved.summaries:[])
     .filter(s=>s&&typeof s.id==='string'&&typeof s.text==='string'&&
      Number.isFinite(s.at)&&s.at<=clock&&Array.isArray(s.sourceEpisodeIds)&&
@@ -272,5 +332,5 @@
     Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
  }
  root.EvidenceMemory={state,record,fromReceipt,fromDialogue,recall,consolidate,restore,working,belief,
-  MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES};
+  MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES,MAX_CLAIMS};
 })(globalThis);
