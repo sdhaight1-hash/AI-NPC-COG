@@ -212,3 +212,48 @@ test('depleted reported source produces one stale claim and stops futile return 
  assert.equal(listener.evidenceMemory.claims[0].status,'supported');
  assert.ok(listener.evidenceMemory.claims[0].verificationReceiptId);
 });
+
+test('private verified speaker reliability outranks newer competing resource hearsay',()=>{
+ const {c,s,n}=setup();
+ s.auto=false;s.npcs=[n];n.energy=100;n.inventory.water=0;
+ s.clock=23*60;s.world.now=s.clock;
+ const points=Array.from({length:s.world.width*s.world.height},(_,i)=>({
+  x:i%s.world.width,y:Math.floor(i/s.world.width),z:0})).filter(p=>
+   c.Frontier.distance(s.world,n,p)>=6&&
+   c.Frontier.distance(s.world,n,p)<=9&&
+   c.Frontier.traversable(s.world,p.x,p.y,0)&&
+   c.WorldRuntime.pathfind(s,n,p).length>0).slice(0,2);
+ assert.equal(points.length,2);
+ const older={id:'reported_source_a',kind:'water',stock:0,max:8,...points[0]};
+ const newer={id:'reported_source_b',kind:'water',stock:7,max:8,...points[1]};
+ s.world.nodes=[older,newer];
+ assert.equal(c.Perception.canSee(s,n,older),false);
+ assert.equal(c.Perception.canSee(s,n,newer),false);
+ // Fixture isolates policy ranking; other tests establish physical provenance.
+ n.evidenceMemory.episodes.push({id:'ev_90',type:'inspection',
+  certainty:'observed',ref:'verified_old_source',receiptId:'evt_90',at:1300,
+  text:'Inspected water at 1,2',salience:4});
+ n.evidenceMemory.claims.push({
+  id:'past_supported',speakerId:'person_2',sourceId:'verified_old_source',
+  kind:'water',status:'supported',at:1200,
+  verificationReceiptId:'evt_90'});
+ n.evidenceMemory.claims.push({
+  id:'report_a',speakerId:'person_2',sourceId:older.id,kind:'water',
+  x:older.x,y:older.y,z:0,status:'unverified',at:1320});
+ n.evidenceMemory.claims.push({
+  id:'report_b',speakerId:'person_3',sourceId:newer.id,kind:'water',
+  x:newer.x,y:newer.y,z:0,status:'unverified',at:1330});
+ assert.ok(c.EvidenceMemory.speakerReliability(n,'person_2').score>
+  c.EvidenceMemory.speakerReliability(n,'person_3').score);
+ const choice=c.WorldRuntime.available(s,n).find(o=>o.key==='fill_water');
+ assert.equal(choice?.ref,older.id,
+  'Known reliable reporter wins, despite older report and zero live stock');
+ assert.doesNotMatch(choice.when,/remaining|stock|7/);
+ const saved=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ const restored=c.Simulation.initial(379210);restored.auto=false;
+ assert.equal(c.Persistence.restore(restored,saved),true);
+ const m=restored.npcs.find(a=>a.id===n.id);
+ // An invented evidence fixture may be discarded by restore validation, so
+ // only assert stable live scoring here; separate tests validate real persistence.
+ assert.ok(m);
+});
