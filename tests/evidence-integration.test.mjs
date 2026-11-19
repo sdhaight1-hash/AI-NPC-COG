@@ -180,9 +180,12 @@ test('depleted reported source produces one stale claim and stops futile return 
    c.Frontier.distance(s.world,p,spring)>20&&
    c.Frontier.traversable(s.world,p.x,p.y,0));
  assert.ok(away);n.x=away.x;n.y=away.y;
- spring.stock=0;spring.regrow=0;
+ spring.stock=1;spring.regrow=0;
  listener.inventory.water=0;listener.energy=100;
  assert.equal(c.WorldRuntime.begin(s,listener,'fill_water','reported claim'),true);
+ // The claim was actionable when work began; the finite source is emptied
+ // before commitment by competing consumption or environmental depletion.
+ spring.stock=0;
  for(let i=0;i<15&&listener.task;i++)c.Simulation.advance(s,1);
  const failure=s.receipts.find(r=>r.actorId===listener.id&&
   r.action==='fill_water'&&r.status==='FAILED');
