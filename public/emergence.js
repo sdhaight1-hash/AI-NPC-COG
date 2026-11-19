@@ -108,7 +108,7 @@
        (n.inventory.wood>=2||findNode(n,world,'wood',canReach)) &&
        (n.inventory.stone>=1||findNode(n,world,'stone',canReach)))
       add('make_campfire','Commit to building a communal campfire, collecting any missing materials');
-    if(!n.plan&&n.inventory.wood>=4&&n.inventory.fiber>=3&&n.energy>=22&&
+    if(n.inventory.wood>=4&&n.inventory.fiber>=3&&n.energy>=22&&
        !world.structures.some(site=>site.type==='shelter'&&distance(n,site)<5))
       add('build_shelter','Construct a small shelter from 4 wood and 3 plant fiber');
     if(!n.plan&&n.energy>=20&&
