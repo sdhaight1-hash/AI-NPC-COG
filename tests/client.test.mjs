@@ -54,10 +54,11 @@ function makeBrowser(options={}) {
   };
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
   const physics=readFileSync(new URL('../public/physics.js',import.meta.url),'utf8');
+  const frontier=readFileSync(new URL('../public/frontier.js',import.meta.url),'utf8');
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(art+'\n'+physics+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo};',context);
+  vm.runInNewContext(art+'\n'+physics+'\n'+frontier+'\n'+rules+'\n'+source +
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions,reachability};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
 
@@ -67,8 +68,8 @@ test('cached static map is painted once, while dynamic frames reuse it',()=>{
   assert.ok(before>100,'Map should be initialized');
   browser.drawWorld();browser.drawWorld();
   assert.equal(browser.counters.staticRects,before,'Static tiles should not be redrawn each frame');
-  assert.equal(browser.counters.screenImages,16,
-    'Each frame draws one cached map and seven pixel-art residents');
+  assert.equal(browser.counters.screenImages,18,
+    'Each frame draws one cached map, seven residents and the fog overlay');
 });
 
 test('held WASD moves continuously rather than resetting movement paths',()=>{
@@ -103,7 +104,7 @@ test('an unfinished chat request is never written to persistent state',()=>{
     {role:'npc',content:'previous completed response',source:'rein'}
   );
   browser.save();
-  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
   assert.equal(stored.npcs[0].chat.length,1);
   assert.equal(stored.npcs[0].chat[0].content,'previous completed response');
 });
@@ -183,7 +184,7 @@ test('agents can gather finite food, eat it, and build an object from earned mat
   assert.equal(npc.inventory.wood,0);
   assert.equal(npc.inventory.stone,0);
   browser.save();
-  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
   assert.equal(stored.world.structures.length,count+1);
   assert.equal(stored.npcs.find(n=>n.id==='rowan').inventory.wood,0);
 });
@@ -265,8 +266,11 @@ test('Rein always receives at most ten legal action choices, even with planning'
  const options=browser.backgroundOptions(npc);
  assert.ok(options.length<=10);
  assert.equal(options.at(-1).key,'none');
- assert.ok(options.some(x=>x.key==='stock_food'));
- assert.ok(options.some(x=>x.key==='make_campfire'));
+ const legal=browser.availableActivities(npc).map(x=>x.key);
+ assert.ok(legal.includes('stock_food'));
+ assert.ok(legal.includes('make_campfire'));
+ assert.ok(options.every(x=>legal.includes(x.key)),
+   'The ten scored choices must all be legal, even when some are omitted');
  assert.ok(!options.some(x=>x.key==='work'),'No occupational scheduling');
 });
 
@@ -348,7 +352,7 @@ test('a complete model-generated NPC exchange commits to both agents exactly onc
  assert.ok(a.needs.social<before);
  assert.equal(a.task,null);
  browser.save();
- const saved=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+ const saved=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
  assert.equal(saved.npcs.find(n=>n.id==='jonas').peerLog.length,1);
  assert.equal(saved.npcs.find(n=>n.id==='mara').lastPeerAt,saved.clock);
 });
@@ -394,10 +398,10 @@ test('ongoing plans and verified exchanges survive a browser restart',()=>{
 test('invalid restored goals are rejected without breaking the world',()=>{
  const before=makeBrowser();
  before.save();
- const data=JSON.parse(before.saved.get('ai-npc-cog-v1'));
+ const data=JSON.parse(before.saved.get('ai-npc-cog-v2'));
  data.npcs[0].plan={key:'become_superuser',steps:-1};
  data.npcs[0].peerLog=[{with:'anonymous',first:'x',second:'y',at:'today'}];
- before.saved.set('ai-npc-cog-v1',JSON.stringify(data));
+ before.saved.set('ai-npc-cog-v2',JSON.stringify(data));
  const after=makeBrowser({saved:before.saved});
  assert.equal(after.state.npcs[0].plan,null);
  assert.equal(after.state.npcs[0].peerLog.length,0);
@@ -529,4 +533,86 @@ test('physics diagnostic rendering can be enabled without changing world state',
  browser.state.debugPhysics=true;
  browser.drawWorld();
  assert.deepEqual({x:npc.x,y:npc.y},position);
+});
+
+test('the world expands into distinct explorable biomes and starts with discovery fog',()=>{
+ const browser=makeBrowser();
+ assert.equal(browser.state.world.width,80);
+ assert.equal(browser.state.world.height,52);
+ assert.equal(browser.state.world.terrain.length,4160);
+ assert.ok(browser.state.world.nodes.length>25);
+ assert.ok(browser.state.world.discovered[12*80+21]);
+ assert.ok(!browser.state.world.discovered[45*80+70]);
+ assert.ok(browser.pathfind(browser.state.player,{x:41,y:22}).length>0,
+   'Starting clearing must connect to the generated frontier');
+});
+test('an NPC can pursue and finish a shelter plan through material collection',()=>{
+ const browser=makeBrowser();
+ browser.state.auto=false;
+ const npc=browser.state.npcs[0];
+ npc.x=41;npc.y=22;npc.body.x=41.5;npc.body.y=22.5;
+ npc.inventory.wood=0;npc.inventory.fiber=0;
+ assert.equal(browser.setAction(npc,'make_shelter','rein',null),true);
+ for(let attempt=0;attempt<8&&npc.plan;attempt++){
+  browser.state.clock+=2;
+  browser.advancePlan(npc);
+  if(npc.task){
+   const node=browser.state.world.nodes.find(n=>n.id===npc.task.ref);
+   if(node){npc.x=node.x;npc.y=node.y;npc.body.x=node.x+.5;npc.body.y=node.y+.5;}
+   npc.path=[];browser.completeActivity(npc);
+  }
+ }
+ assert.ok(browser.state.world.structures.some(s=>s.type==='shelter'));
+ browser.state.clock+=2;browser.advancePlan(npc);
+ assert.equal(npc.plan,null,'Completed building goal must clear');
+ assert.ok(npc.memories.some(m=>m.text.includes('shelter')));
+});
+test('player and NPCs consume the same limited water and share item semantics',()=>{
+ const browser=makeBrowser();
+ const water=browser.state.world.nodes.find(n=>n.id==='wild_water_41_22');
+ assert.ok(water,'Starter island freshwater source is guaranteed');
+ const npc=browser.state.npcs[0],player=browser.state.player;
+ npc.x=water.x;npc.y=water.y;
+ player.x=water.x;player.y=water.y;
+ const initial=water.stock;
+ browser.playerAction('fill_water');
+ assert.equal(water.stock,initial-2);
+ npc.task={key:'fill_water',ref:water.id};
+ browser.completeActivity(npc);
+ assert.equal(water.stock,initial-4,'Both actors draw from the same world node');
+ player.needs.thirst=82;
+ browser.playerAction('drink');
+ assert.equal(player.needs.thirst,34);
+ browser.save();
+ const stored=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
+ assert.equal(stored.player.inventory.water,3);
+ assert.equal(stored.world.nodes.find(n=>n.id===water.id).stock,initial-4);
+});
+test('migration preserves legacy relationships but starts new discovery independently',()=>{
+ const first=makeBrowser();
+ first.save();
+ const old=JSON.parse(first.saved.get('ai-npc-cog-v2'));
+ old.npcs[0].relationships.jonas=77;
+ old.npcs[0].memories=[{time:'Day 1 08:10',text:'Remembering a promise'}];
+ first.saved.delete('ai-npc-cog-v2');
+ first.saved.set('ai-npc-cog-v1',JSON.stringify(old));
+ const next=makeBrowser({saved:first.saved});
+ assert.equal(next.state.npcs[0].relationships.jonas,77);
+ assert.equal(next.state.npcs[0].memories[0].text,'Remembering a promise');
+ assert.ok(next.state.world.discovered[12*80+21]);
+});
+
+test('connected-region flood fill agrees with pathfinder and rejects submerged cells',()=>{
+ const browser=makeBrowser();
+ const n=browser.state.npcs[0],reachable=browser.reachability(n);
+ const targets=[{x:41,y:22},{x:42,y:23},{x:19,y:7},{x:38,y:21}];
+ for(const target of targets){
+  const blocked=browser.state.world.terrain[target.y*80+target.x]==='water'||
+   (target.x>=15&&target.x<23&&target.y>=3&&target.y<8)||
+   (target.x-38)**2+(target.y-21)**2<=4;
+  if(blocked)assert.equal(reachable(target),false,'No flood passage through obstacles');
+  else assert.equal(reachable(target),browser.pathfind(n,target).length>0);
+ }
+ assert.equal(reachable({x:-1,y:3}),false);
+ assert.equal(reachable({x:999,y:999}),false);
 });

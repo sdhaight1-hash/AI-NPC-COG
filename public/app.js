@@ -4,8 +4,9 @@
 const canvas = document.getElementById('world');
 const ctx = canvas.getContext('2d');
 const TILE = VillageArt.TILE;
-const W = 40, H = 26;
-const STORE = 'ai-npc-cog-v1';
+const W = Frontier.WIDTH, H = Frontier.HEIGHT;
+const STORE='ai-npc-cog-v2', LEGACY_STORE='ai-npc-cog-v1';
+const WORLD_SEED=Number(localStorage.getItem('ai-npc-cog-world-seed'))||Frontier.DEFAULT_SEED;
 
 const buildings = [
   { id:'cottage', name:'Longhouse', x:4, y:3, w:7, h:5, door:{x:7,y:8}, roof:'#97674c' },
@@ -44,8 +45,11 @@ const initialNPCs = [
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
   auto:true, backgroundBusy:false, conversationBusy:false, debugPhysics:false,
   selected:'mara', lastDecisionMs:0,
-  zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
-  npcs:initialNPCs, world:AgentWorld.newWorld(), events:[], nextUI:0, nextSave:0, lastSocial:0};
+  zoom:1, camera:{x:0,y:0},
+  player:AgentWorld.newAgent({id:'player',name:'You',x:21,y:12,path:[],travel:0,
+    energy:90,action:'none',relationships:{},goal:'Explore'},6),
+  npcs:initialNPCs,world:AgentWorld.newWorld(WORLD_SEED),
+  events:[],nextUI:0,nextSave:0,lastSocial:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
 const manhattan=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
@@ -57,7 +61,7 @@ function isBlocked(x,y){
  if(x<0||y<0||x>=W||y>=H) return true;
  if(buildings.some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)) return true;
  if((x-38)**2+(y-21)**2<=4) return true;
- return false;
+ return Frontier.terrainAt(state.world,x,y)==='water';
 }
 function pathfind(start,end){
  const tx=Math.round(end.x),ty=Math.round(end.y);
@@ -114,20 +118,41 @@ function reachableFrom(npc,point){
  return !isBlocked(point.x,point.y)&&
   (manhattan(npc,point)===0||pathfind(npc,point).length>0);
 }
+function reachability(npc){
+ // One breadth-first flood per cognition event. Avoid dozens of separate
+ // pathfind calls over the larger island when comparing resource affordances.
+ const visited=new Uint8Array(W*H);
+ const queue=[{x:npc.x,y:npc.y}];
+ if(isBlocked(npc.x,npc.y))return ()=>false;
+ visited[npc.y*W+npc.x]=1;
+ for(let i=0;i<queue.length;i++){
+  const point=queue[i];
+  for(const [dx,dy] of [[0,-1],[1,0],[0,1],[-1,0]]){
+   const x=point.x+dx,y=point.y+dy,k=y*W+x;
+   if(x<0||y<0||x>=W||y>=H||visited[k]||isBlocked(x,y))continue;
+   visited[k]=1;queue.push({x,y});
+  }
+ }
+ return point=>Number.isInteger(point.x)&&Number.isInteger(point.y)&&
+  point.x>=0&&point.y>=0&&point.x<W&&point.y<H&&
+  visited[point.y*W+point.x]===1;
+}
 function availableActivities(npc){
- return AgentWorld.available(npc,state.world,state.npcs,point=>reachableFrom(npc,point));
+ return AgentWorld.available(npc,state.world,state.npcs,reachability(npc));
 }
 function sceneFor(npc){
  const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
   .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
  const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
- const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=18)
+ const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=15)
   .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
  return 'Small settlement, day '+state.day+' at '+timeString()+'. '+
   npc.name+' is at ('+npc.x+','+npc.y+'). Personality: '+npc.personality+
   ' Physical needs: hunger '+Math.round(npc.needs.hunger)+'/100 (high is hungry), energy '+
   Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
-  '/100 (high is lonely), curiosity '+Math.round(npc.needs.curiosity)+'/100. Inventory: '+
+  '/100 (high is lonely), thirst '+Math.round(npc.needs.thirst)+'/100, curiosity '+
+  Math.round(npc.needs.curiosity)+'/100. Biome: '+Frontier.terrainAt(state.world,npc.x,npc.y)+
+  '. Weather: '+state.world.weather.kind+' ('+state.world.weather.temperature+'C). Inventory: '+
   Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
   '. Earned experience: '+Object.entries(npc.skills).map(([k,v])=>k+' '+v).join(', ')+
   ' (practice increases gathering yield). Current intention: '+npc.goal+
@@ -138,13 +163,34 @@ function sceneFor(npc){
   'the environment validates it and supplies consequences.';
 }
 function backgroundOptions(npc){
- // Rein supports A-J only; the world may expose more legal actions.
- // Preserve urgent survival choices and self-chosen multi-step intentions.
- const rank=['eat','rest','stock_food','make_campfire','share_food','socialize',
-  'explore','forage','collect_wood','collect_stone','build_fire'];
- const options=availableActivities(npc).filter(o=>o.key!=='none')
-  .sort((a,b)=>rank.indexOf(a.key)-rank.indexOf(b.key)).slice(0,9);
- options.push({key:'none',when:'Wait and observe without changing current circumstances'});
+ // Rein's trained choice tokens allow at most A-J. Every character receives
+ // urgent survival choices PLUS social and exploration opportunities when legal.
+ const all=availableActivities(npc).filter(o=>o.key!=='none');
+ const urgency=new Map([
+  ['drink',npc.needs.thirst>55?115:35],
+  ['fill_water',npc.needs.thirst>50?95:25],
+  ['eat',npc.needs.hunger>55?105:35],
+  ['forage',npc.needs.hunger>50?90:30],
+  ['rest',npc.energy<30?100:20],
+  ['socialize',npc.needs.social>48?70:38],
+  ['share_food',npc.needs.social>50?61:32],
+  ['explore',npc.needs.curiosity>45?65:28],
+  ['make_shelter',state.world.weather.kind!=='clear'?65:41],
+  ['build_shelter',65],['make_campfire',34],['build_fire',47],
+  ['craft_hatchet',49],['collect_wood',33],['collect_stone',28],['collect_fiber',31]
+ ]);
+ const score=o=>(urgency.get(o.key)||10)+
+  (Frontier.hash(npc.x,npc.y,Math.floor(state.clock/35)+npc.id.length*37+
+    o.key.length*17)-.5)*22;
+ all.sort((a,b)=>score(b)-score(a));
+ const options=all.slice(0,9);
+ // Avoid trapping people in pure survival micromanagement. If they're able
+ // to explore or socialize, maintain one such choice in the option set.
+ const living=all.find(o=>o.key==='socialize'&&npc.needs.social>=35)||
+  all.find(o=>o.key==='explore');
+ if(living&&!options.some(o=>o.key===living.key)&&options.length===9)
+  options[8]=living;
+ options.push({key:'none',when:'Wait and observe the surroundings'});
  return options.map(({key,when})=>({key,when}));
 }
 function fallbackBackground(npc){
@@ -207,7 +253,7 @@ function advancePlan(npc){
     state.clock<(npc.nextPlanAt||0))return;
  if(npc.plan.steps>=8)return finishPlan(npc,'Reached the eight-step safety limit','warning');
  const next=AgentWorld.nextPlanAction(npc,state.world,state.npcs,
-  point=>reachableFrom(npc,point));
+  reachability(npc));
  if(next.status==='done')return finishPlan(npc,'Completed');
  if(next.status==='blocked')return finishPlan(npc,next.reason,'warning');
  if(!setAction(npc,next.option.key,'plan',null))
@@ -269,7 +315,7 @@ function setAction(npc,action,source,scores){
   record(npc.name+': unavailable action rejected: '+action,'warning');
   return false;
  }
- if(['stock_food','make_campfire'].includes(action)){
+ if(['stock_food','make_campfire','make_shelter'].includes(action)){
   if(npc.plan)return false;
   npc.plan={key:action,steps:0};
   npc.nextPlanAt=state.clock;
@@ -488,6 +534,7 @@ function updateMovement(actor,dt,speed){
  const input=actor===state.player?controlVector():{x:0,y:0};
  if(actor===state.player&&(input.x||input.y)){
   actor.path=[];actor.travel=0;
+  actor.action='none';
   Physics2D.steer(body,input,dt,isBlocked,others,speed);
   actor.x=Math.floor(body.x);actor.y=Math.floor(body.y);
  }else if(actor.path?.length){
@@ -527,13 +574,23 @@ function position(actor){
  const body=actor.body;
  return body?{x:body.x-.5,y:body.y-.5}:{x:actor.x,y:actor.y};
 }
+const fogCanvas=document.createElement('canvas');
+fogCanvas.width=W*TILE;fogCanvas.height=H*TILE;
+const fogContext=fogCanvas.getContext('2d');
+function updateFog(){
+ fogContext.clearRect(0,0,fogCanvas.width,fogCanvas.height);
+ fogContext.fillStyle='#080f10';
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+  if(!Frontier.revealed(state.world,x,y))
+   fogContext.fillRect(x*TILE,y*TILE,TILE,TILE);
+}
 const staticCanvas=document.createElement('canvas');
 staticCanvas.width=W*TILE;staticCanvas.height=H*TILE;
 const staticContext=staticCanvas.getContext('2d');
 ctx.imageSmoothingEnabled=false;
 staticContext.imageSmoothingEnabled=false;
 function drawStaticWorld(){
- VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees);
+ VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees,state.world);
 }
 // Optional Kenney CC0 sprites are installed locally once, never fetched at runtime
 // from a third-party host. When absent the original artwork remains usable.
@@ -579,7 +636,11 @@ function drawWorld(){
  // Pixel-align rendered camera without snapping the underlying smooth state.
  ctx.translate(-Math.round(state.camera.x),-Math.round(state.camera.y));
  ctx.drawImage(staticCanvas,0,0);
- VillageArt.drawWorldObjects(ctx,state.world);
+ VillageArt.drawWorldObjects(ctx,state.world,{
+  left:state.camera.x/TILE-2,top:state.camera.y/TILE-2,
+  right:(state.camera.x+canvas.width/state.zoom)/TILE+2,
+  bottom:(state.camera.y+canvas.height/state.zoom)/TILE+2
+ });
  const actors=state.npcs.map(n=>({actor:n,player:false}));
  actors.push({actor:state.player,player:true});
  actors.sort((a,b)=>position(a.actor).y-position(b.actor).y);
@@ -589,6 +650,7 @@ function drawWorld(){
    !item.player&&state.selected===item.actor.id,now);
  }
  VillageArt.drawAmbient(ctx,state.world,state.clock,now);
+ ctx.drawImage(fogCanvas,0,0);
  if(state.debugPhysics){
   // Debug overlay uses the same authoritative collision map as the physics engine.
   for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(isBlocked(x,y)){
@@ -643,9 +705,13 @@ function updateInspector(){
  $('npcPlan').textContent=npc.plan
   ?npc.plan.key.replaceAll('_',' ')+' · '+npc.plan.steps+' steps'
   :'No ongoing plan';
+ $('thirstVal').textContent=Math.round(npc.needs.thirst)+'/100';
+ $('thirstMeter').style.width=clamp(npc.needs.thirst)+'%';
  $('hungerVal').textContent=Math.round(npc.needs.hunger)+'/100';
  $('hungerMeter').style.width=clamp(npc.needs.hunger)+'%';
- $('inventoryVal').textContent='Food '+npc.inventory.food+' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone;
+ $('inventoryVal').textContent='Food '+npc.inventory.food+' · Water '+npc.inventory.water+
+  ' · Wood '+npc.inventory.wood+' · Stone '+npc.inventory.stone+' · Fiber '+npc.inventory.fiber+
+  (npc.inventory.hatchet?' · Hatchet':'');
  $('experienceVal').textContent=Object.entries(npc.skills).filter(([,v])=>v>0)
    .map(([k,v])=>k+' '+v).join(' · ')||'None yet';
  $('socialVal').textContent=Math.round(npc.needs.social)+'/100';
@@ -697,7 +763,8 @@ function renderChat(){
 function save(){
  try{
   const pack={clock:state.clock,day:state.day,
-   player:{x:state.player.x,y:state.player.y},
+   player:{x:state.player.x,y:state.player.y,energy:state.player.energy,
+    needs:state.player.needs,inventory:state.player.inventory,skills:state.player.skills},
    world:state.world,
    npcs:state.npcs.map(n=>({
     id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
@@ -723,13 +790,23 @@ function validSavedPath(path, start){
 }
 function restore(){
  try{
-  const data=JSON.parse(localStorage.getItem(STORE)||'null');if(!data)return;
+  const data=JSON.parse(localStorage.getItem(STORE)||localStorage.getItem(LEGACY_STORE)||'null');if(!data)return;
   if(Number.isFinite(data.clock)&&data.clock>=0)state.clock=data.clock;
   if(Number.isFinite(data.day))state.day=clamp(data.day,1,9999);
   AgentWorld.restoreWorld(state.world,data.world);
   if(data.player&&!isBlocked(data.player.x,data.player.y)){
    state.player.x=Math.round(data.player.x);state.player.y=Math.round(data.player.y);
   }
+  if(Number.isFinite(data.player?.energy))state.player.energy=clamp(data.player.energy);
+  for(const k of ['hunger','thirst','social','curiosity'])
+   if(Number.isFinite(data.player?.needs?.[k]))state.player.needs[k]=clamp(data.player.needs[k]);
+  for(const k of Object.keys(state.player.inventory))
+   if(Number.isInteger(data.player?.inventory?.[k])&&data.player.inventory[k]>=0)
+    state.player.inventory[k]=Math.min(1000,data.player.inventory[k]);
+  for(const k of Object.keys(state.player.skills))
+   if(Number.isInteger(data.player?.skills?.[k])&&data.player.skills[k]>=0)
+    state.player.skills[k]=Math.min(100000,data.player.skills[k]);
+  Frontier.restore(state.world,data.world);
   for(const npc of state.npcs){
    const prev=data.npcs?.find(n=>n.id===npc.id);if(!prev)continue;
    if(!isBlocked(prev.x,prev.y)){npc.x=prev.x;npc.y=prev.y;}
@@ -744,9 +821,9 @@ function restore(){
    if(Array.isArray(prev.chat))npc.chat=prev.chat.filter(item=>item.source!=='pending').slice(-22);
    if(prev.relationships&&typeof prev.relationships==='object')npc.relationships=prev.relationships;
    if(validSavedPath(prev.path,npc))npc.path=prev.path.map(tile=>({x:tile.x,y:tile.y}));
-   for(const key of ['hunger','social','curiosity'])
+   for(const key of ['hunger','thirst','social','curiosity'])
     if(Number.isFinite(prev.needs?.[key]))npc.needs[key]=clamp(prev.needs[key]);
-   for(const key of ['food','wood','stone'])
+   for(const key of ['food','water','wood','stone','fiber','hatchet'])
     if(Number.isInteger(prev.inventory?.[key])&&prev.inventory[key]>=0)
      npc.inventory[key]=Math.min(prev.inventory[key],1000);
    for(const key of Object.keys(npc.skills))
@@ -786,6 +863,9 @@ function step(dt){
  if(Math.floor(state.clock/1440)>beforeDay)state.day++;
  updateMovement(state.player,dt,5.2);
  state.world.now=state.clock;
+ state.world.weather=Frontier.weather(state.world,state.clock);
+ AgentWorld.stepNeeds(state.player,state.world,elapsed);
+ if(Frontier.reveal(state.world,state.player.x,state.player.y,8)>0)updateFog();
  AgentWorld.regenerate(state.world,elapsed);
  for(const npc of state.npcs){
   if(!npc.peerPending)updateMovement(npc,dt,2.0);
@@ -814,6 +894,16 @@ function updateHUD(now){
  state.nextUI=now+750;
  $('worldTime').textContent=timeString();
  $('worldDay').textContent='DAY '+String(state.day).padStart(2,'0');
+ $('worldWeather').textContent=state.world.weather.kind.toUpperCase()+' · '+
+   state.world.weather.temperature+'°C';
+ $('worldSeed').textContent=String(state.world.seed);
+ const p=state.player;
+ $('playerStats').textContent='Hunger '+Math.round(p.needs.hunger)+
+   ' · Thirst '+Math.round(p.needs.thirst)+' · Energy '+Math.round(p.energy)+
+   ' · Food '+p.inventory.food+' · Water '+p.inventory.water+
+   ' · Wood '+p.inventory.wood+' · Stone '+p.inventory.stone+
+   ' · Fiber '+p.inventory.fiber+(p.inventory.hatchet?' · Hatchet':'');
+ updatePlayerActions();drawMinimap();
  $('worldStatus').textContent=state.paused?'Simulation paused':state.conversationBusy?'Conversing with NPC…':state.backgroundBusy?'Background thinking…':'World running';
  $('footerNote').textContent=state.connected?'Model decisions are labeled Rein.':'No model connected: deterministic routines active.';
  $('pauseBtn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';
@@ -891,12 +981,66 @@ for(const btn of document.querySelectorAll('[data-speed]')){
 $('clearLog').addEventListener('click',()=>{state.events=[];renderEvents();});
 $('resetBtn').addEventListener('click',()=>{
  if(!window.confirm('Reset all local NPC memory, relationships, and positions?'))return;
- localStorage.removeItem(STORE);window.location.reload();
+ localStorage.removeItem(STORE);localStorage.removeItem(LEGACY_STORE);window.location.reload();
+});
+function playerOptions(){
+ return AgentWorld.available(state.player,state.world,state.npcs,
+  point=>reachableFrom(state.player,point)).filter(option=>
+   !option.target||manhattan(state.player,option.target)<=1);
+}
+function updatePlayerActions(){
+ const available=new Set(playerOptions().map(option=>option.key));
+ for(const button of document.querySelectorAll('[data-player-action]')){
+  const action=button.dataset.playerAction;
+  button.disabled=!available.has(action)&&action!=='rest';
+ }
+}
+function playerAction(action){
+ if(action==='rest'){
+  state.player.action=state.player.action==='rest'?'none':'rest';
+  record('You '+(state.player.action==='rest'?'rest to recover energy':'get back up'),'social');
+  return;
+ }
+ const option=playerOptions().find(o=>o.key===action);
+ if(!option){record('Move closer or gather required materials first','warning');return;}
+ state.player.task={key:action,ref:option.ref||null};
+ const result=AgentWorld.complete(state.player,state.world,state.npcs);
+ record('You: '+result.message,result.ok?'social':'warning');
+ if(result.ok)save();
+}
+function drawMinimap(){
+ const element=$('miniMap');
+ if(!element||typeof element.getContext!=='function')return;
+ const mapCtx=element.getContext('2d');if(!mapCtx)return;
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  mapCtx.fillStyle=Frontier.revealed(state.world,x,y)
+   ?Frontier.COLORS[Frontier.terrainAt(state.world,x,y)]
+   :'#0a1517';
+  mapCtx.fillRect(x*2,y*2,2,2);
+ }
+ mapCtx.fillStyle='#ffe6a5';
+ mapCtx.fillRect(state.player.x*2-1,state.player.y*2-1,4,4);
+ for(const npc of state.npcs)if(Frontier.revealed(state.world,npc.x,npc.y)){
+  mapCtx.fillStyle='#e5a6b5';mapCtx.fillRect(npc.x*2,npc.y*2,2,2);
+ }
+}
+for(const button of document.querySelectorAll('[data-player-action]')){
+ button.addEventListener('click',()=>playerAction(button.dataset.playerAction));
+}
+$('newIsland').addEventListener('click',()=>{
+ if(!window.confirm('Generate a new island? This starts a new survival world and resets current progress.'))return;
+ const seed=(Math.floor(Math.random()*2147483646)+1);
+ localStorage.setItem('ai-npc-cog-world-seed',String(seed));
+ localStorage.removeItem(STORE);
+ localStorage.removeItem(LEGACY_STORE);
+ window.location.reload();
 });
 $('chatForm').addEventListener('submit',sendMessage);
 drawStaticWorld();
 loadTileset();
 restore();
+Frontier.reveal(state.world,state.player.x,state.player.y,8);
+updateFog();
 renderResidents();updateInspector();renderChat();
 record('Hearthbrook village initialized — click a resident to inspect their state.');
 checkModel();

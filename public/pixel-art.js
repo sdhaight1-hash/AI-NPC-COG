@@ -84,6 +84,49 @@
       rect(ctx,'#6d8372',X+11,Y+12,4,1);
     }
   }
+  function wilderness(ctx,x,y,biome){
+    const X=x*TILE,Y=y*TILE,h=hash(x,y,41);
+    const palette={
+      meadow:['#789856','#688b4c','#567d44','#8aa45a'],
+      forest:['#335c42','#3e6c49','#45734a','#32543b'],
+      marsh:['#526b4d','#617d52','#465c48','#7b8a62'],
+      ridge:['#777b78','#898b7f','#666e6b','#9a9a8b'],
+      sand:['#c9b98d','#b7a77c','#d7c395','#a99b76'],
+      water:['#286779','#347f8c','#3b8b9b','#296f84']
+    };
+    const set=palette[biome]||palette.meadow;
+    rect(ctx,set[h%4],X,Y,16,16);
+    if(biome==='water'){
+      rect(ctx,'#4f9caa',X+2+(h%4),Y+3,8,1);
+      rect(ctx,'#255f75',X+1,Y+12,12,1);
+      if(h%5===0)rect(ctx,'#7db5b6',X+8,Y+8,5,1);
+    }else if(biome==='sand'){
+      rect(ctx,'#eed8a2',X+3,Y+5,5,1);
+      rect(ctx,'#a4936a',X+7,Y+12,6,1);
+      if(h%7===0)rect(ctx,'#f6e5b9',X+11,Y+3,2,2);
+    }else if(biome==='ridge'){
+      rect(ctx,'#4e6261',X+3,Y+9,12,6);
+      rect(ctx,'#afb3a4',X+5,Y+5,7,5);
+      rect(ctx,'#d2cab5',X+6,Y+6,4,1);
+      rect(ctx,'#697a73',X+10,Y+10,4,4);
+    }else if(biome==='marsh'){
+      rect(ctx,'#4c8881',X+2,Y+8,11,4);
+      rect(ctx,'#9f9d69',X+4,Y+3,2,8);
+      rect(ctx,'#b3af76',X+10,Y+1,1,7);
+      if(h%3===0)flower(ctx,X+6,Y+5,h%4);
+    }else if(biome==='forest'){
+      rect(ctx,'#234d3a',X+2,Y+10,13,4);
+      rect(ctx,'#517f48',X+3,Y+6,10,7);
+      rect(ctx,'#6c9953',X+5,Y+5,6,2);
+      if(h%6===0)flower(ctx,X+10,Y+11,h%4);
+    }else{
+      for(let i=0;i<4;i++){
+        const px=2+((h>>>(i*6))%13),py=1+((h>>>(i*4+3))%13);
+        rect(ctx,i%2?'#8cad5d':'#3f7742',X+px,Y+py,1,3);
+      }
+      if(h%13===0)flower(ctx,X+8,Y+8,h%4);
+    }
+  }
   function pond(ctx) {
     // Irregular shoreline near the eastern edge, avoiding all passable road tiles.
     for(let y=19;y<=24;y++)for(let x=35;x<=39;x++){
@@ -382,16 +425,20 @@
     rect(ctx,selected?'#f7d084':isPlayer?'#87c8e7':'#d9ddc9',px-width/2,py-32,width,1);
     ctx.fillStyle=isPlayer?'#bde9ff':'#fff2d6';ctx.fillText(name,px,py-25);
   }
-  function drawWorld(ctx,dimensions,buildings,trees){
+  function drawWorld(ctx,dimensions,buildings,trees,world){
     ctx.imageSmoothingEnabled=false;
-    const road=(x,y)=>(y>=11&&y<=13)||(y>=22&&y<=23)||
-      ((x===7||x===19||x===33)&&y>=7&&y<=23);
-    for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++)
-      ground(ctx,x,y,road(x,y)?'path':'grass');
+    const road=(x,y)=>x<40&&y<26&&((y>=11&&y<=13)||(y>=22&&y<=23)||
+      ((x===7||x===19||x===33)&&y>=7&&y<=23));
+    for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++){
+      if(world && (x>=40||y>=26))
+        wilderness(ctx,x,y,world.terrain[y*dimensions.width+x]);
+      else ground(ctx,x,y,road(x,y)?'path':'grass');
+    }
     // Organic broken road shoulders keep the tilemap readable without square
     // grass/path seams; the physics grid remains authoritative.
     for(let y=0;y<dimensions.height;y++)for(let x=0;x<dimensions.width;x++){
       const h=hash(x,y,21),X=x*16,Y=y*16;
+      if(x>=40||y>=26)continue;
       if(road(x,y)){
         ctx.fillStyle='#68834e';
         if(!road(x,y-1))for(let i=0;i<3;i++)
@@ -420,9 +467,11 @@
     for(const b of buildings)building(ctx,b);
     details(ctx);
   }
-  function drawWorldObjects(ctx,world){
+  function drawWorldObjects(ctx,world,view=null){
     if(!world)return;
     for(const node of world.nodes||[]){
+      if(view&&(node.x<view.left||node.x>view.right||
+        node.y<view.top||node.y>view.bottom))continue;
       const x=node.x*16,y=node.y*16;
       if(node.kind==='food'){
         rect(ctx,'#264d36',x+2,y+8,13,7);
@@ -436,6 +485,17 @@
         rect(ctx,'#d2a472',x+3,y+7,3,5);
         rect(ctx,'#563e2b',x+5,y+8,1,3);
         if(node.stock>0)rect(ctx,'#c29465',x+6,y+5,7,2);
+      }else if(node.kind==='fiber'){
+        rect(ctx,'#305f3d',x+2,y+11,11,4);
+        for(let i=0;i<4;i++){
+          rect(ctx,'#537e48',x+3+i*3,y+5+(i%2)*2,2,9);
+          rect(ctx,'#d5c27e',x+4+i*3,y+3+(i%2)*2,1,3);
+        }
+      }else if(node.kind==='water'){
+        rect(ctx,'#455e62',x+1,y+10,15,4);
+        rect(ctx,'#4d99a5',x+2,y+5,12,9);
+        rect(ctx,'#96c4bd',x+4,y+6,6,2);
+        rect(ctx,'#bed5c7',x+7,y+10,4,1);
       }else if(node.kind==='stone'){
         rect(ctx,'#3c514a',x+2,y+12,13,3);
         rect(ctx,node.stock?'#8d968e':'#64736e',x+2,y+7,12,6);
@@ -444,8 +504,19 @@
       }
     }
     for(const site of world.structures||[]){
-      if(site.type!=='campfire')continue;
+      if(view&&(site.x<view.left||site.x>view.right||
+        site.y<view.top||site.y>view.bottom))continue;
       const x=site.x*16,y=site.y*16;
+      if(site.type==='shelter'){
+        rect(ctx,'#303d34',x-6,y+11,28,8);
+        rect(ctx,'#835d3e',x-7,y+1,29,14);
+        rect(ctx,'#ab8450',x-4,y-4,23,12);
+        rect(ctx,'#d5af70',x-2,y-6,18,3);
+        rect(ctx,'#3c342b',x+4,y+8,8,10);
+        rect(ctx,'#d9bd82',x+7,y+10,2,3);
+        continue;
+      }
+      if(site.type!=='campfire')continue;
       rect(ctx,'#42463f',x+1,y+11,14,3);
       rect(ctx,'#b4a18a',x+3,y+9,11,3);
       rect(ctx,'#62442d',x+4,y+11,10,3);
@@ -462,7 +533,7 @@
     const night=Math.min(1,twilight);
     if(night>.015){
       ctx.fillStyle='rgba(18,32,64,'+(night*.55).toFixed(3)+')';
-      ctx.fillRect(0,0,640,416);
+      ctx.fillRect(0,0,world?.width*16||640,world?.height*16||416);
       // Lamps and campfires pick out readable patches of the night scene.
       for(const [x,y] of [[13,11],[24,11],[28,22]]){
         const X=x*16+9,Y=y*16+5;

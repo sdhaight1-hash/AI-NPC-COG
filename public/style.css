@@ -33,3 +33,16 @@ body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),l
 .map-hint{max-width:92%;line-height:1.35}
 .resident.active{border-color:#eecb8d}
 .event-log,.memories{scrollbar-width:thin;scrollbar-color:#577b5b #1c2c24}
+
+/* Wilderness exploration and player survival controls */
+.wilderness-content{display:flex;flex-wrap:wrap;align-items:flex-start;gap:14px;padding:14px}
+#miniMap{width:160px;height:104px;image-rendering:pixelated;border:2px solid #738263;
+ border-radius:4px;background:#0a1517;box-shadow:0 0 0 3px #162820}
+.survival-panel{min-width:250px;flex:1}
+#playerStats{font:12px/1.65 ui-monospace,Consolas,monospace;color:#e8e3ca;margin:0 0 10px}
+.action-set{display:flex;flex-wrap:wrap;gap:6px}
+.action-set button{border:1px solid #71805b;background:#334c36;color:#f4e2b8;
+ border-radius:6px;padding:7px 9px;font:600 11px ui-monospace,Consolas,monospace;cursor:pointer}
+.action-set button:hover:not(:disabled){background:#547448;border-color:#ddc48b}
+.action-set button:disabled{color:#819183;background:#1c2d26;border-color:#354c3c;cursor:not-allowed}
+.clock-group small#worldWeather{color:#c9dcad;letter-spacing:.1em;font-size:10px}

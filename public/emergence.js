@@ -12,20 +12,28 @@
     ['rock_1','stone',13,23,7], ['rock_2','stone',27,18,7],
     ['rock_3','stone',3,21,6]
   ];
-  const KEYS = ['forage','collect_wood','collect_stone','eat','rest',
-    'share_food','socialize','build_fire','explore','none'];
+  const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water',
+    'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
+    'build_shelter','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
+    collect_fiber:'gathering',fill_water:'survival',drink:'survival',
+    craft_hatchet:'crafting',build_shelter:'building',
     share_food:'cooperation',socialize:'socializing',build_fire:'building',explore:'exploring'};
-  function newWorld() {
-    return { version:1, now:0, nodes:RESOURCE_SEEDS.map(([id,kind,x,y,max])=>({
-      id,kind,x,y,max,stock:max
-    })), structures:[] };
+  function newWorld(seed=Frontier.DEFAULT_SEED) {
+    const island=Frontier.generate(seed);
+    return {version:2,now:0,seed:island.seed,width:island.width,height:island.height,
+      terrain:island.terrain,discovered:{},
+      weather:Frontier.weather(island,480),
+      nodes:[...RESOURCE_SEEDS.map(([id,kind,x,y,max])=>({id,kind,x,y,max,stock:max})),
+        ...island.resources],
+      structures:[]};
   }
   function newAgent(n, index=0) {
-    n.needs = { hunger:28+(index*9)%35, social:35+(index*7)%32,
-      curiosity:40+(index*11)%36 };
-    n.inventory = { food:1,wood:0,stone:0 };
-    n.skills = { foraging:0,gathering:0,cooperation:0,socializing:0,building:0,exploring:0 };
+    n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
+      social:35+(index*7)%32, curiosity:40+(index*11)%36 };
+    n.inventory = { food:1,water:2,wood:0,stone:0,fiber:0,hatchet:0 };
+    n.skills = { foraging:0,gathering:0,crafting:0,survival:0,
+      cooperation:0,socializing:0,building:0,exploring:0 };
     n.visited = [];
     n.task = null;
     n.plan = null;
@@ -39,14 +47,15 @@
     return 'Drawn toward '+entries[0][0]+' ('+entries[0][1]+' actions)';
   }
   function findNode(n,world,kind,canReach) {
-    return world.nodes.filter(node=>node.kind===kind&&node.stock>0&&distance(n,node)<=18)
-      .filter(node=>canReach(node)).sort((a,b)=>distance(n,a)-distance(n,b))[0]||null;
+    const candidates=world.nodes.filter(node=>node.kind===kind&&node.stock>0&&
+      distance(n,node)<=18).sort((a,b)=>distance(n,a)-distance(n,b));
+    return candidates.slice(0,8).find(node=>canReach(node))||null;
   }
   function nearestResident(n,residents,condition=()=>true) {
     return residents.filter(other=>other.id!==n.id&&distance(n,other)<=8&&condition(other))
       .sort((a,b)=>distance(a,n)-distance(b,n))[0]||null;
   }
-  function exploreTarget(n,canReach) {
+  function exploreTarget(n,canReach,world) {
     // Evaluate a small ring of vantage points, not hundreds of BFS paths per decision.
     // All inhabitants use the same directions; past visits change where they choose.
     const directions=[[7,0],[-7,0],[0,7],[0,-7],[6,6],[-6,6],[6,-6],[-6,-6],
@@ -56,7 +65,7 @@
     let best=null,score=-Infinity;
     for(const [dx,dy] of directions){
       const point={x:n.x+dx,y:n.y+dy};
-      if(point.x<0||point.x>=40||point.y<0||point.y>=26||!canReach(point))continue;
+      if(point.x<0||point.x>=world.width||point.y<0||point.y>=world.height||!canReach(point))continue;
       const id=point.x+':'+point.y;
       const novelty=seen.has(id)?-100:100;
       const tie=((point.x*73+point.y*151+seed*19)>>>0)%29;
@@ -67,14 +76,20 @@
   function available(n,world,residents,canReach) {
     const list=[];
     const add=(key,when,target=null,ref=null)=>list.push({key,when,target,ref});
-    for(const [kind,key,label] of [['food','forage','food'],['wood','collect_wood','wood'],['stone','collect_stone','stone']]){
+    for(const [kind,key,label] of [['food','forage','food'],['wood','collect_wood','wood'],
+      ['stone','collect_stone','stone'],['fiber','collect_fiber','plant fiber'],
+      ['water','fill_water','fresh water']]){
       const node=findNode(n,world,kind,canReach);
       if(node&&n.energy>=12){
         add(key,'Collect '+label+' from a visible source ('+node.stock+' remaining, '+distance(n,node)+' tiles away)',node,node.id);
       }
     }
     if(n.inventory.food>0&&n.needs.hunger>=10)
-      add('eat','Eat one carried food to reduce hunger ('+Math.round(n.needs.hunger)+'/100)');
+      add('eat','Eat carried food (hunger '+Math.round(n.needs.hunger)+'/100)');
+    if(n.inventory.water>0&&n.needs.thirst>=10)
+      add('drink','Drink carried water (thirst '+Math.round(n.needs.thirst)+'/100)');
+    if(n.inventory.wood>=1&&n.inventory.stone>=1&&n.inventory.fiber>=1&&n.inventory.hatchet===0)
+      add('craft_hatchet','Craft a basic tool from wood, stone and plant fiber');
     if(n.energy<88)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
     const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0)
@@ -93,7 +108,15 @@
        (n.inventory.wood>=2||findNode(n,world,'wood',canReach)) &&
        (n.inventory.stone>=1||findNode(n,world,'stone',canReach)))
       add('make_campfire','Commit to building a communal campfire, collecting any missing materials');
-    const destination=exploreTarget(n,canReach);
+    if(n.inventory.wood>=4&&n.inventory.fiber>=3&&n.energy>=22&&
+       !world.structures.some(site=>site.type==='shelter'&&distance(n,site)<5))
+      add('build_shelter','Construct a small shelter from 4 wood and 3 plant fiber');
+    if(!n.plan&&n.energy>=20&&
+       !world.structures.some(site=>site.type==='shelter'&&distance(n,site)<5)&&
+       (n.inventory.wood>=4||findNode(n,world,'wood',canReach))&&
+       (n.inventory.fiber>=3||findNode(n,world,'fiber',canReach)))
+      add('make_shelter','Form an intention to collect materials and construct a shelter');
+    const destination=exploreTarget(n,canReach,world);
     if(destination&&n.energy>=10)
       add('explore','Explore an unfamiliar reachable area ('+distance(n,destination)+' tiles)',destination);
     add('none','Continue the current activity or observe before deciding');
@@ -107,16 +130,34 @@
       return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
-    if(['forage','collect_wood','collect_stone'].includes(task.key)){
+    if(['forage','collect_wood','collect_stone','collect_fiber','fill_water'].includes(task.key)){
       const node=world.nodes.find(v=>v.id===task.ref);
       if(!node||node.stock<1||distance(n,node)>1)return {ok:false,message:'Resource no longer available'};
       // Repeated practice gradually improves output; expertise is earned, never assigned.
       const expertise=n.skills[skillNames[task.key]]||0;
-      const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3)));
+      const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3))+
+        (n.inventory.hatchet&&task.key==='collect_wood'?1:0));
       node.stock-=collected;
       n.inventory[node.kind]+=collected;
       n.energy=clamp(n.energy-3*collected);
       message='Collected '+collected+' '+node.kind+' (source '+node.stock+'/'+node.max+' remaining)';
+    }else if(task.key==='drink'){
+      if(n.inventory.water<1)return {ok:false,message:'No drinkable water'};
+      n.inventory.water--;n.needs.thirst=clamp(n.needs.thirst-48);
+      message='Drank fresh water; thirst now '+Math.round(n.needs.thirst);
+    }else if(task.key==='craft_hatchet'){
+      if(n.inventory.hatchet||n.inventory.wood<1||n.inventory.stone<1||n.inventory.fiber<1)
+        return {ok:false,message:'Missing tool materials'};
+      n.inventory.wood--;n.inventory.stone--;n.inventory.fiber--;
+      n.inventory.hatchet=1;message='Crafted a stone hatchet for faster wood gathering';
+    }else if(task.key==='build_shelter'){
+      if(n.inventory.wood<4||n.inventory.fiber<3||n.energy<22||
+         world.structures.some(site=>site.type==='shelter'&&distance(n,site)<5))
+        return {ok:false,message:'Cannot build shelter at this location'};
+      n.inventory.wood-=4;n.inventory.fiber-=3;n.energy=clamp(n.energy-16);
+      world.structures.push({id:'shelter_'+(world.structures.length+1),
+        type:'shelter',x:n.x,y:n.y});
+      message='Built a shared shelter at '+n.x+','+n.y;
     }else if(task.key==='eat'){
       if(n.inventory.food<1)return {ok:false,message:'No food left'};
       n.inventory.food--;n.needs.hunger=clamp(n.needs.hunger-44);
@@ -168,6 +209,12 @@
     if(n.plan.key==='stock_food'){
       if(n.inventory.food>=2)return {status:'done'};
       key='forage';
+    }else if(n.plan.key==='make_shelter'){
+      if(world.structures.some(site=>site.type==='shelter'&&distance(n,site)<5))
+        return {status:'done'};
+      if(n.inventory.wood<4)key='collect_wood';
+      else if(n.inventory.fiber<3)key='collect_fiber';
+      else key='build_shelter';
     }else if(n.plan.key==='make_campfire'){
       if(world.structures.some(site=>site.type==='campfire'&&distance(n,site)<5))
         return {status:'done'};
@@ -180,18 +227,22 @@
     return option?{status:'action',option}:{status:'blocked',reason:'Required resource or location unavailable'};
   }
   function validatePlan(saved){
-    if(!saved || !['stock_food','make_campfire'].includes(saved.key) ||
+    if(!saved || !['stock_food','make_campfire','make_shelter'].includes(saved.key) ||
        !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>8)return null;
     return {key:saved.key,steps:saved.steps};
   }
   function stepNeeds(n,world,dt) {
+    const badWeather=world.weather?.kind==='storm'||world.weather?.kind==='rain';
+    const shelter=world.structures.some(site=>site.type==='shelter'&&distance(n,site)<=4);
+    n.needs.thirst=clamp(n.needs.thirst+dt*(world.weather?.temperature>26?.12:.08));
     n.needs.hunger=clamp(n.needs.hunger+dt*.065);
+    if(badWeather&&!shelter)n.energy=clamp(n.energy-dt*.055);
     n.needs.social=clamp(n.needs.social+dt*.025);
     n.needs.curiosity=clamp(n.needs.curiosity+dt*.016);
     n.energy=clamp(n.energy-dt*.045);
     if(n.action==='rest'){
       const warm=world.structures.some(site=>site.type==='campfire'&&distance(n,site)<=3);
-      n.energy=clamp(n.energy+dt*(warm?.52:.26));
+      n.energy=clamp(n.energy+dt*(shelter?.66:warm?.52:.26));
       if(n.energy>=90) {
         n.action='none';n.goal='Recovered and considering what to do';return 'Recovered';
       }
@@ -202,12 +253,15 @@
     // Gradual finite regeneration, never more than a node's starting capacity.
     for(const node of world.nodes){
       if(node.stock>=node.max)continue;
-      node.regrow=(node.regrow||0)+dt*(node.kind==='food'?.018:.008);
+      node.regrow=(node.regrow||0)+dt*(node.kind==='water'?.027:
+        node.kind==='food'?.018:node.kind==='fiber'?.012:.008);
       while(node.regrow>=1&&node.stock<node.max){node.stock++;node.regrow--;}
     }
   }
   function fallback(n,options) {
     const keys=new Set(options.map(o=>o.key));
+    if(n.needs.thirst>45&&keys.has('drink'))return 'drink';
+    if(n.needs.thirst>45&&keys.has('fill_water'))return 'fill_water';
     if(n.needs.hunger>55&&keys.has('eat'))return 'eat';
     if(n.needs.hunger>50&&keys.has('forage'))return 'forage';
     if(n.energy<30&&keys.has('rest'))return 'rest';
@@ -222,9 +276,10 @@
         node.stock=old.stock;
       }
     }
-    target.structures=saved.structures.filter(s=>s&&s.type==='campfire'&&
-      Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<40&&s.y>=0&&s.y<26
-    ).slice(0,50).map((v,i)=>({id:'fire_'+(i+1),type:'campfire',x:v.x,y:v.y}));
+    target.structures=saved.structures.filter(s=>s&&['campfire','shelter'].includes(s.type)&&
+      Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
+      s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'
+    ).slice(0,80).map((v,i)=>({id:v.type+'_'+(i+1),type:v.type,x:v.x,y:v.y}));
   }
   root.AgentWorld={KEYS,newWorld,newAgent,focus,available,complete,nextPlanAction,validatePlan,stepNeeds,regenerate,fallback,restoreWorld};
 })(globalThis);
