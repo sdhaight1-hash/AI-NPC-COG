@@ -39,12 +39,20 @@ test('time partition: 720 minute advance integrates every body and world minute'
   '720 minutes must not silently use the 360-minute biology clamp');
 });
 
+function equipFlask(n,clock){
+ n.inventory.flask=1;
+ n.craftedItems ||= [];
+ n.craftedItems.push({kind:'flask',quality:2,maker:n.id,
+  craftedAt:clock,method:'flask',materialQuality:2});
+}
+
 test('time partition: a due physical action commits at its actual minute',()=>{
  const k=kernels();
  const {batched,a}=compareSchedules(k,7,state=>{
   const n=state.npcs[0],water=state.world.nodes.find(s=>s.kind==='water'&&s.stock>=3);
   assert.ok(water);
   n.x=water.x;n.y=water.y;n.z=0;n.path=[];
+  equipFlask(n,state.clock);
   n.task={key:'fill_water',ref:water.id,readyAt:state.clock+3};
   n.action='fill_water';n.inventory.water=0;
  },(state,events)=>({
