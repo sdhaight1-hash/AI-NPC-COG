@@ -322,6 +322,8 @@ async function peerExchange(n,other){
   const first=response.first.slice(0,220),second=response.second.slice(0,220);
   const exchange={at:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
    with:other.id,first:n.name+': '+first,second:other.name+': '+second};
+  // The successful encounter proves speech occurred, not that its claims are true.
+  EvidenceMemory.fromDialogue(state,n,other,outcome.receipt,first,second);
   n.peerLog.push(exchange);n.peerLog=n.peerLog.slice(-12);
   other.peerLog.push({...exchange,with:n.id});other.peerLog=other.peerLog.slice(-12);
   remember(n,'Spoke with '+other.name+': '+first+'; '+second);
