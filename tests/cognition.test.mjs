@@ -86,3 +86,23 @@ test('constrained supply plans persist and collect finite physical materials',()
   assert.equal(A.validatePlan({key:'stock_'+kind,steps:1}).key,'stock_'+kind);
  }
 });
+
+test('hydration instinct scouts, stocks and drinks before dehydration is lethal',()=>{
+ const {npc,Cognition:C}=setup();
+ const options=['drink','fill_water','explore','eat','rest'].map(key=>({key}));
+ npc.inventory.water=1;npc.bio.hydrationBudgetMl=1500;
+ npc.needs.thirst=35;
+ assert.equal(C.instinct(npc,options),'fill_water',
+  'Low reserve should seek finite source while body has time to travel');
+ npc.bio.hydrationBudgetMl=1050;
+ assert.equal(C.instinct(npc,options),'drink','Drink carried water before critical damage');
+ npc.inventory.water=0;
+ assert.equal(C.instinct(npc,[{key:'explore'},{key:'rest'}]),'explore',
+  'Unfamiliar sources require a legal scouting action, never invented water');
+ npc.energy=10;
+ assert.equal(C.instinct(npc,[{key:'explore'},{key:'rest'}]),'rest',
+  'Exhausted scouting cannot fabricate energy');
+ npc.energy=75;npc.inventory.water=2;npc.bio.hydrationBudgetMl=2400;
+ npc.needs.thirst=20;
+ assert.equal(C.instinct(npc,options),null,'Healthy hydrated actors are not compulsively interrupted');
+});

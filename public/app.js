@@ -151,16 +151,25 @@ function fallbackBackground(n){
 // simulation time and inventory through the ordinary action executor.
 function survivalReflex(n){
  if(n.peerPending||n.peerReservedFor)return false;
- const options=availableActivities(n);
- const urgent=Cognition.instinct(n,options);
- if(!urgent)return false;
  const critical=n.needs.thirst>=90||n.needs.hunger>=95||
   n.bio?.hydrationBudgetMl<200;
  if((n.task||n.path.length||n.action==='rest')&&!critical)return false;
+ const hydration=n.bio?.hydrationBudgetMl??2400;
+ // Resume a protected suspended activity after the immediate emergency.
+ if((n.suspendedActivities?.length||n.plan?.key==='craft_project')&&
+   hydration>=450&&
+  n.needs.thirst<85&&n.needs.hunger<90&&n.energy>18)return false;
+ const waterSafe=n.needs.thirst<62&&hydration>=1200&&
+  (n.inventory.water>=2||hydration>=1600);
+ if(waterSafe&&n.needs.hunger<85&&n.bio?.longTermKcal>=150&&
+  n.energy>18)return false;
+ const urgent=Cognition.instinct(n,availableActivities(n));
+ if(!urgent)return false;
  if(n.task?.key===urgent)return false;
  if(n.task||n.path.length||n.action==='rest'){
   // A physical emergency interrupts activity, never destroys the workpiece.
   // The multi-stage project remains and resumes after recovery.
+  Activities.interrupt(state,n,'CRITICAL_NEED');
   n.task=null;n.path=[];n.travel=null;n.action='none';
   if(n.plan)n.nextPlanAt=state.clock+2;
   remember(n,'Interrupted work to address immediate bodily danger',
