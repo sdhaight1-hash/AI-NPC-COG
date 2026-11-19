@@ -7,7 +7,8 @@
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water',
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
-    'experiment_wood_stone_fiber','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
+    'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
+    'craft_stage','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
@@ -24,7 +25,8 @@
   function newAgent(n, index=0) {
     n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
       social:35+(index*7)%32, curiosity:40+(index*11)%36 };
-    n.inventory = { food:1,water:2,wood:0,stone:0,fiber:0,hatchet:0 };
+    n.inventory = { food:1,water:2,wood:0,stone:0,fiber:0,hatchet:0,
+      cord:0,blade:0,plank:0,crate:0 };
     n.skills = { foraging:0,gathering:0,crafting:0,survival:0,
       socializing:0,building:0,exploring:0 };
     n.bio = Biology.create(index,n.inventory.food);
@@ -32,6 +34,7 @@
     n.visited = [];
     n.task = null;
     n.plan = null;
+    n.craftedItems=[];n.workpiece=null;
     n.peerLog = [];
     n.lastPeerAt = -100000;
     return n;
@@ -59,6 +62,10 @@
           ' ('+object.stock+'/'+object.max+' units); habitat '+
           Frontier.terrainAt(world,object.x,object.y)};
     }
+    if(object.type==='workbench')
+      return {id:object.id,name:'Woodworking bench',kind:'workbench',
+        x:object.x,y:object.y,condition:'constructed',
+        description:'A constructed workbench (quality '+(object.craftQuality||1)+'/5) for fine timber work'};
     if(object.type==='cache')
       return {id:object.id,name:'Material cache',kind:'cache',x:object.x,y:object.y,
         condition:'constructed',description:'A simple storage cache with '+
@@ -172,6 +179,8 @@
       if(n.inventory.wood<2&&(cache.contents?.wood||0)>0)
         add('retrieve_wood','Take one stored wood from a nearby cache',cache,cache.id);
     }
+    for(const job of root.Crafting.options(n,world))
+      add(job.key,job.when,job.target||null,job.ref||null);
     const examine=inspectTarget(n,world,canReach);
     if(examine&&n.energy>=10)
       add('inspect','Examine '+describeObject(world,examine).name+
@@ -197,7 +206,18 @@
       return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
-    if(['forage','collect_wood','collect_stone','collect_fiber','fill_water'].includes(task.key)){
+    if(task.key.startsWith('craft_')){
+      let outcome;
+      if(task.key==='craft_stage'){
+        outcome=root.Crafting.advance(n,world);
+      }else{
+        const id=task.key.slice(6);
+        outcome=root.Crafting.begin(n,world,id,task.ref);
+        if(outcome.ok)n.plan={key:'craft_project',recipe:id,steps:0};
+      }
+      if(!outcome.ok)return outcome;
+      message=outcome.message;
+    }else if(['forage','collect_wood','collect_stone','collect_fiber','fill_water'].includes(task.key)){
       const node=world.nodes.find(v=>v.id===task.ref);
       if(!node||node.stock<1||distance(n,node)>1)return {ok:false,message:'Resource no longer available'};
       // Repeated practice gradually improves output; expertise is earned, never assigned.
@@ -376,6 +396,9 @@
       if(n.inventory.wood<4)key='collect_wood';
       else if(n.inventory.fiber<3)key='collect_fiber';
       else key='build_shelter';
+    }else if(n.plan.key==='craft_project'){
+      if(!n.workpiece)return {status:'done'};
+      key='craft_stage';
     }else if(n.plan.key==='make_campfire'){
       if(world.structures.some(site=>site.type==='campfire'&&distance(n,site)<5))
         return {status:'done'};
@@ -388,9 +411,11 @@
     return option?{status:'action',option}:{status:'blocked',reason:'Required resource or location unavailable'};
   }
   function validatePlan(saved){
-    if(!saved || !['stock_food','make_campfire','make_shelter'].includes(saved.key) ||
+    if(!saved || !['stock_food','make_campfire','make_shelter','craft_project'].includes(saved.key) ||
        !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>8)return null;
-    return {key:saved.key,steps:saved.steps};
+    return saved.key==='craft_project'?
+      {key:saved.key,recipe:root.Crafting.getRecipe(saved.recipe)?saved.recipe:null,steps:saved.steps}:
+      {key:saved.key,steps:saved.steps};
   }
   function stepNeeds(n,world,dt) {
     // Biology owns digestion, fuel, hydration budget, sleep pressure and
@@ -449,6 +474,11 @@
     if(n.needs.hunger>55&&keys.has('eat'))return 'eat';
     if(n.needs.hunger>50&&keys.has('forage'))return 'forage';
     if(n.energy<30&&keys.has('rest'))return 'rest';
+    if(keys.has('craft_stage'))return 'craft_stage';
+    if(n.inventory.fiber>=3&&n.inventory.cord<2&&keys.has('craft_cord'))return 'craft_cord';
+    if(n.inventory.stone>=2&&n.inventory.blade<1&&keys.has('craft_blade'))return 'craft_blade';
+    if(n.inventory.blade>=1&&n.inventory.cord>=1&&n.inventory.wood>=1&&
+      n.inventory.hatchet===0&&keys.has('craft_hafted_hatchet'))return 'craft_hafted_hatchet';
     if(n.needs.curiosity>=45&&keys.has('inspect'))return 'inspect';
     // Simple survival stockpiles are mechanical routines, not invented
     // relationships, inventions, or claims of AI deliberation.
@@ -472,13 +502,15 @@
         node.stock=old.stock;
       }
     }
-    target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache'].includes(s.type)&&
+    target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache','workbench'].includes(s.type)&&
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
       s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'
     ).slice(0,80).map((v,i)=>({
       id:typeof v.id==='string'&&/^(?:fire|campfire|shelter|cache)_[1-9]\d*$/.test(v.id)?
         v.id:v.type+'_'+(i+1),
       type:v.type,x:v.x,y:v.y,
+      ...(v.type==='workbench'?{craftQuality:Number.isInteger(v.craftQuality)?
+       Math.max(1,Math.min(5,v.craftQuality)):1}:{}),
       ...(v.type==='cache'?{contents:{wood:Number.isInteger(v.contents?.wood)?
         Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
     }));
