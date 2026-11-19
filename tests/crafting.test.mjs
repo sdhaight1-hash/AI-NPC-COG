@@ -138,3 +138,46 @@ test('v3 legacy hatchets retain their quantity when new manufacturing records ar
  assert.equal(npc.inventory.hatchet,1);
  assert.equal(npc.craftedItems.filter(x=>x.kind==='hatchet').length,1);
 });
+
+test('a finished crate becomes a finite, quality-sensitive persistent storage object',()=>{
+ const {world,npc,C,A}=setup();
+ npc.craftedItems.push({kind:'crate',quality:4,maker:npc.id,
+  craftedAt:world.now,method:'crate',materialQuality:3});
+ npc.inventory.crate=1;
+ npc.inventory.wood=25;
+ const count=npc.craftedItems.length;
+ const placement=C.interact(npc,world,'place_crate',null);
+ assert.equal(placement.ok,true,placement.message);
+ assert.equal(npc.inventory.crate,0);
+ assert.equal(npc.craftedItems.length,count-1);
+ const crate=world.structures.find(s=>s.type==='crate');
+ assert.ok(crate);
+ assert.equal(crate.capacity,24);
+ assert.equal(crate.craftQuality,4);
+ for(let i=0;i<24;i++)
+  assert.equal(C.interact(npc,world,'stash_wood',crate.id).ok,true);
+ assert.equal(crate.contents.wood,24);
+ assert.equal(npc.inventory.wood,1);
+ assert.equal(C.interact(npc,world,'stash_wood',crate.id).ok,false,
+  'A full container cannot accept more material');
+ const copy=A.newWorld(world.seed);
+ A.restoreWorld(copy,JSON.parse(JSON.stringify(world)));
+ assert.equal(copy.structures.find(s=>s.id===crate.id).contents.wood,24);
+ assert.equal(C.interact(npc,world,'withdraw_wood',crate.id).ok,true);
+ assert.equal(npc.inventory.wood,2);
+ assert.equal(crate.contents.wood,23);
+ assert.equal(C.interact(npc,world,'place_crate',null).ok,false,
+  'Placed crate is not still carried');
+});
+test('better craftsmanship yields objectively better goods',()=>{
+ const novice=setup(),expert=setup();
+ novice.npc.inventory.fiber=3;expert.npc.inventory.fiber=3;
+ expert.npc.skills.crafting=24;
+ assert.equal(novice.C.begin(novice.npc,novice.world,'cord').ok,true);
+ assert.equal(expert.C.begin(expert.npc,expert.world,'cord').ok,true);
+ finishRemaining(novice.C,novice.npc,novice.world);
+ finishRemaining(expert.C,expert.npc,expert.world);
+ const low=novice.npc.craftedItems[0],high=expert.npc.craftedItems[0];
+ assert.ok(high.quality>low.quality,
+  'Skill must change the actual quality stored on the resulting item');
+});
