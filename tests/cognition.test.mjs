@@ -44,7 +44,7 @@ test('innate emergency responses prefer real available survival actions',()=>{
  assert.equal(C.instinct(npc,[{key:'drink'},{key:'eat'},{key:'forage'}]),'drink');
  npc.inventory.water=0;
  assert.equal(C.instinct(npc,[{key:'fill_water'},{key:'eat'}]),'fill_water');
- npc.needs.thirst=10;
+ npc.needs.thirst=10;npc.inventory.food=1; // Deliberately stocked test actor.
  assert.equal(C.instinct(npc,[{key:'eat'},{key:'forage'}]),'eat');
  npc.needs.hunger=10;npc.energy=8;
  assert.equal(C.instinct(npc,[{key:'rest'}]),'rest');
