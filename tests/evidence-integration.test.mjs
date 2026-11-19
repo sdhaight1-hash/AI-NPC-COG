@@ -156,3 +156,56 @@ test('cited hearsay leads to physical travel, finite gathering, then firsthand v
  assert.equal(listener.evidenceMemory.claims[0].status,'supported');
  assert.ok(listener.evidenceMemory.claims[0].verificationReceiptId);
 });
+
+test('depleted reported source produces one stale claim and stops futile return attempts',()=>{
+ const {c,s,n}=setup();
+ const listener=s.npcs[1];s.npcs=[n,listener];s.auto=false;
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>0);
+ assert.ok(spring);s.world.nodes=[spring];
+ n.x=spring.x;n.y=spring.y;listener.x=spring.x;listener.y=spring.y;
+ n.z=0;listener.z=0;n.path=[];listener.path=[];
+ assert.equal(c.WorldRuntime.begin(s,n,'inspect','test'),true);
+ c.Simulation.advance(s,2);
+ n.task={key:'socialize',ref:listener.id,approved:true,
+  commandId:'cmd_'+(++s.commandSeq)};
+ const spoken=c.WorldReceipts.execute(s,n,n.task,()=>
+  c.AgentWorld.complete(n,s.world,s.npcs));
+ assert.equal(spoken.ok,true);n.task=null;
+ c.EvidenceMemory.fromDialogue(s,n,listener,spoken.receipt,
+  'Check this place [source:'+spring.id+']','I will.');
+ assert.equal(listener.evidenceMemory.claims[0].status,'unverified');
+ // The original witness moves away; depletion does not mean the old witness lied.
+ const away=Array.from({length:s.world.width*s.world.height},(_,i)=>({
+  x:i%s.world.width,y:Math.floor(i/s.world.width),z:0})).find(p=>
+   c.Frontier.distance(s.world,p,spring)>20&&
+   c.Frontier.traversable(s.world,p.x,p.y,0));
+ assert.ok(away);n.x=away.x;n.y=away.y;
+ spring.stock=0;spring.regrow=0;
+ listener.inventory.water=0;listener.energy=100;
+ assert.equal(c.WorldRuntime.begin(s,listener,'fill_water','reported claim'),true);
+ for(let i=0;i<15&&listener.task;i++)c.Simulation.advance(s,1);
+ const failure=s.receipts.find(r=>r.actorId===listener.id&&
+  r.action==='fill_water'&&r.status==='FAILED');
+ assert.ok(failure,'Physical depletion must yield a failed world receipt');
+ const claim=listener.evidenceMemory.claims[0];
+ assert.equal(claim.status,'stale');
+ assert.equal(claim.failureReceiptId,failure.id);
+ assert.equal(listener.evidenceMemory.facts.length,0);
+ assert.equal(n.evidenceMemory.claims.length,0);
+ assert.equal(c.EvidenceMemory.fromFailedReceipt(s,listener,failure),0);
+ assert.equal(c.WorldRuntime.available(s,listener).some(x=>
+  x.ref===spring.id&&x.key==='fill_water'),false,
+  'A stale rumor should not trigger another reported-source journey');
+ const copy=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ const restored=c.Simulation.initial(379210);restored.auto=false;
+ assert.equal(c.Persistence.restore(restored,copy),true);
+ const saved=restored.npcs.find(x=>x.id===listener.id).evidenceMemory.claims[0];
+ assert.equal(saved.status,'stale');
+ assert.equal(saved.failureReceiptId,failure.id);
+ // Replenishment and an actual inspection provide fresh firsthand evidence.
+ spring.stock=3;
+ assert.equal(c.WorldRuntime.begin(s,listener,'inspect','verify'),true);
+ c.Simulation.advance(s,2);
+ assert.equal(listener.evidenceMemory.claims[0].status,'supported');
+ assert.ok(listener.evidenceMemory.claims[0].verificationReceiptId);
+});
