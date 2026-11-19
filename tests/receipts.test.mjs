@@ -73,13 +73,12 @@ test('three-stage crafting receipts capture consumption, workpiece and produced 
  let first=s.receipts.find(r=>r.commandId===id&&r.status==='COMPLETED');
  assert.ok(first);assert.equal(first.delta.inventory.find(x=>x.key==='fiber').delta,-3);
  assert.ok(first.delta.workpiece.after);
- for(let i=0;i<3;i++){
-  assert.equal(c.WorldRuntime.begin(s,n,'craft_stage'),true);
-  id=n.task.commandId;
-  c.Simulation.advance(s,12);
- }
+ // Canonical minute slices can advance the plan automatically between stages.
+ // The external caller must not reissue an already-running craft command.
+ c.Simulation.advance(s,45);
  assert.equal(n.inventory.cord,1);
- const produced=s.receipts.find(r=>r.commandId===id&&r.status==='COMPLETED');
+ const produced=s.receipts.find(r=>r.action==='craft_stage'&&
+  r.status==='COMPLETED'&&r.delta.inventory.some(x=>x.key==='cord'));
  assert.ok(produced.delta.inventory.some(x=>x.key==='cord'&&x.delta===1));
  assert.ok(produced.delta.craftedItems.after.some(x=>x.kind==='cord'));
 });
