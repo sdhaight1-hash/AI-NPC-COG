@@ -74,6 +74,16 @@ test('canonical serialization is stable under key insertion order',()=>{
  assert.throws(()=>k.Simulation.canonical({bad:Infinity}),/Nonfinite/);
 });
 
+function firstDiff(a,b,path='state'){
+ if(JSON.stringify(a)===JSON.stringify(b))return null;
+ if(!a||!b||typeof a!=='object'||typeof b!=='object')
+  return path+': '+JSON.stringify(a)+' != '+JSON.stringify(b);
+ for(const key of [...new Set([...Object.keys(a),...Object.keys(b)])].sort()){
+  const diff=firstDiff(a[key],b[key],path+'.'+key);
+  if(diff)return diff;
+ }
+ return path+': unequal values';
+}
 test('real version-3 save codec preserves a pending physical job and exact output',()=>{
  const k=kernels();
  const base=k.Simulation.initial(379210);base.auto=false;
@@ -94,7 +104,7 @@ test('real version-3 save codec preserves a pending physical job and exact outpu
   k.Simulation.advance(base,1);
   k.Simulation.advance(restored,1);
  }
- assert.equal(digest(k,base),digest(k,restored));
+ assert.equal(digest(k,base),digest(k,restored),firstDiff(base,restored));
  assert.equal(base.world.nodes.find(x=>x.id===resource.id).stock,before-2);
  assert.equal(base.npcs[0].inventory.water,startingWater+2);
 });
@@ -112,7 +122,7 @@ test('version-3 save codec retains fractional progress through an in-flight move
  assert.equal(resumed.npcs[0].travel.remaining,actor.travel.remaining);
  k.Simulation.advance(original,.06);
  k.Simulation.advance(resumed,.06);
- assert.equal(digest(k,original),digest(k,resumed));
+ assert.equal(digest(k,original),digest(k,resumed),firstDiff(original,resumed));
 });
 test('headless actors perform actual tasks without model calls or browser ports',()=>{
  const k=kernels(),state=k.Simulation.initial(379210);
