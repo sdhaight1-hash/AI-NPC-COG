@@ -137,3 +137,16 @@ test('headless actors perform actual tasks without model calls or browser ports'
  assert.ok(state.npcs.some(a=>a.x!==origin.x||a.y!==origin.y||
   a.activityStats?.completed>0));
 });
+
+test('cached reachability invalidates when a traversable tile is edited',()=>{
+ const k=kernels(),state=k.Simulation.initial(379210),actor=state.npcs[0];
+ const target=k.Frontier.neighbors(state.world,actor)[0];
+ assert.ok(target);
+ const seen=k.WorldRuntime.reachability(state,actor);
+ assert.equal(seen(target),true);
+ const key=target.x+':'+target.y+':'+(target.z||0);
+ state.world.edits[key]='bedrock';
+ assert.equal(k.WorldRuntime.reachability(state,actor)(target),false);
+ delete state.world.edits[key];
+ assert.equal(k.WorldRuntime.reachability(state,actor)(target),true);
+});
