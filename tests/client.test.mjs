@@ -34,7 +34,7 @@ function makeBrowser(options={}){
    setItem(k,v){saved.set(k,v);},
    removeItem(k){saved.delete(k);}
   },fetch:options.fetch||(async()=>({ok:true,json:async()=>({connected:false})}))};
- const source=['pixel-art.js','frontier.js','biology.js','crafting.js','cognition.js','emergence.js',
+ const source=['pixel-art.js','frontier.js','biology.js','crafting.js','cognition.js','agency.js','emergence.js',
   'civilization.js','app.js'].map(path=>
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
  vm.runInNewContext(source+'\n'+
