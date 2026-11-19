@@ -464,7 +464,7 @@ async function sendMessage(event){
 }
 
 function ensureBody(actor){
- if(!actor.body)actor.body=Physics2D.create(actor.x,actor.y,actor===state.player?.235:.23);
+ if(!actor.body)actor.body=Physics2D.create(actor.x,actor.y,actor===state.player ? .235 : .23);
  return actor.body;
 }
 function nearbyBodies(actor){
@@ -532,14 +532,14 @@ staticContext.imageSmoothingEnabled=false;
 function drawStaticWorld(){
  VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees);
 }
-function updateCamera(){
+function updateCamera(force=false){
  const zoom=state.zoom;
  const viewW=canvas.width/zoom,viewH=canvas.height/zoom;
  const p=position(state.player);
  const tx=clamp((p.x+.5)*TILE-viewW/2,0,Math.max(0,W*TILE-viewW));
  const ty=clamp((p.y+.5)*TILE-viewH/2,0,Math.max(0,H*TILE-viewH));
- state.camera.x+=(tx-state.camera.x)*.26;
- state.camera.y+=(ty-state.camera.y)*.26;
+ state.camera.x+=force?tx-state.camera.x:(tx-state.camera.x)*.26;
+ state.camera.y+=force?ty-state.camera.y:(ty-state.camera.y)*.26;
 }
 function clientToTile(clientX,clientY,rect){
  const sx=(clientX-rect.left)*canvas.width/rect.width;
@@ -819,7 +819,7 @@ window.addEventListener('pagehide',save);
 function setZoom(next){
  state.zoom=clamp(next,1,3);
  $('zoomLevel').textContent=state.zoom+'×';
- updateCamera();
+ updateCamera(true);
 }
 $('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
 $('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
