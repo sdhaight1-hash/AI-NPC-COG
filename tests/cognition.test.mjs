@@ -75,6 +75,12 @@ test('constrained supply plans persist and collect finite physical materials',()
  for(const kind of resources){
   npc.plan={key:'stock_'+kind,steps:1};
   npc.inventory[kind]=0;npc.energy=100;
+  if(kind==='water'){
+   // This planning test deliberately supplies an already crafted vessel.
+   npc.inventory.flask=1;
+   npc.craftedItems=[{kind:'flask',quality:2,maker:npc.id,craftedAt:0,
+    method:'flask',materialQuality:2}];
+  }
   const target=world.nodes.find(x=>x.kind===kind&&x.stock>0);
   assert.ok(target,'Physical resource required: '+kind);
   npc.x=target.x;npc.y=target.y;
