@@ -1,6 +1,6 @@
 # AI-NPC-COG — Emergent Civilization Observatory
 
-A local-first, top-down, grid-and-time simulation of independent Rein-controlled people living in a seeded, **finite toroidal world with bounded z-levels**. Humans can learn, gather, construct simple shelters, talk and die. The simulation owns physical truth; one shared local **Rein-NPC-4B-Q4_K_M.gguf** model selects personal intentions. The observer is god mode, **not** a player character.
+A local-first, top-down, grid-and-time simulation of independently acting people living in a seeded, **finite toroidal world with bounded z-levels**. Humans can learn, gather, construct simple shelters, talk and die. The simulation owns physical truth; one shared local **Rein-NPC-4B-Q4_K_M.gguf** model selects personal intentions. The observer is god mode, **not** a player character.
 
 This repository is an **active prototype**, not yet the finished generational civilization and ecology simulator described in the [implementation roadmap](docs/emergent-world-roadmap.md). The new v3 world foundation is the first stage.
 
@@ -57,3 +57,15 @@ The test suite covers toroidal generation, boundary pathfinding, monthly calenda
 ## Art and licensing
 
 The renderer is original procedural top-down pixel art, currently much simpler than the intended Kynseed-inspired visual direction. The optional locally downloaded [Kenney Tiny Town](https://kenney.nl/assets/tiny-town) atlas is [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Missing optional sprites never prevent the app from running. Kynseed, Wayward, Project Zomboid, Eco, Crusader Kings III and Dwarf Fortress are design references only; no proprietary game assets or source have been reused.
+
+## Optional Hivemind model
+
+Rein-NPC-4B remains the default via `start.bat`. To try Hivemind Heretic,
+put `Qwen3-4B-Hivemind-Inst-Hrtic-Ablit-Uncensored-Q4_K_M-imat.gguf`
+in `Model` and run `start-hivemind.bat`. Close both old server windows
+before changing models. Only one GGUF uses VRAM at any moment.
+
+Rein retains its 64-token action scoring; Hivemind selects an exact legal key
+by chat and never fabricates comparable probabilities. Both use identical
+authoritative world rules and save data. Invalid outputs are rejected.
+The UI identifies the active model. Comparative performance is not yet benchmarked.
