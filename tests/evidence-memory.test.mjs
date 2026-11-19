@@ -112,3 +112,34 @@ test('legacy v3 recollections migrate without counterfeit physical provenance',(
  assert.equal(E.state(a).facts.length,0);
  assert.equal(E.state(a).summaries.length,0);
 });
+
+test('procedural and relationship recollections follow verified effects, never grant them',()=>{
+ const {E,sim,a,b}=setup();
+ a.knowledge={recipes:['shelter']};
+ const discovery=committed(sim,a,'experiment_wood_fiber',null,'evt_301');
+ discovery.delta={knowledge:{learnedMethods:['shelter']}};
+ E.fromReceipt(sim,a,discovery);
+ assert.equal(E.state(a).methods.length,1);
+ assert.equal(E.state(a).methods[0].method,'shelter');
+ assert.equal(E.state(a).methods[0].receiptId,'evt_301');
+ const social=committed(sim,a,'share_food',b.id,'evt_302');
+ E.fromReceipt(sim,a,social);
+ assert.equal(E.state(a).social[0].actorId,b.id);
+ assert.equal(E.state(a).social[0].sourceEpisodeId,'ev_2');
+ assert.equal(a.relationships,undefined,
+  'Remembering exchange must not create friendship');
+ assert.equal(E.state(b).social.length,0);
+ const clone={id:a.id,x:a.x,y:a.y,z:0};
+ E.restore(clone,JSON.parse(JSON.stringify(E.state(a))),sim.clock);
+ assert.equal(JSON.stringify(E.state(clone)),JSON.stringify(E.state(a)));
+});
+test('working memory is a view of actual task progress, not a made-up activity',()=>{
+ const {E,a}=setup();
+ a.project={goal:'Finish a shelter'};
+ a.task={key:'craft_stage',commandId:'cmd_32'};
+ a.currentActivity={workRequired:20,workDone:9};
+ assert.equal(E.working(a).goal,'Finish a shelter');
+ assert.equal(E.working(a).task,'craft_stage');
+ assert.equal(E.working(a).remainingMinutes,11);
+ assert.equal(E.state(a).episodes.length,0);
+});
