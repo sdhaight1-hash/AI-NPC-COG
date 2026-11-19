@@ -42,8 +42,10 @@
  const hasInputs=(npc,recipe)=>Object.entries(recipe.inputs)
   .every(([kind,amount])=>(npc.inventory[kind]||0)>=amount);
  function stationNear(npc,world,type,range=8){
+  // A craftsperson remembers a station they personally constructed even
+  // when gathering has taken them beyond immediate sensory range.
   return world.structures.find(s=>s.type===type&&
-   root.Frontier.distance(world,npc,s)<=range)||null;
+   (root.Frontier.distance(world,npc,s)<=range||s.maker===npc.id))||null;
  }
  function options(npc,world){
   if(npc.workpiece){
