@@ -296,6 +296,7 @@ async function peerExchange(n,other){
    {key:n.task.key,ref:n.task.ref,commandId:n.task.commandId},
    ()=>AgentWorld.complete(n,state.world,state.npcs));
   if(!outcome.ok)throw Error(outcome.message);
+  Activities.finish(state,n,true);
   activity(n).completed++;activityNote(n,'Completed conversation with '+other.name);
   Agency.outcome(n,state.world,'socialize',other.id,true,state.clock);
   Agency.outcome(other,state.world,'socialize',n.id,true,state.clock);
@@ -312,6 +313,7 @@ async function peerExchange(n,other){
  }catch(e){
   record(n.name+' ↔ '+other.name+': '+e.message,'warning');
   if(n.task?.key==='socialize')n.task=null;
+  Activities.finish(state,n,false,e.message);
   n.action='none';n.thoughtAt=state.clock+8;
   activity(n).failed++;activityNote(n,'Conversation failed: '+e.message);
   Agency.outcome(n,state.world,'socialize',other.id,false,state.clock);
