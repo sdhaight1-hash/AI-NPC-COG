@@ -34,7 +34,7 @@ function makeBrowser(options={}){
    setItem(k,v){saved.set(k,v);},
    removeItem(k){saved.delete(k);}
   },fetch:options.fetch||(async()=>({ok:true,json:async()=>({connected:false})}))};
- const source=['pixel-art.js','frontier.js','biology.js','crafting.js','emergence.js',
+ const source=['pixel-art.js','frontier.js','biology.js','crafting.js','cognition.js','emergence.js',
   'civilization.js','app.js'].map(path=>
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
  vm.runInNewContext(source+'\n'+
@@ -233,7 +233,7 @@ test('urgent needs act while model inference is busy and use finite world invent
  n.needs.thirst=85;n.inventory.water=2;
  assert.equal(b.survivalReflex(n),true);
  assert.equal(n.action,'drink');
- assert.equal(n.source,'survival reflex');
+ assert.equal(n.source,'survival instinct');
  const before=n.inventory.water;
  b.step(2);
  assert.equal(n.inventory.water,before-1,'Physiological action must consume real water');
@@ -320,15 +320,16 @@ test('activity diagnostics distinguish decisions, abstentions, accepted work and
  await b.deliberate(n);
  assert.equal(stats.decisions,1);
  assert.equal(stats.none,1);
- assert.equal(stats.started,0);
+ assert.equal(stats.started,1,'Self-directed autonomy should turn an abstention into work');
+ assert.ok(n.plan||n.task,'A legal persistent goal or action must follow abstention');
  assert.equal(n.thoughtAt,b.state.clock+3,
-  'Model abstention should be reconsidered instead of waiting 25 game minutes');
- assert.match(stats.last,/Selected none/);
+  'Abstention must not postpone the next model decision for 25 minutes');
+ assert.match(stats.last,/Started/);
  assert.equal(b.setAction(n,'nonexistent','rein'),false);
  assert.equal(stats.rejected,1);
  n.needs.thirst=60;
  assert.equal(b.setAction(n,'drink','rein'),true);
- assert.equal(stats.started,1);
+ assert.equal(stats.started,2);
  b.step(2);
  assert.equal(stats.completed,1);
  assert.match(stats.last,/Completed/);
@@ -342,4 +343,38 @@ test('per-NPC activity diagnostics persist safely across save reloads',()=>{
  assert.equal(copy.activityStats.none,1);
  assert.equal(copy.activityStats.rejected,1);
  assert.match(copy.activityStats.last,/no longer available/);
+});
+
+test('critical thirst interrupts a crafting stage but keeps its committed workpiece',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0];
+ b.state.auto=false;
+ n.inventory.fiber=3;
+ assert.equal(b.setAction(n,'craft_cord','rein'),true);
+ b.step(3);
+ assert.ok(n.workpiece,'Project was started');
+ const workpiece=n.workpiece,recipe=n.workpiece.recipe,stage=n.workpiece.stage;
+ n.needs.thirst=96;n.bio.hydrationBudgetMl=150;n.inventory.water=2;
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.task?.key,'drink');
+ assert.equal(n.workpiece,workpiece,'No material duplication or loss on interruption');
+ assert.equal(n.workpiece.recipe,recipe);
+ assert.equal(n.workpiece.stage,stage);
+ assert.equal(n.plan?.key,'craft_project');
+ b.step(2);
+ assert.equal(n.inventory.water,1,'Real hydration consumes a carried water unit');
+ assert.equal(n.needs.thirst<96,true);
+ for(let i=0;i<80;i++)b.step(1);
+ assert.equal(n.inventory.cord,1,'The paused workpiece must eventually finish');
+ assert.equal(n.workpiece,null);
+});
+test('the model sees recalled personal history without giving it to other inhabitants',()=>{
+ const b=makeBrowser(),[a,other]=b.state.npcs;
+ a.goal='I need to find the freshwater spring again';
+ b.Cognition?.record?.(a,'Only I observed the spring behind the northern trees',100,
+  {kind:'observation',salience:5});
+ // The model-facing scene is assembled from the NPC personal memory store.
+ a.memories.push({text:'Only I observed the spring behind the northern trees',
+  kind:'observation',at:100,x:a.x,y:a.y,salience:5});
+ assert.match(b.sceneFor(a),/Only I observed the spring/);
+ assert.doesNotMatch(b.sceneFor(other),/Only I observed the spring/);
 });

@@ -80,10 +80,10 @@ function record(message,type='routine'){
   text:String(message).slice(0,250),type});
  state.events=state.events.slice(0,100);renderEvents();
 }
-function remember(n,entry){
- n.memories.push({time:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
-  text:String(entry).slice(0,180)});
- n.memories=n.memories.slice(-24);
+function remember(n,entry,meta={}){
+ const memory=Cognition.record(n,entry,state.clock,meta);
+ memory.time='Y'+Civilization.stamp(state.clock).year+' '+timeString();
+ return memory;
 }
 function moveTo(n,target){
  const path=pathfind(n,target);
@@ -158,7 +158,9 @@ function sceneFor(n){
   .map(v=>v.kind+' at '+v.x+','+v.y+' ('+v.stock+' units)').join('; ')||'None observed';
  const sensations=Biology.sensation(n.bio,n.needs);
  const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
- const memories=n.memories.slice(-4).map(m=>m.text).join('; ')||'None';
+ const memoryQuery=n.goal+' '+sensations+' '+nearby+' '+n.action;
+ const memories=Cognition.recall(n,memoryQuery,state.clock,5)
+  .map(m=>m.kind+': '+m.text).join('; ')||'No relevant personal recollections';
  return 'Year '+Civilization.stamp(state.clock).year+', '+Civilization.stamp(state.clock).season+', '+timeString()+
   '. Untamed procedural wilderness; no predefined community or government. '+
   n.name+' at ('+n.x+','+n.y+','+(n.z||0)+'). Personality: '+n.personality+
@@ -191,6 +193,7 @@ function actionDuration(n,key){
 function backgroundOptions(n){
  const options=availableActivities(n).filter(o=>o.key!=='none');
  const priority={drink:100,fill_water:80,eat:90,forage:70,
+  stock_water:80,stock_food:69,stock_wood:50,stock_stone:49,stock_fiber:51,
   rest:60,explore:45,inspect:62,pickup_item:63,drop_wood:12,
   build_cache:47,store_wood:37,retrieve_wood:42,experiment_wood_stone:43,
   experiment_wood_fiber:43,experiment_wood_stone_fiber:43,craft_hatchet:45,
@@ -206,7 +209,8 @@ function backgroundOptions(n){
   ((o.key==='eat'||o.key==='forage')?n.needs.hunger*.4:0)+
   (o.key==='rest'?(100-n.energy)*.5:0)+
   (o.key==='socialize'?n.needs.social*.65:0)+
-  (Frontier.hash(n.x,n.y,Math.floor(state.clock/33)+o.key.length*17)-.5)*22;
+  (Frontier.hash(n.x,n.y,Math.floor(state.clock/33)+o.key.length*17)-.5)*22-
+  (Cognition.recentFailure(n,o.key,state.clock)?50:0);
  options.sort((a,b)=>urgency(b)-urgency(a));
  const result=options.slice(0,9);
  const social=options.find(o=>o.key==='socialize')||options.find(o=>o.key==='explore');
@@ -218,18 +222,39 @@ function fallbackBackground(n){return AgentWorld.fallback(n,backgroundOptions(n)
 // Physiological responses continue while inference is busy. They still consume
 // simulation time and inventory through the ordinary action executor.
 function survivalReflex(n){
- if(n.task||n.plan||n.path.length||n.peerPending||n.action==='rest')return false;
+ if(n.peerPending||n.peerReservedFor)return false;
+ const options=availableActivities(n);
+ const urgent=Cognition.instinct(n,options);
+ if(!urgent)return false;
+ const critical=n.needs.thirst>=90||n.needs.hunger>=95||
+  n.bio?.hydrationBudgetMl<200;
+ if((n.task||n.path.length||n.action==='rest')&&!critical)return false;
+ if(n.task?.key===urgent)return false;
+ if(n.task||n.path.length||n.action==='rest'){
+  // A physical emergency interrupts activity, never destroys the workpiece.
+  // The multi-stage project remains and resumes after recovery.
+  n.task=null;n.path=[];n.travel=null;n.action='none';
+  if(n.plan)n.nextPlanAt=state.clock+2;
+  remember(n,'Interrupted work to address immediate bodily danger',
+   {kind:'need',salience:4});
+ }
+ return setAction(n,urgent,'survival instinct');
+}
+function autonomousPurpose(n){
+ if(n.task||n.plan||n.path.length)return false;
  const options=availableActivities(n);
  const has=key=>options.some(o=>o.key===key);
- let action=null;
- if(n.needs.thirst>=75){
-  if(n.inventory.water>0&&has('drink'))action='drink';
-  else if(has('fill_water'))action='fill_water';
- }else if(n.needs.hunger>=80){
-  if(n.inventory.food>0&&has('eat'))action='eat';
-  else if(has('forage'))action='forage';
- }else if(n.energy<18&&has('rest'))action='rest';
- return action?setAction(n,action,'survival reflex'):false;
+ const priorities=[
+  n.inventory.water<2?'stock_water':null,
+  n.inventory.food<2?'stock_food':null,
+  n.inventory.wood<3?'stock_wood':null,
+  n.inventory.fiber<3?'stock_fiber':null,
+  n.inventory.stone<2?'stock_stone':null
+ ].filter(Boolean);
+ const selected=priorities.find(k=>has(k)&&!Cognition.recentFailure(n,k,state.clock));
+ if(selected)return setAction(n,selected,'self-directed goal');
+ if(has('inspect')&&n.needs.curiosity>=35)return setAction(n,'inspect','self-directed curiosity');
+ return has('explore')?setAction(n,'explore','self-directed exploration'):false;
 }
 function socialInitiative(n){
  if(!state.connected||n.needs.social<50||n.energy<25||
@@ -278,7 +303,8 @@ function setAction(n,action,source='rein',scores=null){
   activity(n).rejected++;activityNote(n,'Action '+action+' no longer available');
   return false;
  }
- if(['stock_food','make_campfire','make_shelter'].includes(action)){
+ if(['stock_food','stock_water','stock_wood','stock_stone','stock_fiber',
+  'make_campfire','make_shelter'].includes(action)){
   if(n.plan)return false;
   n.plan={key:action,steps:0};n.nextPlanAt=state.clock;
   n.goal='Pursuing '+action;n.action='none';n.source=source;n.scores=scores;
@@ -294,6 +320,8 @@ function setAction(n,action,source='rein',scores=null){
     ?approach(n,target):moveTo(n,target);
    if(!good){
     activity(n).rejected++;activityNote(n,'No reachable path for '+action);
+    remember(n,'Failed to reach a destination for '+action,
+     {kind:'failure',action,ref:option.ref,salience:3});
     return false;
    }
   }
@@ -327,16 +355,21 @@ function completeActivity(n){
   }
   void peerExchange(n,other);return;
  }
+ const finished={key:n.task.key,ref:n.task.ref};
  const outcome=AgentWorld.complete(n,state.world,state.npcs);
  if(outcome.ok){
   activity(n).completed++;activityNote(n,'Completed: '+outcome.message);
-  remember(n,outcome.message);record(n.name+': '+outcome.message,'social');
+  remember(n,outcome.message,{kind:'success',action:finished.key,ref:finished.ref,
+   salience:finished.key==='inspect'?3:2});
+  record(n.name+': '+outcome.message,'social');
   if(n.plan){
    n.plan.steps++;n.nextPlanAt=state.clock+1;
-   if(n.plan.steps>=8)finishPlan(n,'Plan step limit reached','warning');
+   if(n.plan.steps>=24)finishPlan(n,'Plan step limit reached','warning');
   }else n.thoughtAt=state.clock+2;
   }else{
   activity(n).failed++;activityNote(n,'Task failed: '+outcome.message);
+  remember(n,'Could not finish '+finished.key+': '+outcome.message,
+   {kind:'failure',action:finished.key,ref:finished.ref,salience:3});
   record(n.name+': '+outcome.message+' [rejected]','warning');
   if(n.plan)finishPlan(n,'Plan blocked: '+outcome.message,'warning');
   n.thoughtAt=state.clock+4;
@@ -386,7 +419,9 @@ async function deliberate(n){
    activity(n).decisions++;
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
       options.some(o=>o.key===data.action)){
-    setAction(n,data.action,data.source==='hivemind'?'hivemind':'rein',data.scores);
+    const selected=setAction(n,data.action,
+     data.source==='hivemind'?'hivemind':'rein',data.scores);
+    if(selected&&data.action==='none')autonomousPurpose(n);
    }else{
     activity(n).rejected++;
     activityNote(n,'Discarded stale, paused or invalid model selection');
@@ -723,7 +758,7 @@ function restore(){
      typeof o.text==='string'&&Number.isFinite(o.at))
      .slice(-40).map(o=>({id:o.id,kind:String(o.kind||'').slice(0,30),
       at:o.at,text:o.text.slice(0,240)}));
-   if(Array.isArray(old.memories))n.memories=old.memories.slice(-24);
+   Cognition.restore(n,old.memories);
    if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);

@@ -37,6 +37,7 @@
     n.plan = null;
     n.craftedItems=[];n.workpiece=null;
     n.peerLog = [];
+    n.memories ||= [];
     n.lastPeerAt = -100000;
     return n;
   }
@@ -132,6 +133,14 @@
         add(key,'Collect '+label+' from a visible source ('+node.stock+' remaining, '+distance(n,node)+' tiles away)',node,node.id);
       }
     }
+    if(!n.plan&&n.inventory.water<2&&findNode(n,world,'water',canReach))
+      add('stock_water','Prepare an emergency reserve of clean drinking water');
+    if(!n.plan&&n.inventory.wood<3&&findNode(n,world,'wood',canReach))
+      add('stock_wood','Gather several units of wood for future work');
+    if(!n.plan&&n.inventory.stone<2&&findNode(n,world,'stone',canReach))
+      add('stock_stone','Gather a small supply of usable stone');
+    if(!n.plan&&n.inventory.fiber<3&&findNode(n,world,'fiber',canReach))
+      add('stock_fiber','Collect plant fiber for making cord and bindings');
     if(n.inventory.food>0&&n.needs.hunger>=10)
       add('eat','Eat carried food (hunger '+Math.round(n.needs.hunger)+'/100)');
     if(n.inventory.water>0&&n.needs.thirst>=10)
@@ -401,7 +410,19 @@
   function nextPlanAction(n,world,residents,canReach){
     if(!n.plan)return {status:'done'};
     let key;
-    if(n.plan.key==='stock_food'){
+    if(n.plan.key==='stock_water'){
+      if(n.inventory.water>=2)return {status:'done'};
+      key='fill_water';
+    }else if(n.plan.key==='stock_wood'){
+      if(n.inventory.wood>=3)return {status:'done'};
+      key='collect_wood';
+    }else if(n.plan.key==='stock_stone'){
+      if(n.inventory.stone>=2)return {status:'done'};
+      key='collect_stone';
+    }else if(n.plan.key==='stock_fiber'){
+      if(n.inventory.fiber>=3)return {status:'done'};
+      key='collect_fiber';
+    }else if(n.plan.key==='stock_food'){
       if(n.inventory.food>=2)return {status:'done'};
       key='forage';
     }else if(n.plan.key==='make_shelter'){
@@ -420,13 +441,14 @@
       else if(n.inventory.stone<1)key='collect_stone';
       else key='build_fire';
     }else return {status:'blocked',reason:'Unrecognized intention'};
-    if(n.energy<20)key='rest';
+    if(n.energy<20&&key!=='rest')key='rest';
     const option=available(n,world,residents,canReach).find(a=>a.key===key);
     return option?{status:'action',option}:{status:'blocked',reason:'Required resource or location unavailable'};
   }
   function validatePlan(saved){
-    if(!saved || !['stock_food','make_campfire','make_shelter','craft_project'].includes(saved.key) ||
-       !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>8)return null;
+    if(!saved || !['stock_food','stock_water','stock_wood','stock_stone','stock_fiber',
+      'make_campfire','make_shelter','craft_project'].includes(saved.key) ||
+       !Number.isInteger(saved.steps) || saved.steps<0 || saved.steps>24)return null;
     return saved.key==='craft_project'?
       {key:saved.key,recipe:root.Crafting.getRecipe(saved.recipe)?saved.recipe:null,steps:saved.steps}:
       {key:saved.key,steps:saved.steps};

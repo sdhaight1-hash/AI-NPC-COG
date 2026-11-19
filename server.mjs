@@ -252,6 +252,7 @@ const STATIC = {
   '/assets/kenney-tiny-town.png': ['public/assets/kenney-tiny-town.png', 'image/png'],
   '/emergence.js': ['public/emergence.js', 'text/javascript; charset=utf-8'],
   '/crafting.js': ['public/crafting.js', 'text/javascript; charset=utf-8'],
+  '/cognition.js': ['public/cognition.js', 'text/javascript; charset=utf-8'],
   '/civilization.js': ['public/civilization.js', 'text/javascript; charset=utf-8'],
   '/biology.js': ['public/biology.js', 'text/javascript; charset=utf-8'],
   '/frontier.js': ['public/frontier.js', 'text/javascript; charset=utf-8'],

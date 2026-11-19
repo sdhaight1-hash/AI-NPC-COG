@@ -126,14 +126,23 @@ function updateHealth(state,npc,elapsed){
  if(elapsed<=0)return null;
  const dehydrated=npc.bio.hydrationBudgetMl<=20&&npc.needs.thirst>=90;
  const starving=npc.bio.glycogenKcal<10&&npc.bio.longTermKcal<50&&npc.needs.hunger>=90;
- if(dehydrated)npc.health-=elapsed*.12;
- if(starving)npc.health-=elapsed*.018;
+ // Survival pressures start degrading stamina before they become lethal.
+ // These are game rates per simulated minute, not medical predictions.
+ const thirst=npc.needs.thirst,hunger=npc.needs.hunger;
+ if(thirst>=65)npc.energy=Math.max(0,npc.energy-elapsed*(thirst>=90?.14:.055));
+ if(hunger>=70)npc.energy=Math.max(0,npc.energy-elapsed*(hunger>=90?.08:.035));
+ if(thirst>=85&&npc.bio.hydrationBudgetMl<600)
+  npc.health-=elapsed*(dehydrated?.12:.028);
+ if(hunger>=90&&npc.bio.longTermKcal<250)
+  npc.health-=elapsed*(starving?.018:.006);
  // A conservative age-related gameplay hazard; not a clinical mortality model.
  const years=age(npc,state.clock);
  if(years>80)npc.health-=elapsed*(years-80)*.000004;
  npc.health=Math.max(0,Math.min(100,npc.health));
  if(npc.health<=0){
-  const cause=dehydrated?'dehydration':starving?'starvation':'age-related decline';
+  const cause=thirst>=85&&npc.bio.hydrationBudgetMl<600?
+   'dehydration':hunger>=90&&npc.bio.longTermKcal<250?
+   'starvation':'age-related decline';
   die(state,npc,cause);
   return cause;
  }
