@@ -24,7 +24,8 @@
    dead:state.dead,world:state.world,events:state.events,
    selected:state.selected,viewZ:state.viewZ,
    commandSeq:state.commandSeq||0,receiptSeq:state.receiptSeq||0,
-   effectRevision:state.effectRevision||0,receipts:(state.receipts||[]).slice(-4096)};
+   effectRevision:state.effectRevision||0,receipts:(state.receipts||[]).slice(-4096),
+   reservations:(state.reservations||[]).slice(0,4096)};
  }
 
 function restore(state,saved){
@@ -129,6 +130,7 @@ function restore(state,saved){
     old.thoughtAt:state.clock+3+state.npcs.length*2;
    state.npcs.push(n);
   }
+  root.Reservations?.restore(state,saved.reservations);
   state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
   const maxId=Math.max(5,...state.npcs.map(n=>Number(n.id.slice(7))),
    ...state.dead.filter(v=>/^person_[1-9]\d*$/.test(v.id))
