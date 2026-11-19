@@ -100,3 +100,29 @@ test('receipt sequence survives version-3 checkpoint and contains no private NPC
  assert.equal(restored.receiptSeq,oldSeq+1);
  assert.equal(restored.receipts.at(-1).sequence,oldSeq+1);
 });
+
+test('shared food transfer captures recipient changes without private cognitive state',()=>{
+ const c=load(),s=c.Simulation.initial(379210);s.auto=false;
+ const [n,other]=s.npcs;
+ other.x=n.x;other.y=n.y; // World kernel checks interaction proximity.
+ n.inventory.food=2;n.bio=c.Biology.restore(n.bio,2);
+ other.inventory.food=0;other.bio=c.Biology.restore(other.bio,0);
+ n.task={key:'share_food',ref:other.id,readyAt:s.clock,commandId:'cmd_77'};
+ const result=c.WorldReceipts.execute(s,n,n.task,()=>
+  c.AgentWorld.complete(n,s.world,s.npcs));
+ assert.equal(result.ok,true);
+ const receipt=result.receipt;
+ const peer=receipt.delta.otherActors.find(x=>x.actorId===other.id);
+ assert.ok(peer);
+ assert.ok(peer.inventory.some(x=>x.key==='food'&&x.delta===1));
+ assert.ok(receipt.delta.inventory.some(x=>x.key==='food'&&x.delta===-1));
+ assert.ok(!JSON.stringify(receipt).includes(other.personality));
+});
+test('receipt append retains bounded history with monotonic sequence',()=>{
+ const c=load(),s=c.Simulation.initial(379210),n=s.npcs[0];
+ for(let i=0;i<c.WorldReceipts.MAX+10;i++)
+  c.WorldReceipts.decision(s,n,'none','simulation');
+ assert.equal(s.receipts.length,c.WorldReceipts.MAX);
+ assert.equal(s.receiptSeq,c.WorldReceipts.MAX+10);
+ assert.equal(s.receipts.at(0).sequence,11);
+});
