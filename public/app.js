@@ -70,6 +70,11 @@ function timeString(){
  const d=Civilization.stamp(state.clock);
  return String(d.hour).padStart(2,'0')+':'+String(d.minute).padStart(2,'0');
 }
+function activity(n){
+ return n.activityStats ||= {decisions:0,none:0,rejected:0,started:0,
+  completed:0,failed:0,blocked:0,errors:0,last:'No decisions yet'};
+}
+function activityNote(n,text){activity(n).last=String(text).slice(0,110);}
 function record(message,type='routine'){
  state.events.unshift({time:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
   text:String(message).slice(0,250),type});
@@ -114,6 +119,7 @@ function updateMovement(n,elapsed){
   const next=n.path[0];
   if(isBlocked(next.x,next.y,next.z||0)){
    n.path=[];n.travel=null;n.task=null;n.goal='Route invalidated';
+   activity(n).blocked++;activityNote(n,'Movement: destination became blocked');
    n.thoughtAt=state.clock+3;break;
   }
   if(!n.travel){
@@ -131,6 +137,7 @@ function updateMovement(n,elapsed){
    n.travel=null;
    if(n.blockedFor>5){
     n.path=[];n.task=null;n.goal='Route blocked by another inhabitant';
+    activity(n).blocked++;activityNote(n,'Movement: another inhabitant blocked passage');
     n.thoughtAt=state.clock+3;n.blockedFor=0;
    }
    break;
@@ -262,9 +269,15 @@ function finishPlan(n,reason,type='social'){
  n.goal='Reconsidering my next action';n.thoughtAt=state.clock+3;
 }
 function setAction(n,action,source='rein',scores=null){
- if(!state.npcs.includes(n)||n.task||n.peerReservedFor)return false;
+ if(!state.npcs.includes(n)||n.task||n.peerReservedFor){
+  activity(n).rejected++;activityNote(n,'Cannot start '+action+': already occupied');
+  return false;
+ }
  const option=availableActivities(n).find(v=>v.key===action);
- if(!option)return false;
+ if(!option){
+  activity(n).rejected++;activityNote(n,'Action '+action+' no longer available');
+  return false;
+ }
  if(['stock_food','make_campfire','make_shelter'].includes(action)){
   if(n.plan)return false;
   n.plan={key:action,steps:0};n.nextPlanAt=state.clock;
@@ -279,13 +292,21 @@ function setAction(n,action,source='rein',scores=null){
   if(target&&dist(n,target)>1){
    const good=(action==='share_food'||action==='socialize')
     ?approach(n,target):moveTo(n,target);
-   if(!good)return false;
+   if(!good){
+    activity(n).rejected++;activityNote(n,'No reachable path for '+action);
+    return false;
+   }
   }
   n.action=action;n.source=source;n.scores=scores;
   n.task={key:action,ref:option.ref||null,readyAt:n.path.length?null:
    state.clock+actionDuration(n,action)};
   if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
   n.goal=action.replaceAll('_',' ')+' (self-chosen)';
+ }
+ if(action==='none'){
+  activity(n).none++;activityNote(n,'Selected none ['+source+']');
+ }else{
+  activity(n).started++;activityNote(n,'Started '+action+' ['+source+']');
  }
  record(n.name+' chose '+action.replaceAll('_',' ')+' ['+source+']',
   ['rein','hivemind'].includes(source)?'ai':'routine');
@@ -308,12 +329,14 @@ function completeActivity(n){
  }
  const outcome=AgentWorld.complete(n,state.world,state.npcs);
  if(outcome.ok){
+  activity(n).completed++;activityNote(n,'Completed: '+outcome.message);
   remember(n,outcome.message);record(n.name+': '+outcome.message,'social');
   if(n.plan){
    n.plan.steps++;n.nextPlanAt=state.clock+1;
    if(n.plan.steps>=8)finishPlan(n,'Plan step limit reached','warning');
   }else n.thoughtAt=state.clock+2;
- }else{
+  }else{
+  activity(n).failed++;activityNote(n,'Task failed: '+outcome.message);
   record(n.name+': '+outcome.message+' [rejected]','warning');
   if(n.plan)finishPlan(n,'Plan blocked: '+outcome.message,'warning');
   n.thoughtAt=state.clock+4;
@@ -360,19 +383,25 @@ async function deliberate(n){
     persona:n.personality,scene:sceneFor(n),history:[],
     question:'Which available action do you choose independently, and why?',options
    });
+   activity(n).decisions++;
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
-      options.some(o=>o.key===data.action))
+      options.some(o=>o.key===data.action)){
     setAction(n,data.action,data.source==='hivemind'?'hivemind':'rein',data.scores);
+   }else{
+    activity(n).rejected++;
+    activityNote(n,'Discarded stale, paused or invalid model selection');
+   }
   }else if(!state.paused)setAction(n,fallbackBackground(n),'offline routine');
  }catch(e){
   if(e.status!==429){
+   activity(n).errors++;activityNote(n,'Model error: '+e.message);
    record(n.name+': '+state.modelLabel+' error '+e.message,'warning');
    if(!state.paused&&state.npcs.includes(n))
     setAction(n,fallbackBackground(n),'offline routine');
    void checkModel();
   }
  }finally{
-  n.thoughtAt=state.clock+(state.connected?25:18);
+  n.thoughtAt=state.clock+(state.connected?(n.action==='none'&&!n.task?3:25):18);
   state.backgroundBusy=false;state.lastDecisionMs=performance.now();
  }
 }
@@ -553,6 +582,12 @@ function updateInspector(){
  $('knowledgeVal').textContent=(n.knowledge?.recipes||[]).join(', ')||'No learned recipes';
  $('npcGoal').textContent=n.goal;
  $('npcPlan').textContent=n.plan?n.plan.key+' ('+n.plan.steps+' steps)':'No active plan';
+ const a=activity(n);
+ $('npcActivity').textContent=a.decisions+' model decisions · '+a.started+
+  ' actions started · '+a.completed+' completed · '+a.none+' no-ops';
+ $('npcActivityFailures').textContent=(a.rejected+a.failed+a.blocked)+
+  ' rejected/failed/blocked · '+a.errors+' model errors';
+ $('npcActivityLast').textContent=a.last;
  $('npcCrafting').textContent=n.workpiece?
   Crafting.RECIPES[n.workpiece.recipe].name+' · '+(n.workpiece.stage+1)+'/'+
   Crafting.RECIPES[n.workpiece.recipe].stages.length:'No workpiece';
@@ -668,6 +703,14 @@ function restore(){
     if(Number.isInteger(old.skills?.[k])&&old.skills[k]>=0)
      n.skills[k]=Math.min(old.skills[k],100000);
    n.bio=Biology.restore(old.bio,n.inventory.food);
+   if(old.activityStats&&typeof old.activityStats==='object'){
+    const a=activity(n);
+    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','errors'])
+     if(Number.isInteger(old.activityStats[k])&&old.activityStats[k]>=0)
+      a[k]=Math.min(old.activityStats[k],10000000);
+    if(typeof old.activityStats.last==='string')
+     a.last=old.activityStats.last.slice(0,110);
+   }
    Crafting.restore(n,old);
    n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
     [...new Set(old.knowledge.recipes.filter(v=>
