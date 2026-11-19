@@ -25,6 +25,7 @@ jobs:
       - run: node --check public/simulation.js
       - run: node --check scripts/headless.mjs
       - run: node scripts/headless.mjs 10000 379210
+      - run: node scripts/headless.mjs 200 379210 --auto --trace=receipt-trace.jsonl
       - run: node --test tests/*.test.mjs
   windows-installer:
     runs-on: windows-latest
