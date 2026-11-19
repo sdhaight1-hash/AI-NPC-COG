@@ -73,3 +73,57 @@ test('canonical serialization is stable under key insertion order',()=>{
   k.Simulation.canonical({a:{y:3,z:2},b:1}));
  assert.throws(()=>k.Simulation.canonical({bad:Infinity}),/Nonfinite/);
 });
+
+test('real version-3 save codec preserves a pending physical job and exact output',()=>{
+ const k=kernels();
+ const base=k.Simulation.initial(379210);base.auto=false;
+ const n=base.npcs[0];
+ const resource=base.world.nodes.find(x=>x.kind==='water'&&x.stock>=3);
+ assert.ok(resource);
+ n.x=resource.x;n.y=resource.y;n.z=0;
+ n.task={key:'fill_water',ref:resource.id,readyAt:base.clock+5};
+ n.action='fill_water';
+ const before=resource.stock,startingWater=n.inventory.water;
+ k.Simulation.advance(base,2);
+ const packed=JSON.parse(JSON.stringify(k.Persistence.save(base)));
+ assert.equal(packed.version,3);
+ const restored=k.Simulation.initial(379210);restored.auto=false;
+ assert.equal(k.Persistence.restore(restored,packed),true);
+ assert.equal(restored.npcs[0].task.readyAt,base.npcs[0].task.readyAt);
+ for(let i=0;i<5;i++){
+  k.Simulation.advance(base,1);
+  k.Simulation.advance(restored,1);
+ }
+ assert.equal(digest(k,base),digest(k,restored));
+ assert.equal(base.world.nodes.find(x=>x.id===resource.id).stock,before-2);
+ assert.equal(base.npcs[0].inventory.water,startingWater+2);
+});
+test('version-3 save codec retains fractional progress through an in-flight movement',()=>{
+ const k=kernels(),original=k.Simulation.initial(379210);
+ original.auto=false;
+ const actor=original.npcs[0],target=k.Frontier.neighbors(original.world,actor)[0];
+ assert.ok(target);
+ assert.equal(k.WorldRuntime.moveTo(original,actor,target),true);
+ k.Simulation.advance(original,.02);
+ assert.ok(actor.travel?.remaining>0);
+ const packed=JSON.parse(JSON.stringify(k.Persistence.save(original)));
+ const resumed=k.Simulation.initial(379210);resumed.auto=false;
+ assert.equal(k.Persistence.restore(resumed,packed),true);
+ assert.equal(resumed.npcs[0].travel.remaining,actor.travel.remaining);
+ k.Simulation.advance(original,.06);
+ k.Simulation.advance(resumed,.06);
+ assert.equal(digest(k,original),digest(k,resumed));
+});
+test('headless actors perform actual tasks without model calls or browser ports',()=>{
+ const k=kernels(),state=k.Simulation.initial(379210);
+ state.auto=true;
+ const n=state.npcs[0],origin={x:n.x,y:n.y};
+ let completed=false;
+ for(let i=0;i<200;i++){
+  k.Simulation.advance(state,1);
+  if(state.npcs.some(a=>a.activityStats?.completed>0)){completed=true;break;}
+ }
+ assert.ok(completed,'The offline runtime must physically complete at least one action');
+ assert.ok(state.npcs.some(a=>a.x!==origin.x||a.y!==origin.y||
+  a.activityStats?.completed>0));
+});
