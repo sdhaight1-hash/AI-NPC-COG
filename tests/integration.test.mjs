@@ -120,6 +120,9 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   });
   assert.equal(invalidPeer.status,400,'An agent cannot converse with itself');
 
+  const physics = await fetch(origin + '/physics.js');
+  assert.equal(physics.status,200);
+  assert.match(await physics.text(),/root\.Physics2D=/);
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
   assert.match(await html.text(), /Hearthbrook · Emergent World/);
@@ -131,6 +134,8 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   const rendererSource = await renderer.text();
   assert.match(rendererSource, /root\.VillageArt=/);
   const htmlSource = await (await fetch(origin + '/')).text();
+  assert.ok(htmlSource.indexOf('/physics.js') < htmlSource.indexOf('/app.js'),
+    'Physics must load before app.js');
   assert.ok(htmlSource.indexOf('/pixel-art.js') < htmlSource.indexOf('/app.js'),
     'The art renderer must load before app.js');
   assert.ok(htmlSource.indexOf('/emergence.js') < htmlSource.indexOf('/app.js'),
