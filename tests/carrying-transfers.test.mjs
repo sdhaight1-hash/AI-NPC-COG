@@ -101,3 +101,48 @@ test('crate withdrawal refuses over-capacity actors without deleting stored stoc
  assert.deepEqual(snapshot(crate.contents),before);
  assert.equal(n.inventory.stone,14);
 });
+
+test('dropped fiber keeps one ground identity across save and later pickup',()=>{
+ const {k,s,n}=fixture();
+ n.inventory.fiber=30;
+ assert.equal(k.WorldRuntime.begin(s,n,'drop_fiber'),true);
+ k.Simulation.advance(s,2);
+ const item=s.world.items.find(x=>x.kind==='fiber');
+ assert.ok(item);
+ const saved=snapshot(k.Persistence.save(s));
+ const loaded=k.Simulation.initial(379210);loaded.auto=false;
+ assert.equal(k.Persistence.restore(loaded,saved),true);
+ const actor=loaded.npcs.find(x=>x.id===n.id),ground=loaded.world.items;
+ assert.equal(ground.length,1);
+ assert.equal(ground[0].id,item.id);
+ assert.equal(ground[0].kind,'fiber');
+ assert.equal(actor.inventory.fiber,29);
+ assert.equal(k.WorldRuntime.begin(loaded,actor,'pickup_item'),true);
+ k.Simulation.advance(loaded,2);
+ assert.equal(actor.inventory.fiber,30);
+ assert.equal(loaded.world.items.length,0);
+ const receipt=loaded.receipts.find(x=>x.action==='pickup_item'&&x.status==='COMPLETED');
+ assert.ok(receipt);
+ assert.equal(receipt.delta.collections.items.removed[0].id,item.id);
+});
+
+test('final crafting stage waits for actual carrying space without losing its workpiece',()=>{
+ const {k,s,n}=fixture();
+ n.inventory.fiber=3;
+ assert.equal(k.Crafting.begin(n,s.world,'cord').ok,true);
+ assert.equal(n.inventory.fiber,0);
+ for(let i=0;i<2;i++)assert.equal(k.Crafting.advance(n,s.world).ok,true);
+ assert.equal(n.workpiece.stage,2);
+ n.inventory.fiber=30;
+ const before=snapshot(n.workpiece);
+ const refused=k.Crafting.advance(n,s.world);
+ assert.equal(refused.ok,false);
+ assert.match(refused.message,/CARRYING_CAPACITY/);
+ assert.deepEqual(snapshot(n.workpiece),before);
+ assert.equal(n.inventory.cord,0);
+ n.inventory.fiber=29;
+ assert.equal(k.Crafting.advance(n,s.world).ok,true);
+ assert.equal(n.workpiece,null);
+ assert.equal(n.inventory.cord,1);
+ assert.ok(k.AgentWorld.carrying(n).volumeL<=45);
+});
