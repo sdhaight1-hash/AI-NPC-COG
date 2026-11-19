@@ -126,3 +126,16 @@ test('receipt append retains bounded history with monotonic sequence',()=>{
  assert.equal(s.receiptSeq,c.WorldReceipts.MAX+10);
  assert.equal(s.receipts.at(0).sequence,11);
 });
+
+test('non-physical model choices and inference duration survive checkpoint without prompts',()=>{
+ const c=load(),s=c.Simulation.initial(379210),n=s.npcs[0];
+ c.WorldReceipts.decision(s,n,'inspect','rein','DECIDED',null,12.5);
+ c.WorldReceipts.decision(s,n,'craft_fantasy','model','REJECTED','Invalid option');
+ const other=c.Simulation.initial(379210);
+ const pack=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ assert.equal(c.Persistence.restore(other,pack),true);
+ assert.equal(other.receipts.length,2);
+ assert.equal(other.receipts[0].inferenceMs,12.5);
+ assert.equal(other.receipts[1].reason,'Invalid option');
+ assert.equal(other.receipts[1].commandId,null);
+});
