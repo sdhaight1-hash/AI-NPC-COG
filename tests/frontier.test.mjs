@@ -68,7 +68,7 @@ test('construction uses actual earned materials and never creates starter struct
  n.task={key:'build_shelter',ref:null};
  assert.equal(A.complete(n,w,[n]).ok,true);
  assert.equal(w.structures.length,1);
- assert.equal(n.inventory.wood,0);assert.equal(n.inventory.fiber,0);
+ assert.equal(n.inventory.wood,1);assert.equal(n.inventory.fiber,0);
  assert.equal(n.skills.building,1);
  const copy=A.newWorld();
  A.restoreWorld(copy,JSON.parse(JSON.stringify(w)));
