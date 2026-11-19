@@ -205,19 +205,23 @@
     option.target.needs.social<45||option.target.energy<20)){
    stats(n).rejected++;note(n,'Offline companion not mutually willing');return false;
   }
-  const resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
-  const resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
+  let resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
+  let resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
    a.key===action&&a.ref===(option.ref??null)&&
    (action!=='craft_stage'||(a.workpieceRecipe===n.workpiece?.recipe&&
     a.workpieceStage===n.workpiece?.stage))):null;
+  if(resumeCandidate&&!root.Reservations.validCommand(state,
+    resumeCandidate.commandId,resumeCandidate.reservationIds?.length||0)){
+   // A lapsed material claim must not shadow a fresh legal action forever.
+   // Discard only this suspended activity, never its separate workpiece.
+   root.Reservations.releaseCommand(state,resumeCandidate.commandId,
+    'RESERVATION_EXPIRED');
+   n.suspendedActivities=n.suspendedActivities.filter(a=>a!==resumeCandidate);
+   resumed=false;resumeCandidate=null;
+  }
   const commandId=resumeCandidate?.commandId||
    'cmd_'+(state.commandSeq=(state.commandSeq||0)+1);
   const request=root.Reservations.specsFor(state,n,action,option.ref);
-  const expected=resumeCandidate?.reservationIds?.length||0;
-  if(resumed&&!root.Reservations.validCommand(state,commandId,expected)){
-   stats(n).rejected++;note(n,'Reservation for suspended work expired');
-   return false;
-  }
   const hold=resumed?{ok:true,claims:root.Reservations.active(state)
     .filter(x=>x.commandId===commandId)}:
    root.Reservations.claim(state,n.id,commandId,request);
