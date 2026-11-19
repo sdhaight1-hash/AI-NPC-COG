@@ -1,0 +1,103 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+
+function fixture(){
+ const k=vm.createContext({});
+ const names=['frontier','construction','biology','crafting','cognition','agency',
+  'emergence','civilization','receipts','activities','reservations','projects',
+  'perception','evidence-memory','world-runtime','simulation','persistence'];
+ vm.runInContext(names.map(n=>readFileSync(new URL('../public/'+n+'.js',
+  import.meta.url),'utf8')).join('\n'),k);
+ const s=k.Simulation.initial(379210);s.auto=false;
+ return {k,s,n:s.npcs[0]};
+}
+const snapshot=x=>JSON.parse(JSON.stringify(x));
+
+test('mass-limited gathering reserves and takes only what can be carried',()=>{
+ const {k,s,n}=fixture(),node=s.world.nodes.find(v=>v.kind==='wood'&&v.stock>=4);
+ assert.ok(node);
+ n.x=node.x;n.y=node.y;n.z=0;n.path=[];
+ n.inventory.stone=13; // Dense load leaves room for one wood but not two.
+ assert.equal(k.AgentWorld.roomFor(n,'wood'),1);
+ assert.equal(k.WorldRuntime.begin(s,n,'collect_wood'),true);
+ const claims=k.Reservations.active(s).filter(x=>x.commandId===n.task.commandId);
+ assert.equal(claims.length,1);
+ assert.equal(claims[0].quantity,1,'Only physically feasible stock can be reserved');
+ const stock=node.stock;
+ k.Simulation.advance(s,5);
+ assert.equal(node.stock,stock-1);
+ assert.equal(n.inventory.wood,1);
+ const receipt=s.receipts.find(x=>x.action==='collect_wood'&&x.status==='COMPLETED');
+ assert.equal(receipt.delta.nodeStock.find(x=>x.key===node.id).delta,-1);
+ assert.ok(k.AgentWorld.carrying(n).massKg<=32);
+});
+
+test('a full bulky armload cannot forage until some material is actually dropped',()=>{
+ const {k,s,n}=fixture(),source=s.world.nodes.find(v=>v.kind==='food'&&v.stock>=2);
+ assert.ok(source);
+ n.x=source.x;n.y=source.y;n.z=0;n.path=[];
+ n.inventory.fiber=30; // 45 L of loose fiber but only 6 kg.
+ assert.equal(k.AgentWorld.roomFor(n,'food'),0);
+ assert.ok(!k.WorldRuntime.available(s,n).some(o=>o.key==='forage'));
+ assert.ok(k.WorldRuntime.available(s,n).some(o=>o.key==='drop_fiber'));
+ const stock=source.stock;
+ assert.equal(k.WorldRuntime.begin(s,n,'drop_fiber'),true);
+ k.Simulation.advance(s,2);
+ assert.equal(n.inventory.fiber,29);
+ assert.equal(s.world.items.filter(item=>item.kind==='fiber').length,1);
+ assert.ok(k.AgentWorld.roomFor(n,'food')>=1);
+ assert.equal(k.WorldRuntime.begin(s,n,'forage'),true);
+ k.Simulation.advance(s,3);
+ assert.ok(source.stock<stock);
+ assert.ok(n.inventory.food>=1);
+ assert.equal(n.bio.pantry.length,n.inventory.food);
+ assert.ok(k.AgentWorld.carrying(n).volumeL<=45);
+});
+
+test('late load increase causes a failed harvest with zero material or pantry changes',()=>{
+ const {k,s,n}=fixture(),node=s.world.nodes.find(v=>v.kind==='food'&&v.stock>=4);
+ assert.ok(node);
+ n.x=node.x;n.y=node.y;n.z=0;n.path=[];
+ assert.equal(k.WorldRuntime.begin(s,n,'forage'),true);
+ const commandId=n.task.commandId;
+ n.inventory.fiber=30; // Another authorized effect consumed capacity mid-job.
+ const stock=node.stock,pantry=n.bio.pantry.length;
+ k.Simulation.advance(s,3);
+ assert.equal(node.stock,stock,'Source must remain untouched when output cannot fit');
+ assert.equal(n.inventory.food,0);
+ assert.equal(n.bio.pantry.length,pantry);
+ const failed=s.receipts.find(x=>x.commandId===commandId&&x.status==='FAILED');
+ assert.match(failed.reason,/CARRYING_CAPACITY/);
+});
+
+test('a recipient with no remaining bulk cannot be gifted more food',()=>{
+ const {k,s,n}=fixture(),other=s.npcs[1];
+ other.x=n.x;other.y=n.y;other.z=0;
+ other.inventory.fiber=30;
+ n.inventory.food=1;
+ assert.equal(k.Biology.addForaged(n.bio,'nuts',1),true);
+ assert.equal(k.AgentWorld.roomFor(other,'food'),0);
+ const sourceCount=n.bio.pantry.length;
+ assert.ok(!k.WorldRuntime.available(s,n).some(o=>o.key==='share_food'));
+ assert.equal(k.WorldRuntime.begin(s,n,'share_food'),false);
+ assert.equal(n.inventory.food,1);
+ assert.equal(n.bio.pantry.length,sourceCount);
+ assert.equal(other.inventory.food,0);
+});
+
+test('crate withdrawal refuses over-capacity actors without deleting stored stock',()=>{
+ const {k,s,n}=fixture();
+ n.inventory.stone=14;
+ const crate={id:'crate_42',type:'crate',x:n.x,y:n.y,capacity:12,
+  contents:{wood:0,stone:1,fiber:0}};
+ s.world.structures.push(crate);
+ const before=snapshot(crate.contents);
+ assert.equal(k.AgentWorld.roomFor(n,'stone'),0);
+ assert.ok(!k.Crafting.options(n,s.world).some(o=>o.key==='withdraw_stone'));
+ const result=k.Crafting.interact(n,s.world,'withdraw_stone',crate.id);
+ assert.equal(result.ok,false);
+ assert.deepEqual(snapshot(crate.contents),before);
+ assert.equal(n.inventory.stone,14);
+});
