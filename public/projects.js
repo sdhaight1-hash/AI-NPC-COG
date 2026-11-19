@@ -99,7 +99,9 @@
  }
  function sync(state,n){
   const p=n.project;
-  if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')return p;
+  if(!p||p.status==='ABANDONED')return p;
+  if(p.status==='COMPLETED'&&!predicate(state,n,p.kind,'build'))
+   p.status='ACTIVE';
   const byId=new Map(p.nodes.map(x=>[x.id,x]));
   for(const node of p.nodes){
    if(predicate(state,n,p.kind,node.id)){
@@ -186,7 +188,7 @@
     Math.min(100000,Math.max(0,previous.attempts)):0;
   }
   // World predicates win over persisted claims of completed work.
-  if(p.status!=='COMPLETED')sync(state,n);
+  sync(state,n);
   return p;
  }
  root.Projects={DEFINITIONS,validateGraph,predicate,create,maybeStart,
