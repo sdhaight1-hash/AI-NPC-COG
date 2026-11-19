@@ -34,7 +34,7 @@ function makeBrowser(options={}){
    setItem(k,v){saved.set(k,v);},
    removeItem(k){saved.delete(k);}
   },fetch:options.fetch||(async()=>({ok:true,json:async()=>({connected:false})}))};
- const source=['pixel-art.js','frontier.js','biology.js','crafting.js','cognition.js','emergence.js',
+ const source=['pixel-art.js','frontier.js','biology.js','crafting.js','cognition.js','agency.js','emergence.js',
   'civilization.js','app.js'].map(path=>
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
  vm.runInNewContext(source+'\n'+
@@ -220,10 +220,13 @@ test('offline scheduling starts multiple independent NPC tasks without a wall-cl
   n.thoughtAt=b.state.clock;n.action='none';n.task=null;n.plan=null;n.path=[];
  }
  b.scheduleIdleAgents();
- const active=b.state.npcs.filter(n=>n.task||n.path.length||n.action!=='none');
- assert.ok(active.length>=3,'Multiple inhabitants should begin tasks independently');
- assert.ok(active.every(n=>['offline routine','survival reflex'].includes(n.source)));
+ const active=b.state.npcs.filter(n=>n.plan||n.task||n.path.length||n.action!=='none');
+ assert.ok(active.length>=3,'Multiple inhabitants should choose work or a persistent purpose');
+ assert.ok(active.every(n=>['offline routine','survival instinct'].includes(n.source)));
  assert.ok(b.state.npcs.every(n=>n.thoughtAt>b.state.clock));
+ b.step(2);
+ assert.ok(b.state.npcs.some(n=>n.task||n.path.length||n.action!=='none'),
+  'A persistent purpose must begin an actual physical subaction');
 });
 test('urgent needs act while model inference is busy and use finite world inventory',()=>{
  const b=makeBrowser();
@@ -266,6 +269,8 @@ test('socially motivated residents approach each other and complete model-genera
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(a.peerLog.length,1,'Both replies were required to complete conversation');
  assert.equal(other.peerLog.length,1);
+ assert.ok(a.agency.practice.social>0,'Initiator learns from a real conversation');
+ assert.ok(other.agency.practice.social>0,'Responder also learns from the exchange');
  assert.match(a.peerLog[0].first,/fresh water/);
  assert.equal(a.task,null);
  assert.equal(other.peerReservedFor,undefined);
@@ -377,4 +382,18 @@ test('the model sees recalled personal history without giving it to other inhabi
   kind:'observation',at:100,x:a.x,y:a.y,salience:5});
  assert.match(b.sceneFor(a),/Only I observed the spring/);
  assert.doesNotMatch(b.sceneFor(other),/Only I observed the spring/);
+});
+
+test('personally ranked decisions and witnessed beliefs enter the model context before truncation',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0],other=b.state.npcs[1];
+ const spring=b.state.world.nodes.find(o=>o.kind==='water');
+ n.agency.goal={key:'stock_water',startedAt:b.state.clock,
+  reason:'security',source:'self-directed goal',progress:1};
+ n.agency.beliefs.push({ref:spring.id,kind:'water',x:spring.x,y:spring.y,
+  at:b.state.clock,confidence:1,status:'available',stock:3});
+ const text=b.sceneFor(n).slice(0,1800);
+ assert.match(text,/Personal drives:/);
+ assert.match(text,/Current intention: stock_water/);
+ assert.match(text,/My witnessed beliefs: water at/);
+ assert.doesNotMatch(b.sceneFor(other),/My witnessed beliefs: water at/);
 });
