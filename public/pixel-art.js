@@ -22,6 +22,16 @@
     player: { hair: '#3b2d27', shirt: '#5eabd4', shade:'#316b99', accent:'#e1e9b9', pants:'#263e6a' }
   };
   const sprites = new Map();
+  let tinyTownAtlas=null;
+  function setAtlas(image){
+    if(!image || image.width!==192 || image.height!==176) return false;
+    tinyTownAtlas=image;
+    return true;
+  }
+  function atlasTile(ctx,index,x,y){
+    if(!tinyTownAtlas)return;
+    ctx.drawImage(tinyTownAtlas,(index%12)*16,Math.floor(index/12)*16,16,16,x,y,16,16);
+  }
   function rect(ctx,color,x,y,w=1,h=1){
     ctx.fillStyle=color; ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));
   }
@@ -39,6 +49,8 @@
     const X=x*TILE,Y=y*TILE,h=hash(x,y);
     if(kind==='path'){
       rect(ctx,h%3===0?'#a18a68':'#ab9676',X,Y,16,16);
+      // CC0 tiles from Kenney, packed 12x11, with procedural detail retained.
+      if(tinyTownAtlas){atlasTile(ctx,24+(h%3),X,Y);return;}
       rect(ctx,'#937d5f',X,Y+7,16,1);
       const joints=[3+(h%4),10+((h>>>3)%4)];
       for(const j of joints){
@@ -53,6 +65,11 @@
       return;
     }
     rect(ctx,C.grass[h%5],X,Y,16,16);
+    if(tinyTownAtlas){
+      atlasTile(ctx,(h%5===0?1:0),X,Y);
+      if((h%23)===0)atlasTile(ctx,2,X,Y);
+      return;
+    }
     if((h&3)===0)rect(ctx,'#699253',X+2,Y+7,8,4);
     for(let i=0;i<4;i++){
       const p=hash(x,y,i+2);
@@ -268,7 +285,7 @@
     const skin=id==='jonas'?'#c28c66':id==='nico'?'#d9a18b':'#edc29d';
     const skinShade=id==='jonas'?'#916849':'#b98e73';
     // Feet anchor: bottom row 23; forward walking alternates legs.
-    const legA=stride?21:20,legB=stride?20:21;
+    const legA=[20,22,20,19][stride%4],legB=[20,19,20,22][stride%4];
     rect(c,'#293143',4,legA,4,3);rect(c,'#293143',9,legB,3,3);
     rect(c,p.pants,5,18,3,4);rect(c,p.pants,9,18,3,4);
     rect(c,'#293044',4,23,4,1);rect(c,'#293044',9,23,4,1);
@@ -321,8 +338,8 @@
   function actor(ctx,person,isPlayer,p,selected,clockMs){
     const id=isPlayer?'player':person.id;
     const facing=['up','down','left','right'].includes(person.facing)?person.facing:'down';
-    const moving=!!person.path?.length;
-    const stride=moving?Math.floor(clockMs/220)%2:0;
+    const moving=(person.motion||0)>.14 || !!person.path?.length;
+    const stride=moving?Math.floor(clockMs/135)%4:0;
     const key=id+':'+facing+':'+stride;
     if(!sprites.has(key))sprites.set(key,createSprite(id,facing,stride));
     const px=Math.round((p.x+.5)*TILE),py=Math.round((p.y+1)*TILE);
@@ -387,5 +404,52 @@
       rect(ctx,'#da6747',x+6,y+9,7,3);
     }
   }
-  root.VillageArt={ TILE, drawWorld, drawWorldObjects, drawActor:actor, hash };
+  function drawAmbient(ctx,world,clock,now){
+    // Low-cost pixelated dusk/night grade. No shaders or extra draw calls per tile.
+    const hour=((clock%1440)+1440)%1440/60;
+    const twilight=Math.max(0,Math.min(1,(hour-16.5)/4.5))+
+      Math.max(0,Math.min(1,(5.5-hour)/3));
+    const night=Math.min(1,twilight);
+    if(night>.015){
+      ctx.fillStyle='rgba(18,32,64,'+(night*.55).toFixed(3)+')';
+      ctx.fillRect(0,0,640,416);
+      // Lamps and campfires pick out readable patches of the night scene.
+      for(const [x,y] of [[13,11],[24,11],[28,22]]){
+        const X=x*16+9,Y=y*16+5;
+        ctx.fillStyle='rgba(253,196,106,'+(night*.10).toFixed(3)+')';
+        ctx.fillRect(X-20,Y-17,40,36);
+        ctx.fillStyle='rgba(255,220,139,'+(night*.22).toFixed(3)+')';
+        ctx.fillRect(X-7,Y-6,14,11);
+        rect(ctx,'#fff2bb',X-1,Y-3,3,3);
+      }
+    }
+    // Discrete ripples across the pond; all sprites remain integer-aligned.
+    const t=Math.floor(now/600);
+    for(let i=0;i<5;i++){
+      const px=35+((i*3+t)%5),py=19+((i*2+(t>>1))%5);
+      const x=px*16+3,y=py*16+3;
+      ctx.fillStyle=i%2?'#79b6c0':'#a0cbd0';
+      ctx.fillRect(x,y,4+(t%3)*2,1);
+    }
+    // Leaves, dust motes and drifting light animate independently of the cached ground.
+    for(let i=0;i<13;i++){
+      const h=hash(i,42);
+      const sway=Math.sin(now/1400+i*2.2)*4;
+      const x=Math.floor(((h%630)+sway+640)%640);
+      const y=Math.floor((((h>>>9)%410)+(now/17000)*(i%2?1:-1)+416)%416);
+      ctx.fillStyle=i%3===0?'rgba(239,198,111,.65)':'rgba(208,227,145,.52)';
+      ctx.fillRect(x,y,2,i%3===0?2:1);
+    }
+    for(const fire of world?.structures||[]){
+      if(fire.type!=='campfire')continue;
+      const x=fire.x*16+8,y=fire.y*16+5;
+      for(let i=0;i<3;i++){
+        const rise=((now/120+i*7)%23);
+        const drift=Math.sin(now/900+i*2)*3;
+        ctx.fillStyle='rgba(210,213,194,'+(0.35-rise/65)+')';
+        ctx.fillRect(Math.round(x+drift),Math.round(y-rise),3+i%2,2);
+      }
+    }
+  }
+  root.VillageArt={ TILE, drawWorld, drawWorldObjects, drawAmbient, drawActor:actor, hash, setAtlas };
 })(globalThis);
