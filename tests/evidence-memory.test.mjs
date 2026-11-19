@@ -234,3 +234,53 @@ test('dialogue attribution survives save/restore as reported, never witnessed',(
  assert.equal(E.state(restored).episodes[0].certainty,'reported');
  assert.equal(E.state(restored).facts.length,0);
 });
+
+test('explicit personally observed source citation becomes private hearsay, not world truth',()=>{
+ const {E,sim,a,b}=setup();a.name='Asha';b.name='Mara';
+ const inspect=committed(sim,a,'inspect','spring_1','evt_801');
+ assert.ok(E.fromReceipt(sim,a,inspect));
+ sim.clock++;
+ const exchange=committed(sim,a,'socialize',b.id,'evt_802');
+ E.fromDialogue(sim,a,b,exchange,'Fresh water at [source:spring_1]','I will look.');
+ assert.equal(E.state(a).claims.length,0);
+ assert.equal(E.state(b).claims.length,1);
+ const claim=E.state(b).claims[0];
+ assert.equal(claim.status,'unverified');
+ assert.equal(claim.kind,'water');
+ assert.equal(claim.sourceId,'spring_1');
+ assert.equal(claim.sourceEpisodeId,'ev_1');
+ assert.equal(claim.speechReceiptId,'evt_802');
+ assert.equal(E.state(b).facts.length,0);
+ assert.equal(b.inventory.water,0);
+ const saved=JSON.parse(JSON.stringify(E.state(b)));
+ const clone={id:b.id,x:b.x,y:b.y,z:b.z};
+ E.restore(clone,saved,sim.clock);
+ assert.equal(JSON.stringify(E.state(clone)),JSON.stringify(E.state(b)));
+ sim.clock++;
+ const observed=committed(sim,b,'inspect','spring_1','evt_803');
+ E.fromReceipt(sim,b,observed);
+ assert.equal(E.state(b).claims[0].status,'supported');
+ assert.equal(E.state(b).claims[0].verificationReceiptId,'evt_803');
+ assert.equal(E.state(a).claims.length,0);
+});
+test('fabricated, unspoken or unsupported source tags never become transmitted claims',()=>{
+ const {E,sim,a,b}=setup();a.name='Asha';b.name='Mara';
+ const exchange=committed(sim,a,'socialize',b.id,'evt_804');
+ E.fromDialogue(sim,a,b,exchange,'I saw [source:spring_1]','Okay');
+ assert.equal(E.state(b).claims.length,0,'Invented reference must not gain provenance');
+ sim.clock++;
+ const proof=committed(sim,a,'inspect','spring_1','evt_805');
+ E.fromReceipt(sim,a,proof);
+ sim.clock++;
+ const next=committed(sim,a,'socialize',b.id,'evt_806');
+ E.fromDialogue(sim,a,b,next,'Water is somewhere near us','Perhaps');
+ assert.equal(E.state(b).claims.length,0,'Unspoken source tag cannot transfer data');
+ const forged=JSON.parse(JSON.stringify(E.state(b)));
+ forged.claims.push({id:'fake',speakerId:a.id,sourceId:'spring_1',kind:'water',
+  x:2,y:4,z:0,at:sim.clock,sourceEpisodeId:'ev_1',
+  speechEpisodeId:E.state(b).episodes.at(-1).id,
+  speechReceiptId:'evt_806',status:'unverified',verificationReceiptId:null});
+ const clone={id:b.id,x:b.x,y:b.y,z:b.z};
+ E.restore(clone,forged,sim.clock);
+ assert.equal(E.state(clone).claims.length,0,'Tampered save without spoken tag is rejected');
+});
