@@ -3,10 +3,14 @@
 const canvas=document.getElementById('world'),ctx=canvas.getContext('2d');
 const TILE=VillageArt.TILE,W=Frontier.WIDTH,H=Frontier.HEIGHT;
 const STORE='ai-npc-cog-v3';
+const SPEED_STORE='ai-npc-cog-speed';
+const PRESET_SPEEDS=[1,60,120,240,3600];
+const storedSpeed=Number(localStorage.getItem(SPEED_STORE));
+const initialSpeed=PRESET_SPEEDS.includes(storedSpeed)?storedSpeed:240;
 const WORLD_SEED=Number(localStorage.getItem('ai-npc-cog-world-seed'))||Frontier.DEFAULT_SEED;
 const world=AgentWorld.newWorld(WORLD_SEED);
 const founders=Civilization.founders(world,490);
-const state={clock:490,speed:60,day:1,paused:false,auto:true,connected:false,
+const state={clock:490,speed:initialSpeed,day:1,paused:false,auto:true,connected:false,
  backgroundBusy:false,conversationBusy:false,debugGrid:false,
  model:'rein',modelLabel:'Rein-NPC-4B',
  npcs:founders,dead:[],nextPersonId:6,world,events:[],selected:founders[0].id,
@@ -726,11 +730,16 @@ $('artToggle').addEventListener('click',()=>{
  $('artToggle').textContent=showAtlas?'Art: CC0 Tiny Town':'Art: Original';
 });
 $('autoAI').addEventListener('change',e=>{state.auto=e.target.checked;});
-for(const button of document.querySelectorAll('[data-speed]'))button.addEventListener('click',()=>{
- state.speed=Number(button.dataset.speed);
- document.querySelectorAll('[data-speed]').forEach(el=>
-  el.classList.toggle('active',el===button));
-});
+for(const button of document.querySelectorAll('[data-speed]')){
+ button.classList.toggle('active',Number(button.dataset.speed)===state.speed);
+ button.addEventListener('click',()=>{
+  const value=Number(button.dataset.speed);
+  if(!PRESET_SPEEDS.includes(value))return;
+  state.speed=value;localStorage.setItem(SPEED_STORE,String(value));
+  document.querySelectorAll('[data-speed]').forEach(el=>
+   el.classList.toggle('active',el===button));
+ });
+}
 $('clearLog').addEventListener('click',()=>{state.events=[];renderEvents();});
 $('resetBtn').addEventListener('click',()=>{
  if(!window.confirm('Reset this simulated world and its history?'))return;

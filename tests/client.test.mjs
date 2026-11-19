@@ -50,7 +50,11 @@ function makeBrowser(options={}){
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
   'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity};',context);
- return {...context.exposed,saved,events,elements,counters,frames};
+ const launchedSpeed=context.exposed.state.speed;
+ // Most tests explicitly exercise a one-minute-per-second physics fixture,
+ // independently from the user-facing default playback preference.
+ context.exposed.state.speed=options.fixtureSpeed??60;
+ return {...context.exposed,launchedSpeed,saved,events,elements,counters,frames};
 }
 test('fresh start contains five distinct independent founders, no player, no village',()=>{
  const b=makeBrowser();
@@ -542,4 +546,13 @@ test('connected backlog never overrides a fresh model request before the grace p
  b.scheduleIdleAgents();
  for(const n of b.state.npcs.slice(1))
   assert.equal(n.task,null,'Recent model-eligible resident should retain the model lane');
+});
+
+test('watchable initial pace defaults to six-minute days and respects saved preference',()=>{
+ const fresh=makeBrowser();
+ assert.equal(fresh.launchedSpeed,240);
+ const saved=new Map([['ai-npc-cog-speed','120']]);
+ assert.equal(makeBrowser({saved}).launchedSpeed,120);
+ const invalid=new Map([['ai-npc-cog-speed','400000']]);
+ assert.equal(makeBrowser({saved:invalid}).launchedSpeed,240);
 });
