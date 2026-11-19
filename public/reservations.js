@@ -35,6 +35,10 @@
   const node=(kind,quantity)=>({type:'node',id:ref,kind,quantity});
   const site=(kind,quantity)=>({type:'structure',id:ref,kind,quantity});
   const matched=/^collect_(wood|stone|fiber)$/.exec(action);
+  if(action==='drink_source'){
+   const spring=state.world.nodes.find(x=>x.id===ref&&x.kind==='water');
+   return spring?.stock>0?[node('water',1)]:[];
+  }
   if(matched||action==='forage'||action==='fill_water'){
    const kind=matched?.[1]|| (action==='forage'?'food':'water');
    const target=state.world.nodes.find(x=>x.id===ref&&x.kind===kind);

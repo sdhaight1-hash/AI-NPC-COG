@@ -6,7 +6,7 @@
  const GOALS=new Set(['stock_water','stock_food','stock_wood','stock_stone',
   'stock_fiber','make_shelter','make_campfire']);
  const CATEGORIES={
-  drink:'safety',fill_water:'safety',eat:'safety',forage:'safety',rest:'safety',
+  drink:'safety',drink_source:'safety',fill_water:'safety',eat:'safety',forage:'safety',rest:'safety',
   stock_water:'security',stock_food:'security',stock_wood:'craft',
   stock_stone:'craft',stock_fiber:'craft',make_shelter:'security',
   make_campfire:'security',collect_wood:'craft',collect_stone:'craft',

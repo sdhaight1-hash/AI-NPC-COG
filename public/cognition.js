@@ -69,7 +69,8 @@
   // Stock and drink early enough to survive travel, gathering and sleep.
   // No water is created: every choice must still be a legal world affordance.
   if(n.needs.thirst>=62||hydration<1200){
-   const water=choose(n.inventory.water>0?'drink':'fill_water','fill_water','drink');
+   const water=choose(n.inventory.water>0?'drink':'drink_source',
+    'drink_source','fill_water','drink');
    if(water)return water;
    if(n.energy>=18)return choose('explore'); // physically scout for unknown water
   }

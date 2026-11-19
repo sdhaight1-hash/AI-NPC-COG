@@ -4,14 +4,14 @@
   'use strict';
   const clamp = (x, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x));
   const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
-  const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water',
+  const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water','drink_source',
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
     'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
-    collect_fiber:'gathering',fill_water:'survival',drink:'survival',
+    collect_fiber:'gathering',fill_water:'survival',drink_source:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
     socialize:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
@@ -135,6 +135,10 @@
         add(key,'Collect '+label+' from a visible source ('+node.stock+' remaining, '+distance(n,node)+' tiles away)',node,node.id);
       }
     }
+    const drinkable=findNode(n,world,'water',canReach);
+    if(drinkable&&(n.needs.thirst>=10||n.bio?.hydrationBudgetMl<2400))
+      add('drink_source','Drink directly at a reachable freshwater source',
+       drinkable,drinkable.id);
     if(!n.plan&&n.inventory.water<2&&findNode(n,world,'water',canReach))
       add('stock_water','Prepare an emergency reserve of clean drinking water');
     if(!n.plan&&n.inventory.wood<3&&findNode(n,world,'wood',canReach))
@@ -288,6 +292,14 @@
         return {ok:false,message:'Loose item is unavailable'};
       world.items.splice(index,1);n.inventory.wood++;
       message='Picked up one wood from the ground';
+    }else if(task.key==='drink_source'){
+      const source=world.nodes.find(v=>v.id===task.ref&&v.kind==='water');
+      if(!source||source.stock<1||distance(n,source)>1)
+        return {ok:false,message:'No reachable freshwater remains'};
+      if(!Biology.drink(n.bio,400))
+        return {ok:false,message:'Cannot consume source water'};
+      source.stock--;n.needs.thirst=clamp(n.needs.thirst-48);
+      message='Drank directly from freshwater (source '+source.stock+'/'+source.max+')';
     }else if(task.key==='drink'){
       if(n.inventory.water<1)return {ok:false,message:'No drinkable water'};
       n.inventory.water--;n.needs.thirst=clamp(n.needs.thirst-48);
@@ -509,6 +521,7 @@
   function fallback(n,options) {
     const keys=new Set(options.map(o=>o.key));
     if(n.needs.thirst>45&&keys.has('drink'))return 'drink';
+    if(n.needs.thirst>45&&keys.has('drink_source'))return 'drink_source';
     if(n.needs.thirst>45&&keys.has('fill_water'))return 'fill_water';
     if(n.needs.hunger>55&&keys.has('eat'))return 'eat';
     if(n.needs.hunger>50&&keys.has('forage'))return 'forage';

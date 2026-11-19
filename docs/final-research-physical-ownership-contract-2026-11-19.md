@@ -127,3 +127,9 @@ Within one synchronous JS simulation, there is no need for a distributed databas
 **Not yet:** fully generic nesting/pockets, equipment rarity economics, NPC property law, liquid mixing, procedural chemistry, spoilage rates for all items, elaborate encumbrance injury, multiplayer/network locks or a single universal materials pipeline.
 
 **Decisive rule:** if item accounting requires the LLM to decide how many liters a bag holds, the boundary is wrong. The LLM can decide *why* it wants the water and whose request to honor; physics decides how the water can move.
+
+## Implemented prerequisite — direct freshwater consumption (2026-11-19)
+
+[PR #79](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/79) introduces `drink_source`: a physically timed, reachable freshwater-node action that reserves one finite water-source unit, debits it only on completed consumption and restores an actor's bodily hydration **without creating portable inventory water**. Tests cover lawful source consumption, depletion mid-action, and pending-action v3 save/restore.
+
+This is a prerequisite for **zero-possession spawning**, not that final feature. Today's founders/new arrivals still receive initial carried food/water and the legacy `fill_water` action can still create carried counter-based water without a physical vessel. Do **not** claim that #26's physical inventory or water-container requirement is complete. The next authority change must replace portable water counters with actual vessel-compatible physical lots **before** switching new NPC spawns to empty inventories, then rerun multi-seed founder survival.
