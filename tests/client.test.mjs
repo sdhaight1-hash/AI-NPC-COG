@@ -312,9 +312,9 @@ test('healthy inhabitants have useful non-rest options without prematurely sleep
  assert.ok(b.availableActivities(n).some(o=>o.key==='rest'));
 });
 test('activity diagnostics distinguish decisions, abstentions, accepted work and rejection',async()=>{
- const b=makeBrowser({fetch:async()=>({ok:true,json:async()=>({
-  action:'none',source:'rein',scores:{none:1}
- })})});
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/health'?
+  {connected:true,model:'rein',modelLabel:'Rein-NPC-4B'}:
+  {action:'none',source:'rein',scores:{none:1}}})});
  const n=b.state.npcs[0],stats=b.activity(n);
  b.state.connected=true;
  await b.deliberate(n);
@@ -341,5 +341,5 @@ test('per-NPC activity diagnostics persist safely across save reloads',()=>{
  const copy=makeBrowser({saved}).state.npcs.find(p=>p.id===n.id);
  assert.equal(copy.activityStats.none,1);
  assert.equal(copy.activityStats.rejected,1);
- assert.match(copy.activityStats.last,/not available/);
+ assert.match(copy.activityStats.last,/no longer available/);
 });
