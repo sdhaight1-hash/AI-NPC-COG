@@ -18,7 +18,7 @@ No administrator access or external AI service is required. First-time installat
 - The world uses deterministic 80×52 terrain, seeded habitats and finite wild resources. X wraps east/west, Y wraps north/south. Existing z-level support is a **bounded subterranean material substrate and vertical-connection rule**, not a completed excavation/building simulator.
 - Inhabitants occupy authoritative integer grid tiles. Movement and actions cost simulated time and sprite motion is interpolated. Pausing and time acceleration do not grant free actions. Resource stocks, digestion and weather are code-driven.
 - **No controllable avatar.** WASD or arrows pan the camera; click an inhabitant to inspect/follow; F follows the selected inhabitant; +/- zoom; PageUp/PageDown or the Layer controls inspect z-levels; the grid diagnostic can be toggled.
-- Gathering, eating, drinking, making a campfire, building a basic shelter, exploration, simple social exchange and individual hatchet-method experimentation are prototype actions. Crafting the hatchet requires discovery of its method; merely having ingredients does not reveal it.
+- Gathering, eating, drinking, making a campfire, building a basic shelter, exploration and social exchanges remain prototype actions. Traditional hatchet-method experimentation still requires discovery. A separate primitive manufacturing chain allows NPCs to learn by doing: twisting cord, knapping blades, hafting axes, building workbenches, splitting planks and assembling crates. Each process uses distinct timed stages, finite ingredients, tools or stations, with item-quality records.
 - Bodies have energy, nutritional state, hydration, sleep pressure, stress, age metadata and simplified health. Death removes an inhabitant permanently and records their identity and cause. The world persists when no humans survive, allowing future independent arrivals.
 - The inspectable event log is bounded for now. People have basic short individual memories and earned action experience; **full durable knowledge, genealogy, reproduction and historical provenance are scheduled for later phases**.
 
@@ -36,6 +36,21 @@ The speed selector advances simulated time independently of rendering frames. It
 ### Saving and migration
 
 Local storage now uses the ai-npc-cog-v3 key. Older v1/v2 player-and-village states cannot safely be mapped to the new wilderness, so they are **not automatically imported or erased**. Clicking Reset clears the current v3 world. New world selects a new seed after confirmation. Browser local storage is temporary prototype storage and does not yet provide the reliability of a server-side historical database.
+
+## Multi-stage crafting foundation
+
+Crafting is **not** instantaneous recipe conversion. Rein or Hivemind can choose
+a legal manufacturing intention. Materials are spent on a persistent unfinished
+workpiece; the world executes each timed stage and awards an item only after
+all required steps pass. Intermediate components, quality, maker identity and
+workshop locations are saved. A crafted crate can be placed as finite, shared
+storage, and quality affects capacity, wood gathering or workshop precision.
+The original v3 hatchet is preserved on old saves.
+
+This is an intentionally narrow **working production chain**, not a complete
+pottery, food, textile or metallurgy system. See the
+[crafting and production architecture](docs/crafting-architecture.md) for
+material-property, process, ecology, wear, logistics and workshop expansion gates.
 
 ## Roadmap and architecture
 
