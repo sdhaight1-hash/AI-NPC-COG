@@ -510,6 +510,16 @@
         rect(ctx,'#d9bd82',x+7,y+10,2,3);
         continue;
       }
+      if(site.type==='crate'){
+        rect(ctx,'#292b23',x+1,y+12,14,4);
+        rect(ctx,'#875b3d',x+2,y+5,12,9);
+        rect(ctx,'#c18e59',x+3,y+5,10,3);
+        rect(ctx,'#493427',x+4,y+9,8,2);
+        rect(ctx,'#d3b278',x+7,y+7,2,7);
+        if(Object.values(site.contents||{}).some(n=>n>0))
+         rect(ctx,'#e6d5a2',x+4,y+4,8,2);
+        continue;
+      }
       if(site.type==='workbench'){
         rect(ctx,'#322d27',x+1,y+12,15,4);
         rect(ctx,'#ac8556',x+1,y+6,14,5);
