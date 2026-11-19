@@ -125,7 +125,7 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   assert.match(await physics.text(),/root\.Physics2D=/);
   const html = await fetch(origin + '/');
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /Frontier Island · Living World/);
+  assert.match(await html.text(), /Toroidal Wilderness · Living World/);
   const frontier = await fetch(origin + '/frontier.js');
   assert.equal(frontier.status,200);
   assert.match(await frontier.text(),/root\.Frontier=/);
