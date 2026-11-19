@@ -1,85 +1,118 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI-NPC-COG | Living Village Lab</title>
-  <link rel="stylesheet" href="/style.css">
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+ <title>AI-NPC-COG | Civilization Observatory</title>
+ <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><div class="mark">◈</div><div><strong>AI·NPC·COG</strong><small>Living Village / Cognitive Sandbox</small></div></div>
-    <div class="top-right"><span class="chip" id="modelStatus"><i class="status-dot"></i> Checking local model…</span><span class="chip muted">Rein-NPC-4B · Q4_K_M</span><a href="https://github.com/sdhaight1-hash/AI-NPC-COG" target="_blank" rel="noopener">GitHub ↗</a></div>
-  </header>
-  <main class="layout">
-    <section class="world-column">
-      <div class="panel simulation">
-        <div class="panel-head"><div><span class="eyebrow">WORLD 001 / SANDBOX</span><h1>Frontier Island · Living World</h1><p>Seeded survival island · 80×52 tiles · six autonomous inhabitants · one Rein model</p></div><div class="clock-group"><strong id="worldTime">08:10</strong><small id="worldDay">DAY 01</small><small id="worldWeather">CLEAR · 20°C</small></div></div>
-        <div class="toolbar"><button id="pauseBtn" class="control">Ⅱ Pause</button><div class="speed-picker"><span>Time scale</span><button class="speed active" data-speed="1">1×</button><button class="speed" data-speed="3">3×</button><button class="speed" data-speed="8">8×</button></div><div class="zoom-picker"><span>Camera</span><button class="zoom-btn" id="zoomOut" type="button" aria-label="Zoom out">−</button><strong id="zoomLevel" aria-live="polite">1×</strong><button class="zoom-btn" id="zoomIn" type="button" aria-label="Zoom in">+</button></div><label class="switch"><input id="autoAI" type="checkbox" checked><span>Autonomous decisions</span></label><button id="physicsDebug" class="control" type="button" aria-pressed="false">Physics: Debug off</button><button id="artToggle" class="control art-toggle" title="Compare original and Kenney CC0 terrain">Art: Original</button><button id="newIsland" class="control">New island</button><button id="resetBtn" class="control reset">Reset</button></div>
-        <div class="world-frame"><canvas id="world" width="640" height="416" aria-label="Interactive seeded wilderness island with six AI inhabitants"></canvas><div class="map-hint">WASD / arrows: smooth movement · Click: navigate · E: talk · +/- zoom</div><div class="world-status" id="worldStatus">World running</div></div>
-        <div class="world-footer"><span><i class="legend player"></i> You</span><span><i class="legend npc"></i> Villagers</span><span><i class="legend selected"></i> Selected resident</span><span class="footer-note" id="footerNote">Offline routines are explicitly labeled.</span></div>
-      </div>
-      <div class="panel wilderness">
-        <div class="panel-head small"><div><span class="eyebrow">SURVIVAL / EXPLORATION</span><h2>Island field journal</h2></div><span class="small-count">Seed <strong id="worldSeed">—</strong></span></div>
-        <div class="wilderness-content">
-          <canvas id="miniMap" width="160" height="104" aria-label="Discovered island minimap"></canvas>
-          <div class="survival-panel"><p id="playerStats">Gathering survival information…</p>
-            <div class="action-set">
-              <button data-player-action="forage">Gather food</button>
-              <button data-player-action="fill_water">Collect water</button>
-              <button data-player-action="drink">Drink</button>
-              <button data-player-action="eat">Eat</button>
-              <button data-player-action="collect_wood">Collect wood</button>
-              <button data-player-action="collect_stone">Gather stone</button>
-              <button data-player-action="collect_fiber">Gather fiber</button>
-              <button data-player-action="craft_hatchet">Craft hatchet</button>
-              <button data-player-action="build_shelter">Build shelter</button>
-              <button data-player-action="rest">Rest</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="panel journal">
-        <div class="panel-head small"><div><span class="eyebrow">OBSERVABILITY</span><h2>Decision & event timeline</h2></div><button id="clearLog" class="text-btn">Clear log</button></div>
-        <div id="eventLog" class="event-log" aria-live="polite"></div>
-      </div>
-    </section>
-    <aside class="sidebar">
-      <div class="panel character">
-        <div class="panel-head small"><div><span class="eyebrow">RESIDENT INSPECTOR</span><h2>Character state</h2></div><span class="small-count" id="npcCount">6 NPCs</span></div>
-        <div class="resident-list" id="residentList"></div>
-        <div class="identity"><div class="portrait" id="npcPortrait">?</div><div><h3 id="npcName">Select a villager</h3><p id="npcMeta">Click a character in the village or list</p></div></div>
-        <div class="stat"><div class="stat-label"><span>Mood</span><strong id="moodVal">—</strong></div><div class="meter"><div id="moodMeter"></div></div></div>
-        <div class="stat"><div class="stat-label"><span>Energy</span><strong id="energyVal">—</strong></div><div class="meter"><div id="energyMeter" class="energy"></div></div></div>
-        <div class="stat"><div class="stat-label"><span>Hunger</span><strong id="hungerVal">—</strong></div><div class="meter"><div id="hungerMeter" class="hunger"></div></div></div>
-        <div class="stat"><div class="stat-label"><span>Thirst</span><strong id="thirstVal">—</strong></div><div class="meter"><div id="thirstMeter" class="hunger"></div></div></div>
-        <div class="stat"><div class="stat-label"><span>Trust in you</span><strong id="trustVal">—</strong></div><div class="meter"><div id="trustMeter" class="trust"></div></div></div>
-        <div class="info-line"><span>Social need</span><strong id="socialVal">—</strong></div>
-        <div class="info-line"><span>Bodily sensation</span><strong id="bioSensation">—</strong></div>
-        <div class="info-line"><span>Diet · past 24h</span><strong id="bioNutrition">—</strong></div>
-        <div class="info-line"><span>Hormone indices (game model)</span><strong id="bioHormones">—</strong></div>
-        <div class="info-line"><span>Inventory</span><strong id="inventoryVal">—</strong></div>
-        <div class="info-line"><span>Experience</span><strong id="experienceVal">—</strong></div>
-        <div class="info-line"><span>Current goal</span><strong id="npcGoal">—</strong></div>
-        <div class="info-line"><span>Longer-term intention</span><strong id="npcPlan">None</strong></div>
-        <div class="info-line"><span>Decision source</span><strong id="decisionSource">—</strong></div>
-        <div class="subsection"><h4>Last decision probabilities</h4><div class="decisions" id="npcDecisions"><span class="empty">No decisions yet.</span></div></div>
-        <div class="subsection"><h4>Episodic memory</h4><div id="npcMemories" class="memories"><span class="empty">No memories yet.</span></div></div>
-        <div class="subsection"><h4>NPC-to-NPC conversations</h4><div id="peerLog" class="memories"><span class="empty">No peer conversations yet.</span></div></div>
-      </div>
-      <div class="panel conversation">
-        <div class="panel-head small"><div><span class="eyebrow">DIRECT INTERACTION</span><h2>Conversation</h2></div><span id="talkDistance" class="small-count">Select NPC</span></div>
-        <div id="chatLog" class="chat-log"><div class="empty">Approach a resident to talk. Their replies and decisions use the local model when connected.</div></div>
-        <form id="chatForm" class="chat-form"><input id="messageInput" maxlength="500" autocomplete="off" placeholder="Say something to the selected resident…" aria-label="Speak to NPC"><button id="sendBtn" type="submit">Send ↗</button></form>
-        <p id="chatHint" class="chat-hint">NPCs must be within four tiles to hear you.</p>
-      </div>
-    </aside>
-  </main>
-  <script src="/pixel-art.js" defer></script>
-  <script src="/physics.js" defer></script>
-  <script src="/frontier.js" defer></script>
-  <script src="/biology.js" defer></script>
-  <script src="/emergence.js" defer></script>
-  <script src="/app.js" defer></script>
+<header class="topbar">
+ <div class="brand"><div class="mark">◈</div><div><strong>AI·NPC·COG</strong><small>Emergent Civilization Observatory</small></div></div>
+ <div class="top-right"><span class="chip" id="modelStatus"><i class="status-dot"></i> Checking Rein…</span>
+ <span class="chip muted">Rein-NPC-4B · Shared inference</span>
+ <a href="https://github.com/sdhaight1-hash/AI-NPC-COG" target="_blank" rel="noopener">GitHub ↗</a></div>
+</header>
+<main class="layout">
+ <section class="world-column">
+  <div class="panel simulation">
+   <div class="panel-head"><div><span class="eyebrow">WORLD / GOD-MODE OBSERVER</span>
+    <h1>Toroidal Wilderness · Living World</h1>
+    <p>Finite procedural world · Five independent founders · No predefined settlement</p></div>
+    <div class="clock-group"><strong id="worldTime">08:10</strong>
+     <small id="worldDay">YEAR 1 · MONTH 1 · DAY 1</small>
+     <small id="worldWeather">CLEAR · 20°C</small></div>
+   </div>
+   <div class="toolbar">
+    <button id="pauseBtn" class="control">Ⅱ Pause</button>
+    <div class="speed-picker"><span>Simulation speed</span>
+     <button class="speed" data-speed="1">1×</button>
+     <button class="speed active" data-speed="60">60×</button>
+     <button class="speed" data-speed="3600">3600×</button>
+    </div>
+    <div class="zoom-picker"><span>Camera</span>
+     <button class="zoom-btn" id="zoomOut" type="button">−</button>
+     <strong id="zoomLevel">1×</strong><button class="zoom-btn" id="zoomIn" type="button">+</button>
+    </div>
+    <div class="zoom-picker"><span>Layer</span>
+     <button class="zoom-btn" id="zDown" type="button" aria-label="Down one z-level">−</button>
+     <strong id="zLabel">Z 0</strong>
+     <button class="zoom-btn" id="zUp" type="button" aria-label="Up one z-level">+</button>
+    </div>
+    <button id="followBtn" class="control">Follow selected</button>
+    <label class="switch"><input id="autoAI" type="checkbox" checked><span>Autonomous decisions</span></label>
+    <button id="physicsDebug" class="control">Grid: Off</button>
+    <button id="artToggle" class="control">Art: Original</button>
+    <button id="newIsland" class="control">New world</button>
+    <button id="resetBtn" class="control reset">Reset</button>
+   </div>
+   <div class="world-frame">
+    <canvas id="world" width="640" height="416" aria-label="God-mode view of a procedural toroidal world"></canvas>
+    <div class="map-hint">WASD/arrows: pan · Click a person: follow · F: follow · PgUp/PgDn: z-level · +/- zoom</div>
+    <div class="world-status" id="worldStatus">World running</div>
+   </div>
+   <div class="world-footer">
+    <span><i class="legend npc"></i> Inhabitants</span>
+    <span><i class="legend selected"></i> Followed person</span>
+    <span class="footer-note" id="footerNote">No player character. The observer never acts as an inhabitant.</span>
+   </div>
+  </div>
+  <div class="panel wilderness">
+   <div class="panel-head small"><div><span class="eyebrow">WORLD STATE</span><h2>Population and terrain</h2></div>
+    <span class="small-count">Seed <strong id="worldSeed">—</strong></span></div>
+   <div class="wilderness-content">
+    <canvas id="miniMap" width="160" height="104" aria-label="Whole toroidal world minimap"></canvas>
+    <div class="survival-panel"><p id="populationStats">Five founders; new arrivals on the first of each month.</p>
+     <p>All building, knowledge, ownership and social organization must arise from inhabitants' actions.</p></div>
+   </div>
+  </div>
+  <div class="panel journal">
+   <div class="panel-head small"><div><span class="eyebrow">OBSERVABILITY</span><h2>World events</h2></div>
+    <button id="clearLog" class="text-btn">Clear displayed log</button></div>
+   <div id="eventLog" class="event-log" aria-live="polite"></div>
+  </div>
+ </section>
+ <aside class="sidebar">
+  <div class="panel character">
+   <div class="panel-head small"><div><span class="eyebrow">INHABITANT INSPECTOR</span><h2>Individual state</h2></div>
+    <span class="small-count" id="npcCount">5 alive</span></div>
+   <div class="resident-list" id="residentList"></div>
+   <div class="identity"><div class="portrait" id="npcPortrait">?</div>
+    <div><h3 id="npcName">Select an inhabitant</h3><p id="npcMeta">Independent actor</p></div></div>
+   <div class="stat"><div class="stat-label"><span>Mood</span><strong id="moodVal">—</strong></div>
+    <div class="meter"><div id="moodMeter"></div></div></div>
+   <div class="stat"><div class="stat-label"><span>Energy</span><strong id="energyVal">—</strong></div>
+    <div class="meter"><div id="energyMeter" class="energy"></div></div></div>
+   <div class="stat"><div class="stat-label"><span>Health</span><strong id="healthVal">—</strong></div>
+    <div class="meter"><div id="healthMeter" class="energy"></div></div></div>
+   <div class="stat"><div class="stat-label"><span>Hunger</span><strong id="hungerVal">—</strong></div>
+    <div class="meter"><div id="hungerMeter" class="hunger"></div></div></div>
+   <div class="stat"><div class="stat-label"><span>Thirst</span><strong id="thirstVal">—</strong></div>
+    <div class="meter"><div id="thirstMeter" class="hunger"></div></div></div>
+   <div class="info-line"><span>Social need</span><strong id="socialVal">—</strong></div>
+   <div class="info-line"><span>Bodily sensations</span><strong id="bioSensation">—</strong></div>
+   <div class="info-line"><span>Nutrition · past 24h</span><strong id="bioNutrition">—</strong></div>
+   <div class="info-line"><span>Hormone indices (approximation)</span><strong id="bioHormones">—</strong></div>
+   <div class="info-line"><span>Inventory</span><strong id="inventoryVal">—</strong></div>
+   <div class="info-line"><span>Practiced skills</span><strong id="experienceVal">—</strong></div>
+   <div class="info-line"><span>Known methods</span><strong id="knowledgeVal">—</strong></div>
+   <div class="info-line"><span>Current goal</span><strong id="npcGoal">—</strong></div>
+   <div class="info-line"><span>Longer-term intention</span><strong id="npcPlan">None</strong></div>
+   <div class="info-line"><span>Decision source</span><strong id="decisionSource">—</strong></div>
+   <div class="subsection"><h4>Recent option probabilities</h4><div id="npcDecisions" class="decisions"></div></div>
+   <div class="subsection"><h4>Personal recollections</h4><div id="npcMemories" class="memories"></div></div>
+  </div>
+  <div class="panel conversation">
+   <div class="panel-head small"><div><span class="eyebrow">OBSERVED COMMUNICATION</span><h2>NPC conversations</h2></div></div>
+   <div id="chatLog" class="chat-log"><div class="empty">No recorded conversations yet.</div></div>
+  </div>
+ </aside>
+</main>
+<script src="/pixel-art.js" defer></script>
+<script src="/frontier.js" defer></script>
+<script src="/biology.js" defer></script>
+<script src="/emergence.js" defer></script>
+<script src="/civilization.js" defer></script>
+<script src="/app.js" defer></script>
 </body>
 </html>
