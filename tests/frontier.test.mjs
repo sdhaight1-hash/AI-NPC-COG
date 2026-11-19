@@ -104,3 +104,31 @@ test('rain exposure and shelter change energy depletion, without assigning chara
  assert.equal(exposed.role,undefined);
  assert.equal(protectedAgent.work,undefined);
 });
+
+test('calendar transitions across compact months, seasons and years',()=>{
+ const {F}=modules();
+ assert.equal(F.DAYS_PER_YEAR,108);
+ assert.equal(F.calendar(0).season,'Spring');
+ assert.equal(F.calendar(8*1440).dayOfMonth,9);
+ assert.equal(F.calendar(9*1440).month,2);
+ assert.equal(F.calendar(27*1440).season,'Summer');
+ assert.equal(F.calendar(54*1440).season,'Autumn');
+ assert.equal(F.calendar(81*1440).season,'Winter');
+ assert.equal(F.calendar(108*1440).year,2);
+ assert.equal(F.calendar(108*1440).season,'Spring');
+ assert.equal(F.calendar(111*1440).totalDay,112);
+});
+test('winter is colder and plants regenerate more slowly',()=>{
+ const {F,A}=modules(),island=F.generate(379210);
+ const summer=F.weather(island,40*1440+720),winter=F.weather(island,94*1440+720);
+ assert.ok(summer.temperature>winter.temperature+12);
+ assert.equal(winter.season,'Winter');
+ const warm=A.newWorld(),cold=A.newWorld();
+ const food=warm.nodes.find(n=>n.kind==='food');
+ const winterFood=cold.nodes.find(n=>n.id===food.id);
+ food.stock=0;winterFood.stock=0;
+ warm.weather={kind:'clear',season:'Summer'};
+ cold.weather={kind:'clear',season:'Winter'};
+ A.regenerate(warm,100);A.regenerate(cold,100);
+ assert.ok(food.stock>winterFood.stock);
+});
