@@ -116,7 +116,7 @@ function restore(state,saved){
      readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
    }
    root.Activities.restore(n,old,state.clock);
-   n.project=root.Projects.restore(old.project,state.clock);
+   if(old.project)n.project=root.Projects.restore(old.project,state.clock);
    n.plan=AgentWorld.validatePlan(old.plan);
    if(n.task&&!n.task.commandId)n.task.commandId='cmd_'+(++state.commandSeq);
    if(n.task?.commandId){
