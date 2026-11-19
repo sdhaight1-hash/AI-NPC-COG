@@ -32,7 +32,7 @@ test('death physically transfers all counted goods, edible identities and crafte
  const other=s.npcs[1];
  const foreign=c.Reservations.claim(s,other.id,'cmd_2',
   [{type:'npc',id:n.id,kind:'wood',quantity:1}]);
- assert.equal(foreign.ok,true);
+ assert.equal(foreign.reason,'PRIVATE_INVENTORY');
  const otherInventory=snapshot(other.inventory);
  const original=snapshot(n.inventory),pantry=snapshot(n.bio.pantry);
  const created=c.Civilization.die(s,n,'dehydration');
