@@ -112,6 +112,7 @@ function restore(state,saved){
    Agency.restore(n,old.agency,state.clock);
    root.Projects?.restore(state,n,old.project);
    root.EvidenceMemory?.restore(n,old.evidenceMemory,state.clock,old.memories);
+   Cognition.restoreAttention(n,old.attention,state.clock);
    n.completedProjects=Array.isArray(old.completedProjects)?
     old.completedProjects.filter(x=>x&&['shelter','campfire','workbench','storage'].includes(x.kind)&&
      Number.isFinite(x.startedAt)&&Number.isFinite(x.finishedAt)&&x.finishedAt<=state.clock&&

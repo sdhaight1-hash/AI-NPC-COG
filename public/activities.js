@@ -2,6 +2,7 @@
 // still commits through WorldRuntime/WorldReceipts exactly once at completion.
 (function(root){
  'use strict';
+ const MAX_SUSPENDED=4;
  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
  function valid(a){
   return a&&typeof a.commandId==='string'&&/^cmd_[1-9]\d*$/.test(a.commandId)&&
@@ -28,17 +29,17 @@
   n.currentActivity=a;
   return a;
  }
- function eligible(n,key,ref){
-  return (n.suspendedActivities||[]).some(a=>valid(a)&&
-   a.key===key&&a.ref===(ref??null)&&
+ function matches(n,a,key,ref){
+  return valid(a)&&a.key===key&&a.ref===(ref??null)&&
    (key!=='craft_stage'||(a.workpieceRecipe===n.workpiece?.recipe&&
-    a.workpieceStage===n.workpiece?.stage)));
+    a.workpieceStage===n.workpiece?.stage));
+ }
+ function eligible(n,key,ref){
+  return (n.suspendedActivities||[]).some(a=>matches(n,a,key,ref));
  }
  function resume(state,n,key,ref){
   const stack=n.suspendedActivities||[];
-  const index=stack.findLastIndex(a=>valid(a)&&a.key===key&&
-   a.ref===(ref??null)&&(key!=='craft_stage'||
-    (a.workpieceRecipe===n.workpiece?.recipe&&a.workpieceStage===n.workpiece?.stage)));
+  const index=stack.findLastIndex(a=>matches(n,a,key,ref));
   if(index<0)return null;
   const [a]=stack.splice(index,1);
   a.state='RUNNING';a.lastTick=state.clock;a.reason=null;
@@ -52,8 +53,12 @@
   a.state=reason==='ROUTE_BLOCKED'?'BLOCKED':'INTERRUPTED';
   a.reason=String(reason).slice(0,48);
   a.lastTick=state.clock;
-  (n.suspendedActivities ||= []).push(a);
-  n.suspendedActivities=n.suspendedActivities.slice(-4);
+  const stack=n.suspendedActivities||=[];
+  stack.push(a);
+  if(stack.length>MAX_SUSPENDED){
+   const expired=stack.shift();
+   root.Reservations?.releaseCommand(state,expired.commandId,'ACTIVITY_EVICTED');
+  }
   n.currentActivity=null;
   root.WorldReceipts.lifecycle(state,n,a,'INTERRUPTED',a.reason);
   return a;
@@ -98,7 +103,7 @@
     typeof x==='string'&&/^res_[1-9]\d*$/.test(x)).slice(0,40):[]
   });
   if(Array.isArray(source?.suspendedActivities)){
-   n.suspendedActivities=source.suspendedActivities.filter(valid).slice(-4).map(copy);
+   n.suspendedActivities=source.suspendedActivities.filter(valid).slice(-MAX_SUSPENDED).map(copy);
   }
   if(valid(source?.currentActivity)&&source.currentActivity.state==='RUNNING'&&
    n.task?.key===source.currentActivity.key&&

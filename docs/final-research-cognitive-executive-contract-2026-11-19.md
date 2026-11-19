@@ -184,3 +184,21 @@ First run code-only trait counterfactual fixtures, then add LLM deliberation. If
 - `AgentWorld.stepNeeds` varies only the rate of `needs.social` accumulation based on those two personal traits. A strongly solitary person accumulates unmet contact desire slowly but is **never mathematically unable** to form an attachment or seek help. Bodily food/water/energy survival and other world authority remain unchanged.
 - A counterfactual headless test starts two NPC clones with identical physical and social states except their trait vectors and verifies divergent social pressure after equal simulated minutes, and independently asserts hydration is identical.
 - **Still research/planned**: explicit social fatigue, valuable particular relationships, learning preferences, affection/attachment, experience-driven temperament changes, sustained goal commitments, a cue inbox, and fully autonomous social decision/governance. The numeric traits are gameplay parameters, not validated clinical psychology.
+
+## Implementation checkpoint — evidence-triggered model reviews (#73)
+
+An idle connected resident may request a first review, then request another
+when their own inspection finds a source or crosses the available/depleted
+boundary, they discover a method, or they hear a distinct resource report
+with no firsthand evidence. A repeated observation at the same availability
+and repeat reports about the same source create no new request. A review
+considers up to eight recent cues drawn from private evidence. Cues expire
+after 180 simulated minutes. The review watermark and the 30-minute
+per-resident request cooldown survive v3 save and restore.
+
+Routine decisions continue through Agency and the shared action executor.
+Known projects and body reflexes retain priority. The model still selects a
+validated action from an actor-private menu. A delayed response loses
+authorization if its cue or existing decision basis expires or changes.
+Long-horizon commitment conflicts and strategic proposals remain separate
+work under this contract.
