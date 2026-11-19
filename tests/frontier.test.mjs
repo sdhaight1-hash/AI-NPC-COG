@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
@@ -22,6 +23,45 @@ test('natural seed is repeatable and has multiple biomes and finite resources',(
  for(const n of w.nodes){
   assert.notEqual(F.terrainAt(w,n.x,n.y),'water');
   assert.ok(n.stock>0&&n.stock<=n.max);
+ }
+});
+test('revision 1 preserves the terrain and resource layout of historical worlds',()=>{
+ const {Frontier:F}=modules();
+ for(const [seed,expected] of [
+  [379210,'c42a7b572296fc5cafa0061d6efc989bac264959f5e54601752f4dcdb985dc57'],
+  [71934,'101f320e0aab626021556c79addc7a5614c771820904ae222b8a4a8bac4d8d5b'],
+  [2147483646,'49de40fbab559b8a41a29cd46d61e243117fc5e1c31260f91cce324c112ed93b']
+ ]){
+  const world=F.generate(seed);
+  assert.equal(createHash('sha256').update(JSON.stringify([world.terrain,world.resources])).digest('hex'),expected);
+ }
+});
+test('absolute regions restore the same base regardless of order or seam crossings',()=>{
+ const {Frontier:F,AgentWorld:A}=modules();
+ for(const seed of [379210,71934])for(const side of [16,32]){
+  const world=A.newWorld(seed),regions=[];
+  for(let y=0;y<world.height;y+=side)for(let x=0;x<world.width;x+=side)
+   regions.push({x,y,width:Math.min(side,world.width-x),height:Math.min(side,world.height-y)});
+  const assembled=[];
+  for(const r of regions.reverse()){
+   const data=F.baseRegion(world.generator,r);
+   for(let row=0;row<r.height;row++)for(let col=0;col<r.width;col++)
+    assembled[(r.y+row)*world.width+r.x+col]=data[row*r.width+col];
+  }
+  assert.deepEqual(assembled,Array.from(world.terrain));
+  for(const z of [-3,0,2]){
+   const r={x:-2,y:-1,width:4,height:3,z};
+   const sample=F.baseRegion(world.generator,r);
+   const shifted=F.baseRegion(world.generator,{...r,x:r.x+2*world.width,y:r.y-world.height});
+   assert.deepEqual(Array.from(sample),Array.from(shifted));
+   for(let dy=0;dy<r.height;dy++)for(let dx=0;dx<r.width;dx++)
+    assert.equal(sample[dy*r.width+dx],F.materialAt(world,r.x+dx,r.y+dy,z));
+  }
+  world.edits['0:0:-1']='bedrock';
+  assert.equal(F.materialAt(world,0,0,-1),'bedrock');
+  assert.notEqual(F.baseRegion(world.generator,{x:0,y:0,width:1,height:1,z:-1})[0],'bedrock');
+  assert.throws(()=>F.baseRegion({...world.generator,revision:2},{x:0,y:0,width:1,height:1}),
+   {message:'Unsupported world generator descriptor'});
  }
 });
 test('time-dependent weather repeats for a seed',()=>{

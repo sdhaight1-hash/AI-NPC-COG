@@ -18,7 +18,7 @@
   function newWorld(seed=Frontier.DEFAULT_SEED) {
     const island=Frontier.generate(seed);
     return {version:3,now:0,seed:island.seed,width:island.width,height:island.height,
-      terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
+      generator:island.generator,terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
       nodes:island.resources,construction:root.Construction?.fresh(),
       structures:[],items:[],itemSeq:1};

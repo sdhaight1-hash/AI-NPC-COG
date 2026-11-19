@@ -88,3 +88,31 @@ test('time partition: unreasonably large catch-up rejects without partial mutati
   {name:'RangeError',message:'Simulation interval exceeds one simulated day'});
  assert.equal(k.Simulation.canonical(state),old);
 });
+
+test('v3 world identity migration preserves edits, harvest, structures and actors',()=>{
+ const k=kernels(),state=k.Simulation.initial(379210);
+ const node=state.world.nodes[0],tile=state.npcs[0];
+ node.stock-=1;
+ state.world.edits['79:51:-1']='bedrock';
+ state.world.structures.push({id:'shelter_1',type:'shelter',x:tile.x,y:tile.y});
+ const old=clone(k.Persistence.save(state));
+ delete old.world.generator;
+ old.world.edits['-1:51:-1']='air';
+ old.world.edits['1:1:200']='air';
+ old.world.edits['1:1:-1']='invalid';
+ const loaded=k.Simulation.initial(379210);
+ assert.equal(k.Persistence.restore(loaded,old),true);
+ assert.deepEqual(clone(loaded.world.generator),clone(state.world.generator));
+ assert.deepEqual(clone(loaded.world.edits),{'79:51:-1':'bedrock'});
+ assert.equal(loaded.world.nodes[0].stock,node.stock);
+ assert.equal(loaded.world.structures[0].id,'shelter_1');
+ assert.deepEqual(clone(loaded.npcs.map(n=>n.id)),clone(state.npcs.map(n=>n.id)));
+ const current=clone(k.Persistence.save(loaded));
+ for(const mismatch of [{revision:2},{topology:'plane'},{seed:71934},{width:81},{zMin:-5}]){
+  const fresh=k.Simulation.initial(379210),before=k.Simulation.canonical(fresh);
+  const bad=clone(current);
+  Object.assign(bad.world.generator,mismatch);
+  assert.equal(k.Persistence.restore(fresh,bad),false);
+  assert.equal(k.Simulation.canonical(fresh),before);
+ }
+});
