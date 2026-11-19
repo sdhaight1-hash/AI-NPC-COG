@@ -68,6 +68,12 @@ test('conflicting observations preserve sources and time instead of overwriting'
  assert.deepEqual(Array.from(E.state(a).facts.map(x=>x.value)),['7','2']);
  assert.equal(E.state(a).facts[0].receiptId,'evt_1');
  assert.equal(E.state(a).facts[1].receiptId,'evt_2');
+ const belief=E.belief(a,'spring_1','stock',sim.clock);
+ assert.equal(belief.contradictory,true);
+ assert.equal(belief.certainty,'inferred');
+ assert.equal(belief.value,'2');
+ assert.equal(belief.sourceEpisodeIds.length,2);
+ assert.ok(belief.confidence<0.9);
  assert.equal(E.fromReceipt(sim,a,second),null,'Receipt cannot duplicate evidence');
 });
 test('two inhabitants cannot share evidence or private physiology by reference',()=>{
