@@ -90,3 +90,32 @@ test('legacy version-3 actor without lifecycle fields still restores a timed tas
  steps(c,restored,20);
  assert.equal(restored.world.structures.filter(x=>x.type==='campfire').length,1);
 });
+
+test('expired suspended freshwater reservation restarts safely instead of trapping a dehydrated actor',()=>{
+ const {c,state:s,n}=create();
+ const source=s.world.nodes.find(v=>v.kind==='water'&&v.stock>=2);
+ assert.ok(source);
+ n.x=source.x;n.y=source.y;n.z=0;n.path=[];
+ n.inventory.water=0;n.needs.thirst=96;n.bio.hydrationBudgetMl=120;n.energy=0;
+ assert.equal(c.WorldRuntime.begin(s,n,'drink_source'),true);
+ const oldCommand=n.task.commandId,before=source.stock;
+ assert.ok(s.reservations.some(x=>x.commandId===oldCommand&&x.status==='ACTIVE'));
+ assert.ok(c.Activities.interrupt(s,n,'CRITICAL_NEED'));
+ n.task=null;n.action='none';
+ // A lengthy interruption may outlast the resource claim while the task
+ // remains resumable. It must not shadow all later legal survival actions.
+ s.clock+=181;s.world.now=s.clock;
+ c.Reservations.expire(s);
+ assert.equal(c.Reservations.validCommand(s,oldCommand,1),false);
+ assert.equal(c.WorldRuntime.survival(s,n),true);
+ assert.equal(n.task?.key,'drink_source');
+ assert.notEqual(n.task.commandId,oldCommand,'Restart requires a fresh command');
+ assert.equal(n.suspendedActivities.some(a=>a.commandId===oldCommand),false);
+ assert.equal(source.stock,before,'New reservation does not consume water early');
+ steps(c,s,1);
+ assert.equal(source.stock,before-1,'Exactly one physical water unit was consumed');
+ assert.equal(n.inventory.water,0,'Direct drinking never mints portable water');
+ assert.ok(n.bio.hydrationBudgetMl>120);
+ assert.ok(s.receipts.some(x=>x.commandId===n.lastActivity?.id?.slice(4)&&
+  x.action==='drink_source'&&x.status==='COMPLETED'));
+});
