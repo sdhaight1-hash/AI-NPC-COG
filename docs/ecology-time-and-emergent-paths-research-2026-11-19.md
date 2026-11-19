@@ -98,3 +98,12 @@ We cannot claim per-frame 100-NPC real-world scalability from a passing 5-NPC so
 **First next tests:** (1) variable-step partition equivalence, (2) resource-category regen/conservation audit, (3) no-LLM actor time and offscreen progression parity, (4) emerging desire path without minted infrastructure, (5) survival across multiple viable seeds **without starter possessions** after inventory redesign.
 
 **What we should not do:** install large general ECS, try to simulate tectonic uplift per NPC tick, write a whole Rust engine port, add speculative 50-parameter personality model, or claim Earth-like biology. The high-confidence gain is an authoritative contract with tested boundaries, not system size.
+
+## Implementation checkpoint — fractional regeneration persistence (2026-11-19)
+
+Tracked in [#72](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/72) and [PR #78](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/78).
+
+- **Implemented:** `AgentWorld.restoreWorld` restores a valid per-source fractional `regrow` accumulator instead of resetting the saved progress. Invalid or legacy missing values normalize to zero. Tests cover all existing source kinds and wood yield parity across a save/restore boundary.
+- **Important observed regression during development:** an initial code attempt stopped stone regrowing immediately. The existing seven-day viability benchmark then reported **one founder dead of dehydration** (expected zero). The mineral change was **reverted**, not the benchmark; this proves that scarcity changes the existing agents' behavior and that resource-class conservation needs a coordinated survival/planning intervention.
+- **Not implemented:** nonrenewable mineral classification, finite water mass cycles, tree species/biomass and soil budgets. Today's bounded stock refill remains a temporary gameplay rule, explicitly not long-term conservation.
+- **Next gate:** separate diagnostic mortality traces for depleted minerals and new water-seeking policies, then rerun multi-seed survival before reintroducing a physical mineral budget. Keep #72 and #63 open.

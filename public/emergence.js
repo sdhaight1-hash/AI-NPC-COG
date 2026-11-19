@@ -539,6 +539,9 @@
       const old=saved.nodes.find(v=>v.id===node.id&&v.kind===node.kind);
       if(old&&Number.isInteger(old.stock)&&old.stock>=0&&old.stock<=node.max){
         node.stock=old.stock;
+        // A checkpoint must not discard partially accumulated resource growth.
+        node.regrow=Number.isFinite(old.regrow)&&
+          old.regrow>=0&&old.regrow<1?old.regrow:0;
       }
     }
     root.Construction?.restore(target,saved.construction);
