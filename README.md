@@ -1,173 +1,52 @@
-# AI-NPC-COG — a living 2D NPC sandbox
+# AI-NPC-COG — Emergent Civilization Observatory
 
-An experimental, local-first 2D village for testing autonomous NPC behavior with **Rein-NPC-4B-Q4_K_M.gguf**. The 2D renderer and simulation keep moving even during local model inference. Every decision is observable, labeled, and constrained by the world engine.
+A local-first, top-down, grid-and-time simulation of independent Rein-controlled people living in a seeded, **finite toroidal world with bounded z-levels**. Humans can learn, gather, construct simple shelters, talk and die. The simulation owns physical truth; one shared local **Rein-NPC-4B-Q4_K_M.gguf** model selects personal intentions. The observer is god mode, **not** a player character.
 
-## Quick start (Windows — one click)
+This repository is an **active prototype**, not yet the finished generational civilization and ecology simulator described in the [implementation roadmap](docs/emergent-world-roadmap.md). The new v3 world foundation is the first stage.
 
-**No manual llama.cpp installation and no model download required.**
+## Quick start on Windows
 
-1. Place your existing model in this path inside the repository (you already have this file):
+1. Place the existing model at Model\Rein-NPC-4B-Q4_K_M.gguf inside the repository.
+2. Double-click **install.bat** once if this machine does not already have the required local runtime. It installs a private Node.js runtime when needed and the official llama.cpp CUDA binary with hash verification.
+3. Subsequently double-click **start.bat**. It runs the local model/server and opens the app at http://127.0.0.1:5173.
 
-       Model\Rein-NPC-4B-Q4_K_M.gguf
+No administrator access or external AI service is required. First-time installation may download hundreds of megabytes of official runtime files. If inference exhausts the RTX 2060's 6 GB of VRAM, reduce the -ngl 99 setting in start.bat to -ngl 25 and close other GPU applications. The UI labels offline fallback rules clearly; they are **not equivalent to genuine Rein cognition**.
 
-2. **Double-click install.bat**. It checks for Node.js 20+, installs portable Node.js 22 LTS only if needed, and downloads the official Windows CUDA 12.4 llama.cpp server plus CUDA runtime DLLs. Both downloads are SHA-256 verified. It installs everything beneath the private _runtime folder and launches the program when successful.
+## Phase-1 gameplay and observer controls
 
-3. The first run opens two console windows (model server and web server) and launches your browser at **http://127.0.0.1:5173**. Wait for the model to finish loading before expecting Rein-driven decisions.
+- **Five randomized adults** begin near one another in viable wilderness. No seeded houses, roads, town, affiliation, designated friendship or profession. Additional adults spawn anywhere suitable on the first day of every simulated month; no bed or room is required.
+- The world uses deterministic 80×52 terrain, seeded habitats and finite wild resources. X wraps east/west, Y wraps north/south. Existing z-level support is a **bounded subterranean material substrate and vertical-connection rule**, not a completed excavation/building simulator.
+- Inhabitants occupy authoritative integer grid tiles. Movement and actions cost simulated time and sprite motion is interpolated. Pausing and time acceleration do not grant free actions. Resource stocks, digestion and weather are code-driven.
+- **No controllable avatar.** WASD or arrows pan the camera; click an inhabitant to inspect/follow; F follows the selected inhabitant; +/- zoom; PageUp/PageDown or the Layer controls inspect z-levels; the grid diagnostic can be toggled.
+- Gathering, eating, drinking, making a campfire, building a basic shelter, exploration, simple social exchange and individual hatchet-method experimentation are prototype actions. Crafting the hatchet requires discovery of its method; merely having ingredients does not reveal it.
+- Bodies have energy, nutritional state, hydration, sleep pressure, stress, age metadata and simplified health. Death removes an inhabitant permanently and records their identity and cause. The world persists when no humans survive, allowing future independent arrivals.
+- The inspectable event log is bounded for now. People have basic short individual memories and earned action experience; **full durable knowledge, genealogy, reproduction and historical provenance are scheduled for later phases**.
 
-For later sessions, **double-click start.bat**. You do not need to run the installer again. Leave the two server console windows open while using the simulation; close them to stop it.
+### Simulation clock
 
-The script uses **your existing local GGUF**, changes no system PATH or security settings permanently, needs no administrator rights, and does not install Python or use cloud inference. Windows PowerShell is used for downloading and verifying the official release ZIPs. The combined llama.cpp/CUDA downloads can be several hundred megabytes, so the first install needs an internet connection and free disk space.
+The speed selector advances simulated time independently of rendering frames. Its 1×, 60× and 3600× options are time multipliers. At 60×, one real second advances one in-game minute; at 3600×, one real second advances one in-game hour. Time acceleration can outpace local AI decisions: monitor model throughput and do not mistake offline defaults for rich autonomy.
 
-If llama-server.exe reports out-of-memory on an RTX 2060 6GB, close other GPU applications and reduce the -ngl 99 setting to -ngl 25 in start.bat to offload some layers to RAM. If you already have Node.js, the installer reuses it. If interrupted, rerun install.bat; completed components are kept.
+### Saving and migration
 
-**Troubleshooting:** If Windows blocks the download, verify the archive is from the official [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/releases) project. If the model server immediately exits with a CUDA DLL error, check that your NVIDIA graphics driver supports CUDA 12.4. Inspect the model server console for exact errors; the village UI will label offline fallback routines whenever Rein is not connected.
+Local storage now uses the ai-npc-cog-v3 key. Older v1/v2 player-and-village states cannot safely be mapped to the new wilderness, so they are **not automatically imported or erased**. Clicking Reset clears the current v3 world. New world selects a new seed after confirmation. Browser local storage is temporary prototype storage and does not yet provide the reliability of a server-side historical database.
 
-## Cognitive architecture and biological simulation
+## Roadmap and architecture
 
-**The simulation executes the world; Rein chooses intentions.** Food gathering, movement,
-construction, material transfers, physiology, memory evidence and time are owned by code.
-The single loaded Rein model receives relevant, character-specific perceptions and chooses
-legal actions, forms subjective beliefs and speaks as an individual.
+- [Emergent world roadmap](docs/emergent-world-roadmap.md) — the full set of design invariants, future phases, acceptance gates, and honest omissions.
+- [Architecture and physiology research](docs/architecture-and-physiology.md) — the previous documented biology research and world/AI authority separation. Sections describing the older village/player layout are historical, not current features.
 
-A new standalone `public/biology.js` tracks food varieties and their nutrients, gradual
-digestion, available energy, hydration, sleep pressure, stress, and circadian game-signals
-for **ghrelin, leptin, insulin, cortisol and melatonin**. Eating berries differs from
-eating forest nuts; nutrients affect stored energy and appetite. Player and NPC portions
-remain concrete inventory objects, and transferring food keeps its composition.
+The future work includes a server-owned event queue and durable journal, editable multilevel geology, construction from individual components, researchable technologies and practical skill learning, population-wide plants/wildlife/monster ecology, genetic lineage, gestation and childhood, and genuinely emergent communities, ownership claims, laws, economics, treaties and conflict.
 
-All hormone indices are **normalized gameplay abstractions**, never measured hormone
-concentrations, clinical estimates or medical advice. Food composition is provisional,
-not a validated nutrition database, and biological effects have not been medically
-calibrated. Rein receives qualitative bodily sensations; hormone numbers appear in
-the inspector for debugging only. Existing saves initialize safely to a baseline.
+**Social institutions never appear by default.** Land claims are social assertions and possible laws; they never create impassable walls. Claims may never be invented in a given world. Cooperation is an individual's decision, not a compulsory algorithmic relationship bonus. If every living person dies, the world and its surviving physical artifacts persist.
 
-Read the detailed research and staged design in
-[Architecture and physiology](docs/architecture-and-physiology.md), including Eco
-ecology, event-owned memory, nutrition sources, endocrine limitations and the
-proposed server-authoritative simulation roadmap.
+## Tests
 
-## World overhaul v1 — seeded island survival
+Node.js 22 runs the current suite with:
 
-The experimental world is now a **deterministic 80×52 tile island**, with the legacy 40×26 starting settlement retained as a safe arrival clearing. Outside it, a seeded terrain generator creates **meadow, forest, marsh, rocky upland, beaches, and water**. Terrain is not arbitrary wallpaper: deep water blocks movement; resources are distributed by habitat; walking to a source uses the same pathfinding and physical collision as other NPC behavior.
+    node --test tests/*.test.mjs
 
-**Exploration and atmosphere.** The player initially knows only a small area. Moving reveals wilderness through permanent fog-of-war; a 160×104 minimap shows explored terrain and visible residents. Island seed, day, weather and temperature are visible in the UI. Weather varies deterministically by day; rain or storms increase fatigue unless a nearby shelter protects a character. The original art and optional Kenney CC0 tiles are still supported.
+The test suite covers toroidal generation, boundary pathfinding, monthly calendar events, zero-population survival, individual knowledge, biology and world resources, plus the HTTP Rein protocol. GitHub Actions also checks browser script syntax and exercises Windows installer validation. These tests do not replace an on-device visual/GPU smoke test.
 
-**Survival and crafting.** All six AI characters and the player use the **same authoritative finite resource nodes**. Food, wood, stone, plant fiber and freshwater can be collected from appropriate sites. Food and water are consumed; hunger and thirst rise over time. Repeated work increases experience; crafted stone hatchets increase wood-gathering output. Characters can use wood and fiber to build a shelter that persists and improves recovery during harsh conditions. Resources regenerate at bounded rates rather than appearing from nothing.
+## Art and licensing
 
-**Player participation.** Hold WASD/arrows or click to navigate, then use the **Survival / Exploration** buttons to collect resources, drink, eat, craft a hatchet, build shelter, or rest. Buttons disable when the action is unavailable or its required materials are missing. The AI residents have access to the same world rules, and can choose a longer-term \`make_shelter\` goal that retrieves missing materials across multiple trips. Their decisions still use the **one loaded Rein-NPC-4B model**.
-
-**Seeds and persistence.** **New island** generates a fresh random seed and clears the current simulation after confirmation. Reset also clears local progress. New saves use \`ai-npc-cog-v2\`, while the former \`ai-npc-cog-v1\` save is left untouched and may be read once for dialogue, skills and relationships on upgrade. The deterministic terrain and changed resource stocks, structures, discovered map and player supplies are persisted in the new save.
-
-**Wayward reference and ownership.** This milestone uses the *systems design* of [Wayward](https://store.steampowered.com/app/379210/Wayward/) as inspiration for survival and procedural exploration. **No Wayward source code, world data, dialogue, or artwork has been copied.** It is an original implementation centered on shared-model agents.
-
-**Scope:** this is an extensible survival world *foundation*, not a complete Wayward reproduction. There is no infinite archipelago, farming, animal ecosystem, combat, injury or death system, equipment durability, advanced technology chain, multiplayer, or server-authoritative simulation yet. These need explicit world-rule, AI affordance and persistence designs before implementation. The starting settlement remains static for compatibility in this milestone.
-
-## Graphics — pixel-art village
-
-Hearthbrook now uses an **original 16×16 pixel-art rendering layer** inspired by classic top-down RPG tilesets, including [Anokolisa's Pixel Crawler free pack](https://anokolisa.itch.io/free-pixel-art-asset-pack-topdown-tileset-rpg-16x16-sprites).
-
-- Hand-authored procedural pixel tiles for grass, stone and dirt roads, flowerbeds, water, shrubs, trees, fences, lamps, well and market props.
-- Six visually distinct NPC sprites plus the player, with four facing directions and four-phase walking animations.
-- Buildings differentiated by roofing, windows, signs, doors, awnings, and other decorations.
-- A **nearest-neighbor/pixel-perfect Canvas renderer** at a 640×416 logical resolution, with 1×/2×/3× camera zoom. The camera follows the player when zoomed in. The original starting area's layout and paths are preserved within the **expanded 80×52 world**. Interaction ranges and tile-based navigation remain compatible; save-state storage has been versioned.
-- Static scenery is cached. Dynamic lighting, water ripples, drifting particles and campfire smoke are rendered over the scene without changing resource or AI state.
-- The optional **Kenney Tiny Town CC0 16×16 atlas** is downloaded automatically once to `public/assets` on Windows startup. If installation fails or you are offline, the original procedural village continues to render. Use **Art: CC0 Tiny Town / Art: Original** in the toolbar to compare either treatment.
-
-**Licensing:** The linked Anokolisa pack is a **visual reference**, not a dependency; its artwork is not redistributed here. The optional [Kenney Tiny Town](https://kenney.nl/assets/tiny-town) atlas is licensed under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) and downloaded **locally**, not committed to this repository. Original procedural graphics are authored for AI-NPC-COG. If the network was unavailable at first launch, double-click `install-art.bat` to retry once you reconnect. A failed download does not prevent the simulation from starting.
-
-**Camera:** Click `−` or `+` beside Camera, or use the minus/plus keys when the chat field isn't focused. 1× shows the complete village; 2× and 3× zoom follow the player. Click-to-move and NPC selection continue to work at all zoom levels.
-
-## Physics and collision — top-down, no rigid-body dependency
-
-The browser now uses `public/physics.js`: a small continuous **kinematic collision controller** with acceleration, deceleration, radius-aware tile collisions, swept incremental movement against walls, solid character bodies, and axis-based wall sliding. AI navigation still uses the original 40×26 integer grid, but physical bodies interpolate to each waypoint with acceleration and braking. This preserves world rules and existing NPC goals.
-
-The camera follows the physical player position smoothly instead of snapping to successive tile centers. The renderer keeps its 640×416 logical resolution, integer sprite pixels and the 30 FPS rendering cap; inference stays on the original one-instance Rein server.
-
-**Why not Matter.js or Box2D?** This is a ground-plane RPG testbed with no jumping, gravity, ropes or rigid-body piles. Adding a full physics engine would introduce a second authoritative collision model and larger integration risk without improving current gameplay. If the project adds pushable objects, vehicles or dynamic debris, a dedicated solver can be reconsidered.
-
-**Important limitations:** Collision currently uses small circular footprints and tile-based static obstacles. It does not simulate terrain height, buoyancy or accurate per-pixel sprite contours. All AI world decisions remain authoritative in the existing simulation, and neither downloaded art nor graphics effects affect character cognition.
-
-## Emergent inhabitants — no assigned occupations
-
-Hearthbrook is a compact **2D autonomy experiment**, inspired by the world-first design of [VoxelMind](https://voxel-mind.com/). There are six inhabitants, **zero predetermined jobs**, and one loaded local Rein-NPC GGUF shared between all of them. Their personalities are starting dispositions, not occupational descriptions. The simulation never directs a character to go to work at a set time.
-
-### Decision loop
-
-1. Each inhabitant has hunger, energy, social need, curiosity, inventory, personal memories and earned experience. Each can perceive only relevant nearby people and resource nodes, not the entire hidden state of the map.
-2. The environment creates a **bounded list of currently possible actions**: forage food, collect wood or stone, eat, recover, share food, socialize, explore or build a shared campfire when materials are available. Rein scores the options. There is no job slot, job schedule or fixed character-to-building mapping.
-3. World rules validate and execute the chosen action. Characters have to walk to resources. Gathering depletes them, eating consumes food, sharing transfers an actual item, and construction spends wood and stone and leaves a persistent, visible campfire. Sources slowly regenerate.
-4. Successful actions improve earned skills; practiced gatherers eventually collect more per trip while still depleting finite sources. The inspector describes the most common observed behavior only after it has happened multiple times; this is not a permanent class or job assignment. Memories preserve the consequences.
-5. Idle inhabitants take turns using the **same model server**, while player conversation preempts background decisions. Offline fallback is marked as deterministic survival behavior, **not AI-driven emergence**.
-
-The existing buildings are starting scenery and communal places, not employers or assigned homes. This remains a **small emergent-agent testbed**, not VoxelMind feature parity. There are no farms, governments, advanced craft chains, a real economy, reflective memory retrieval, or general-purpose open-ended planning yet. Characters can now sustain two world-grounded intentions and exchange short model-generated dialogue with nearby agents.
-
-**Existing save migration:** Old trust, dialogue and memories are retained if a legacy browser save exists, but obsolete job actions and their routes are discarded. If you want every inhabitant to start without history from the previous job-based prototype, click **Reset** in the simulation. Reset clears local browser state.
-
-## Controls
-- Click a villager to inspect their mood, goal, memories and relationships.
-- Hold WASD or the arrow keys for continuous acceleration and friction. Diagonal movement is normalized; collision with solid tiles and residents prevents walking through them.
-- Click open ground for physically smooth, tile-navigated travel. The player can slide along obstacles while moving manually.
-- Explore outward to uncover fog-of-war. The map includes an explored-terrain minimap.
-- Use Survival / Exploration controls near local resource sites to gather, eat, drink, craft and build.
-- The New island button creates a different seeded wilderness after confirmation.
-- Use **Physics: Debug on** to reveal walls, circular character collision bodies, and velocity vectors.
-- **Art: CC0 Tiny Town / Art: Original** switches locally installed tiles and procedural art instantly.
-- Approach an NPC within four tiles to talk; hit E or use Talk.
-- Enter text to converse. Rein first evaluates a typed decision; only then generates a reply.
-- Pause, change simulation speed, or reset the village from the toolbar.
-- Watch the lower cognitive event log and selected NPC's decision scores.
-- Progress and relationships persist locally in your browser (localStorage). Reset removes the saved local state.
-
-## What is really AI-driven?
-
-When the model health indicator says **Rein connected**:
-- Background NPCs are periodically offered explicit action choices. Rein scores those choices using its trained 64-token decision interface. The highest-scoring valid action is executed.
-- Player speech triggers a separate social-response decision, followed by an ordinary Rein chat-completion request.
-- The backend uses llama.cpp's raw /completion for one-token option probabilities, calibrated with Rein's documented 0.812 temperature, and /v1/chat/completions for speech.
-
-When the model is disconnected the sandbox continues with **clearly labeled deterministic routines and fallback dialogue**. Offline behavior is not presented as AI intelligence. The world remains authoritative: decisions cannot teleport people, cross blocked tiles or invent inventory. Movement, time, physical needs, resource regeneration and action outcomes are deterministic; NPC choices are event-driven and serialized to avoid GPU overload.
-
-This is a prototype for *behavioral testing*, not a finished persistent-persona architecture: it has short episodic memory, individual needs, real inventory transfers, earned gathering experience and simple relationship scores, but not vector retrieval, reflective summarization, interiors or a full economy.
-
-## Performance and architecture (RTX 2060 / 6 GB target)
-
-The browser runs the **2D simulation continuously**, while the local Node bridge serializes access to `llama-server`. There are two request priorities:
-
-- **Foreground conversation:** `POST /api/interact` combines Rein's trained decision pass and its dialogue pass in a *single priority job*. It includes the player's latest message in both stages, commits NPC mood/trust/memory **only after the complete reply succeeds**, and interrupts an in-flight background inference.
-- **Background activity:** `POST /api/decide` and `POST /api/peer-exchange` share the same low-priority lane and **never queue multiple stale requests**. A busy server returns HTTP 429 so the browser can defer the work rather than falsely declaring the model offline.
-
-This is still **one loaded GGUF**, not a separate model instance per resident. Chat and decisions are serialized because `start.bat` uses `--parallel 1` for the 6 GB GPU. Priority cancellation reduces wait time but cannot guarantee instantaneous interruption inside llama.cpp. The model server's actual throughput depends on GPU drivers, VRAM pressure and context.
-
-The village now caches the unmoving map, renders dynamic characters at up to 30 FPS, and separates conversation and background busy state. Held WASD movement no longer clears its own path; walkable paths remain validated by the game. NPCs are offered only contextually possible resource and social actions; repeated idle decisions don't corrupt goals or restart routes.
-
-When connected, background thinking begins at roughly one decision every 12 seconds or after the previous one has finished, whichever is later. Actual model latency is reported in the event timeline in milliseconds. The **Rein connected** indicator may remain online through short busy periods when health checks are delayed.
-
-**For diagnosing slowness:** look at the two server windows after launching `start.bat`. If the browser says *offline*, inspect the model console for loading, GPU/driver, or out-of-memory errors. If dialogue works but takes many seconds, compare the timeline's reported decision/dialogue latency; GUI drawing and GPU inference are separate. Closing ComfyUI and other GPU-heavy programs can reduce competition for your 6 GB VRAM. Reduce `-ngl 99` to a smaller layer count in `start.bat` **only if GPU allocation fails**—CPU offload usually makes inference slower.
-
-The app continues with explicitly marked offline routines if the model is not connected. This is not equivalent to AI-driven behavior.
-
-### Verification
-
-```bat
-node --test tests/*.test.mjs
-```
-
-The test suite includes accelerated motion, collision sliding and anti-tunneling, plus Rein's special-token scoring, HTTP end-to-end peer and player dialogue with a fake local model, foreground cancellation, stale-result rejection, bounded multi-step intentions, save validation, static scene caching and held-key movement. CI also runs the Windows installer checks. Real-GGUF speed and visual polish still need evaluation on your own hardware.
-
-## How to evaluate
-
-Look at the event log's action probabilities and compare similar scenarios with different personalities, moods or relationship scores. Try asking one character for help, insulting them, and revisiting them after changing their mood. Ask a question outside their knowledge and see whether the response stays grounded. Restart and verify memories persist. Inspect Chrome DevTools if the model has an error: the UI distinguishes server failures from valid model decisions.
-
-To run protocol tests:
-
-       node --test tests/*.test.mjs
-
-## Research / protocol
-
-- Rein-NPC model card and exact two-request protocol: https://huggingface.co/jmc0/Rein-NPC-4B
-- GGUF release: https://huggingface.co/jmc0/Rein-NPC-4B-GGUF
-- VoxelMind's autonomous villager ideas: https://voxel-mind.com/blog/
-- Generative Agents: memory, reflection, planning: https://arxiv.org/abs/2304.03442
-- 2D NPC sandbox examples and world-authoritative execution: https://hub.stabilarity.com/living-npcs-zero-script-llm-characters-on-a-shared-engine-live-results-from-a-2d-village-and-a-3d-mage-isle/
-
-The referenced YouTube videos were used as inspiration; their exact visuals and implementation have not been reproduced. This project does not reuse video assets or model weights.
+The renderer is original procedural top-down pixel art, currently much simpler than the intended Kynseed-inspired visual direction. The optional locally downloaded [Kenney Tiny Town](https://kenney.nl/assets/tiny-town) atlas is [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Missing optional sprites never prevent the app from running. Kynseed, Wayward, Project Zomboid, Eco, Crusader Kings III and Dwarf Fortress are design references only; no proprietary game assets or source have been reused.
