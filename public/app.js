@@ -565,8 +565,8 @@ function clientToTile(clientX,clientY,rect){
  const sx=(clientX-rect.left)*canvas.width/rect.width;
  const sy=(clientY-rect.top)*canvas.height/rect.height;
  return {
-  x:Math.floor((state.camera.x+sx/state.zoom)/TILE),
-  y:Math.floor((state.camera.y+sy/state.zoom)/TILE)
+  x:Math.floor((Math.round(state.camera.x)+sx/state.zoom)/TILE),
+  y:Math.floor((Math.round(state.camera.y)+sy/state.zoom)/TILE)
  };
 }
 function drawWorld(){
@@ -576,7 +576,8 @@ function drawWorld(){
  ctx.fillRect(0,0,canvas.width,canvas.height);
  ctx.save();
  ctx.scale(state.zoom,state.zoom);
- ctx.translate(-state.camera.x,-state.camera.y);
+ // Pixel-align rendered camera without snapping the underlying smooth state.
+ ctx.translate(-Math.round(state.camera.x),-Math.round(state.camera.y));
  ctx.drawImage(staticCanvas,0,0);
  VillageArt.drawWorldObjects(ctx,state.world);
  const actors=state.npcs.map(n=>({actor:n,player:false}));
