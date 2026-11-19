@@ -62,7 +62,9 @@ test('construction uses actual earned materials and never creates starter struct
  const {AgentWorld:A}=modules(),w=A.newWorld(),n=A.newAgent({
   id:'builder',x:5,y:5,energy:95,action:'none',relationships:{}});
  assert.equal(w.structures.length,0);
- n.inventory.wood=4;n.inventory.fiber=3;
+ n.inventory.wood=5;n.inventory.fiber=4;
+ n.task={key:'experiment_wood_fiber',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,true);
  n.task={key:'build_shelter',ref:null};
  assert.equal(A.complete(n,w,[n]).ok,true);
  assert.equal(w.structures.length,1);
