@@ -82,7 +82,8 @@
     if((npc.inventory[kind]||0)>0&&occupied<crate.capacity)
      work.push({key:'stash_'+kind,when:'Store one '+kind+' in an existing crate',
       target:crate,ref:crate.id});
-    if((crate.contents?.[kind]||0)>0&&npc.inventory[kind]<1000)
+    if((crate.contents?.[kind]||0)>0&&
+       (root.AgentWorld?.roomFor(npc,kind)??1000)>0)
      work.push({key:'withdraw_'+kind,when:'Retrieve one '+kind+' from a crate',
       target:crate,ref:crate.id});
    }
@@ -143,6 +144,11 @@
   if(part.recipe==='workbench'&&part.stage===spec.stages.length-1&&
    world.structures.length>=80)
    return {ok:false,message:'World structure limit reached'};
+  // A completed workpiece cannot fabricate an item that the maker cannot
+  // physically hold. Keep its prior stage/materials until space is created.
+  if(part.stage===spec.stages.length-1&&spec.output.kind&&
+     (root.AgentWorld?.roomFor(npc,spec.output.kind)??1000)<spec.output.count)
+    return {ok:false,message:'CARRYING_CAPACITY: no space for finished product'};
   const practiced=npc.skills.crafting||0;
   const workshop=part.station?
    world.structures.find(s=>s.id===part.station):null;
@@ -199,7 +205,7 @@
     return {ok:false,message:'No material or crate space remains'};
    npc.inventory[kind]--;crate.contents[kind]++;
   }else{
-   if(crate.contents[kind]<1||(npc.inventory[kind]||0)>=1000)
+   if(crate.contents[kind]<1||(root.AgentWorld?.roomFor(npc,kind)??1000)<1)
     return {ok:false,message:'No stored material or inventory space'};
    crate.contents[kind]--;npc.inventory[kind]++;
   }
