@@ -87,7 +87,7 @@
  }
  function isNear(state,n,type){
   return state.world.structures.some(s=>s.type===type&&
-   root.Frontier.distance(state.world,n,s)<5);
+   (s.maker===n.id||root.Frontier.distance(state.world,n,s)<5));
  }
  function predicate(state,n,kind,id){
   const have=(k,q)=>(n.inventory?.[k]||0)>=q;
