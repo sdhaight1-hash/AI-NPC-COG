@@ -117,3 +117,39 @@ test('critical thirst interrupts a physical project task and resumes remaining w
  assert.ok(s.receipts.some(r=>r.commandId===initialCommand&&r.status==='RESUMED'));
  assert.equal(n.project.nodes.find(x=>x.id==='learn').status,'DONE');
 });
+
+test('workbench project completes from finite raw ingredients and staged crafting',()=>{
+ const {c,s,n}=setup();
+ n.inventory.wood=3;n.inventory.stone=1;n.inventory.fiber=3;
+ c.Projects.create(s,n,'workbench');
+ let done=false;
+ for(let i=0;i<180;i++){
+  n.energy=100;tick(c,s);
+  if(n.project.status==='COMPLETED'){done=true;break;}
+ }
+ assert.equal(done,true,n.project.blockedReason||'Workbench dependency graph stalled');
+ assert.equal(s.world.structures.filter(x=>x.type==='workbench').length,1);
+ assert.equal(n.inventory.wood,0);
+ assert.equal(n.inventory.stone,0);
+ assert.equal(n.inventory.fiber,0);
+ assert.equal(n.inventory.cord,0);
+ assert.ok(s.receipts.filter(x=>x.action==='craft_stage'&&
+  x.status==='COMPLETED').length>=6);
+});
+test('storage project has an acyclic real production chain with tool repair',()=>{
+ const {c,s,n}=setup();
+ const project=c.Projects.create(s,n,'storage');
+ assert.ok(project);
+ assert.equal(c.Projects.validateGraph(project.nodes),true);
+ const tool=project.nodes.find(x=>x.id==='hatchet');
+ assert.ok(tool.requires.includes('blade')&&tool.requires.includes('cord_hatchet'));
+ assert.ok(project.nodes.find(x=>x.id==='planks').requires.includes('hatchet'));
+ assert.equal(c.Projects.predicate(s,n,'storage','hatchet'),false);
+ n.inventory.hatchet=1;
+ c.Projects.sync(s,n);
+ assert.equal(tool.status,'DONE');
+ n.inventory.hatchet=0;
+ c.Projects.sync(s,n);
+ assert.equal(tool.status,'PENDING','Lost tool must reopen its prerequisite');
+ assert.ok(project.nodes.some(x=>x.status!=='DONE'));
+});
