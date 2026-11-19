@@ -442,7 +442,7 @@ test('real browser frame loop advances the displayed clock across scheduled offl
  for(let ms=1050;ms<=16100;ms+=50)b.tick(ms);
  assert.ok(b.state.clock>=start+14,
   'Simulation clock must advance even during NPC scheduling and world rendering');
- assert.match(b.elements.get('worldTime').textContent,/^\\d{2}:\\d{2}$/);
+ assert.match(b.elements.get('worldTime').textContent,/^\d{2}:\d{2}:\d{2}$/);
  assert.ok(b.frames.length>250,'Every browser frame must schedule its successor');
  assert.match(b.elements.get('worldStatus').textContent,/World running|Offline|deliberating/);
 });
