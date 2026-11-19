@@ -120,7 +120,7 @@ test('model context contains personal discoveries but no other actor private phy
  assert.match(text,/independent beliefs/);
 });
 test('monthly boundaries create one newcomer even when a frame skips midnight',()=>{
- const b=makeBrowser(),first=31*1440;
+ const b=makeBrowser(),first=9*1440;
  b.state.clock=first-1;b.state.speed=60;
  const before=b.state.npcs.length;
  b.step(2);
@@ -143,7 +143,7 @@ test('deaths are permanent; the world persists through population zero',()=>{
  assert.equal(b.state.npcs.length,0);
  assert.equal(b.state.dead.length,5);
  assert.equal(JSON.stringify(w.terrain),initial);
- b.state.clock=31*1440-1;
+ b.state.clock=9*1440-1;
  b.step(2);
  assert.equal(b.state.npcs.length,1);
  assert.equal(b.state.npcs[0].id,'person_6');
