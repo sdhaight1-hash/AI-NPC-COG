@@ -3,29 +3,20 @@
 (function (root) {
   'use strict';
   const clamp = (x, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x));
-  const distance = (a,b) => Math.abs(a.x-b.x) + Math.abs(a.y-b.y);
-  const RESOURCE_SEEDS = [
-    ['berry_1','food',12,14,6], ['berry_2','food',27,16,6],
-    ['berry_3','food',36,12,5], ['berry_4','food',3,11,5],
-    ['tree_1','wood',12,9,8], ['tree_2','wood',2,13,8],
-    ['tree_3','wood',26,9,8], ['tree_4','wood',38,10,7],
-    ['rock_1','stone',13,23,7], ['rock_2','stone',27,18,7],
-    ['rock_3','stone',3,21,6]
-  ];
+  const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water',
     'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
-    'build_shelter','explore','none'];
+    'build_shelter','experiment_tool','explore','none'];
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',
-    share_food:'cooperation',socialize:'socializing',build_fire:'building',explore:'exploring'};
+    socialize:'socializing',build_fire:'building',explore:'exploring',experiment_tool:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
     const island=Frontier.generate(seed);
-    return {version:2,now:0,seed:island.seed,width:island.width,height:island.height,
-      terrain:island.terrain,discovered:{},
+    return {version:3,now:0,seed:island.seed,width:island.width,height:island.height,
+      terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
-      nodes:[...RESOURCE_SEEDS.map(([id,kind,x,y,max])=>({id,kind,x,y,max,stock:max})),
-        ...island.resources],
+      nodes:island.resources,
       structures:[]};
   }
   function newAgent(n, index=0) {
@@ -65,8 +56,8 @@
     let seed=0;for(const c of n.id)seed=seed*31+c.charCodeAt(0)|0;
     let best=null,score=-Infinity;
     for(const [dx,dy] of directions){
-      const point={x:n.x+dx,y:n.y+dy};
-      if(point.x<0||point.x>=world.width||point.y<0||point.y>=world.height||!canReach(point))continue;
+      const point={x:Frontier.wrap(n.x+dx,world.width),y:Frontier.wrap(n.y+dy,world.height),z:n.z||0};
+      if(!canReach(point))continue;
       const id=point.x+':'+point.y;
       const novelty=seen.has(id)?-100:100;
       const tie=((point.x*73+point.y*151+seed*19)>>>0)%29;
@@ -89,8 +80,11 @@
       add('eat','Eat carried food (hunger '+Math.round(n.needs.hunger)+'/100)');
     if(n.inventory.water>0&&n.needs.thirst>=10)
       add('drink','Drink carried water (thirst '+Math.round(n.needs.thirst)+'/100)');
-    if(n.inventory.wood>=1&&n.inventory.stone>=1&&n.inventory.fiber>=1&&n.inventory.hatchet===0)
-      add('craft_hatchet','Craft a basic tool from wood, stone and plant fiber');
+    if(n.inventory.wood>=1&&n.inventory.stone>=1&&n.inventory.fiber>=1&&n.inventory.hatchet===0){
+      if(n.knowledge?.recipes?.includes('hatchet'))
+        add('craft_hatchet','Use a learned method to craft a stone hatchet');
+      else add('experiment_tool','Experiment with wood, stone and fiber; outcome unknown');
+    }
     if(n.energy<88)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
     const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0)
@@ -155,7 +149,17 @@
       n.inventory.water--;n.needs.thirst=clamp(n.needs.thirst-48);
       Biology.drink(n.bio,400);
       message='Drank fresh water; thirst now '+Math.round(n.needs.thirst);
+    }else if(task.key==='experiment_tool'){
+      if(n.knowledge?.recipes?.includes('hatchet')||n.inventory.fiber<1||
+         n.inventory.wood<1||n.inventory.stone<1)
+        return {ok:false,message:'Not enough material or nothing new to test'};
+      n.inventory.fiber--;
+      n.knowledge ||= {recipes:[],observations:[]};
+      n.knowledge.recipes.push('hatchet');
+      message='Experimented with materials and discovered a workable hatchet method';
     }else if(task.key==='craft_hatchet'){
+      if(!n.knowledge?.recipes?.includes('hatchet'))
+        return {ok:false,message:'The crafting process is not known'};
       if(n.inventory.hatchet||n.inventory.wood<1||n.inventory.stone<1||n.inventory.fiber<1)
         return {ok:false,message:'Missing tool materials'};
       n.inventory.wood--;n.inventory.stone--;n.inventory.fiber--;
@@ -203,8 +207,7 @@
       // Talk alone is not proof of friendship. Cooperative material acts
       // earn trust; dialogue changes needs and memory, not automatic affection.
       if(task.key==='share_food'){
-        n.relationships[other.id]=clamp((n.relationships[other.id]??50)+2);
-        other.relationships[n.id]=clamp((other.relationships[n.id]??50)+2);
+        // Transfer is factual; relationship interpretations belong to each actor.
       }else{
         n.lastPeerAt=world.now;
         other.lastPeerAt=world.now;
