@@ -269,6 +269,8 @@ test('socially motivated residents approach each other and complete model-genera
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(a.peerLog.length,1,'Both replies were required to complete conversation');
  assert.equal(other.peerLog.length,1);
+ assert.ok(a.agency.practice.social>0,'Initiator learns from a real conversation');
+ assert.ok(other.agency.practice.social>0,'Responder also learns from the exchange');
  assert.match(a.peerLog[0].first,/fresh water/);
  assert.equal(a.task,null);
  assert.equal(other.peerReservedFor,undefined);
@@ -380,4 +382,18 @@ test('the model sees recalled personal history without giving it to other inhabi
   kind:'observation',at:100,x:a.x,y:a.y,salience:5});
  assert.match(b.sceneFor(a),/Only I observed the spring/);
  assert.doesNotMatch(b.sceneFor(other),/Only I observed the spring/);
+});
+
+test('personally ranked decisions and witnessed beliefs enter the model context before truncation',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0],other=b.state.npcs[1];
+ const spring=b.state.world.nodes.find(o=>o.kind==='water');
+ n.agency.goal={key:'stock_water',startedAt:b.state.clock,
+  reason:'security',source:'self-directed goal',progress:1};
+ n.agency.beliefs.push({ref:spring.id,kind:'water',x:spring.x,y:spring.y,
+  at:b.state.clock,confidence:1,status:'available',stock:3});
+ const text=b.sceneFor(n).slice(0,1800);
+ assert.match(text,/Personal drives:/);
+ assert.match(text,/Current intention: stock_water/);
+ assert.match(text,/My witnessed beliefs: water at/);
+ assert.doesNotMatch(b.sceneFor(other),/My witnessed beliefs: water at/);
 });
