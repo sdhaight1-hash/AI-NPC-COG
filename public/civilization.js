@@ -63,6 +63,7 @@ function person(world,index,clock,position){
  npc.lineage={biologicalParents:[],caregivers:[]};
  npc.spawnAt=clock;
  npc.spawnKind=index<=5?'founder':'arrival';
+ root.Agency.state(npc);
  return npc;
 }
 function founders(world,clock=490){
