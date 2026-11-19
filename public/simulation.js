@@ -50,6 +50,8 @@
      runtime.advanceProject(state,n);
    }
   }
+  if(root.EvidenceMemory&&Math.floor(before/1440)!==Math.floor(state.clock/1440))
+   for(const n of state.npcs)root.EvidenceMemory.consolidate(state,n);
   ports.afterActors?.(state);
   schedule?.(state);
   return {advanced:true,arrivals:arrivals.map(n=>n.id),deaths};
