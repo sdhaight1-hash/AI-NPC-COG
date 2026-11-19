@@ -40,7 +40,7 @@ function makeBrowser(options={}){
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
-  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc};',context);
+  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick};',context);
  return {...context.exposed,saved,events,elements,counters};
 }
 test('fresh start contains five distinct independent founders, no player, no village',()=>{
@@ -192,4 +192,23 @@ test('z-level inspector and coordinate conversions do not move NPCs',()=>{
  b.setZ(20);
  assert.equal(b.state.viewZ,3);
  assert.equal(n.x,original.x);assert.equal(n.y,original.y);assert.equal(n.z,original.z);
+});
+
+test('an archived identity in a damaged save cannot return alive',()=>{
+ const saved=new Map(),b=makeBrowser({saved});
+ b.save();
+ const data=JSON.parse(saved.get('ai-npc-cog-v3'));
+ data.dead.push({id:data.npcs[0].id,name:data.npcs[0].name,deathAt:data.clock,cause:'test'});
+ saved.set('ai-npc-cog-v3',JSON.stringify(data));
+ const restored=makeBrowser({saved});
+ assert.equal(restored.state.npcs.length,4);
+ assert.ok(!restored.state.npcs.some(n=>n.id===data.npcs[0].id));
+ assert.ok(restored.state.dead.some(n=>n.id===data.npcs[0].id));
+});
+test('fixed render tick batches identical logical intervals despite jitter',()=>{
+ const a=makeBrowser(),b=makeBrowser();
+ a.tick(100);a.tick(150);a.tick(200);a.tick(250);a.tick(300);
+ b.tick(100);b.tick(200);b.tick(300);
+ assert.equal(a.state.clock,b.state.clock);
+ assert.equal(a.state.npcs.length,b.state.npcs.length);
 });
