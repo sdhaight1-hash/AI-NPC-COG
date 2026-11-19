@@ -215,12 +215,24 @@
   n.evidenceMemory=result;
   return result;
  }
+ function belief(n,entityId,key,clock){
+  const claims=state(n).facts.filter(f=>f.entityId===entityId&&f.key===key);
+  if(!claims.length)return null;
+  const latest=claims[claims.length-1];
+  const contradictory=claims.some(f=>f.value!==latest.value);
+  const age=Math.max(0,clock-latest.at);
+  const confidence=Math.max(0,Math.min(1,
+   (contradictory?.55:.9)/(1+age/14400)));
+  return {entityId,key,value:latest.value,
+   certainty:'inferred',confidence:Math.round(confidence*1000)/1000,
+   contradictory,sourceEpisodeIds:claims.slice(-12).map(f=>f.sourceEpisodeId)};
+ }
  function working(n){
   return {task:n.task?.key||null,commandId:n.task?.commandId||null,
    goal:n.project?.goal||n.plan?.key||n.agency?.goal?.key||null,
    remainingMinutes:n.currentActivity?
     Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
  }
- root.EvidenceMemory={state,record,fromReceipt,recall,consolidate,restore,working,
+ root.EvidenceMemory={state,record,fromReceipt,recall,consolidate,restore,working,belief,
   MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES};
 })(globalThis);
