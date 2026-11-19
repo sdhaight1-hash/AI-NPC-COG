@@ -169,11 +169,15 @@ function scheduleIdleAgents(){
   if(initiator)socialInitiative(initiator);
  }
  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&!n.peerReservedFor&&
+  (!n.project||n.project.status==='COMPLETED')&&
   n.action!=='rest'&&state.clock>=n.thoughtAt)
   .sort((a,b)=>a.thoughtAt-b.thoughtAt);
  if(!state.connected){
   // Offline world rules need no serialized model inference lane.
   for(const n of due){
+   if(Projects.maybeStart(state,n)){
+    WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});continue;
+   }
    const success=setAction(n,fallbackBackground(n),'offline routine');
    n.thoughtAt=state.clock+(success?18:3);
   }
