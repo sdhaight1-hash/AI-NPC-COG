@@ -32,7 +32,10 @@
    const death=Civilization.updateHealth(state,n,elapsed);
    if(death){deaths.push({id:n.id,cause:death});ports.onDeath?.(n,death);continue;}
    if(!n.peerPending){
-    if(n.task&&!n.path.length)complete?.(n);
+    if(n.task&&!n.path.length){
+     root.Activities?.progress(state,n);
+     complete?.(n);
+    }
     else if(n.plan&&!n.task&&!n.path.length)plan?.(n);
    }
   }
