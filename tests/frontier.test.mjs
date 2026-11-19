@@ -7,6 +7,7 @@ function modules(){
  const context={};
  const base=new URL('../public/',import.meta.url);
  vm.runInNewContext(readFileSync(new URL('frontier.js',base),'utf8')+'\n'+
+  readFileSync(new URL('biology.js',base),'utf8')+'\n'+
   readFileSync(new URL('emergence.js',base),'utf8'),context);
  return {F:context.Frontier,A:context.AgentWorld};
 }

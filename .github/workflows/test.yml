@@ -16,6 +16,7 @@ jobs:
       - run: node --check public/pixel-art.js
       - run: node --check public/physics.js
       - run: node --check public/emergence.js
+      - run: node --check public/biology.js
       - run: node --check public/frontier.js
       - run: node --test tests/*.test.mjs
   windows-installer:

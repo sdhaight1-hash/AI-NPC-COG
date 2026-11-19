@@ -196,6 +196,7 @@ const STATIC = {
   '/physics.js': ['public/physics.js', 'text/javascript; charset=utf-8'],
   '/assets/kenney-tiny-town.png': ['public/assets/kenney-tiny-town.png', 'image/png'],
   '/emergence.js': ['public/emergence.js', 'text/javascript; charset=utf-8'],
+  '/biology.js': ['public/biology.js', 'text/javascript; charset=utf-8'],
   '/frontier.js': ['public/frontier.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8']
 };

@@ -22,6 +22,30 @@ If llama-server.exe reports out-of-memory on an RTX 2060 6GB, close other GPU ap
 
 **Troubleshooting:** If Windows blocks the download, verify the archive is from the official [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/releases) project. If the model server immediately exits with a CUDA DLL error, check that your NVIDIA graphics driver supports CUDA 12.4. Inspect the model server console for exact errors; the village UI will label offline fallback routines whenever Rein is not connected.
 
+## Cognitive architecture and biological simulation
+
+**The simulation executes the world; Rein chooses intentions.** Food gathering, movement,
+construction, material transfers, physiology, memory evidence and time are owned by code.
+The single loaded Rein model receives relevant, character-specific perceptions and chooses
+legal actions, forms subjective beliefs and speaks as an individual.
+
+A new standalone `public/biology.js` tracks food varieties and their nutrients, gradual
+digestion, available energy, hydration, sleep pressure, stress, and circadian game-signals
+for **ghrelin, leptin, insulin, cortisol and melatonin**. Eating berries differs from
+eating forest nuts; nutrients affect stored energy and appetite. Player and NPC portions
+remain concrete inventory objects, and transferring food keeps its composition.
+
+All hormone indices are **normalized gameplay abstractions**, never measured hormone
+concentrations, clinical estimates or medical advice. Food composition is provisional,
+not a validated nutrition database, and biological effects have not been medically
+calibrated. Rein receives qualitative bodily sensations; hormone numbers appear in
+the inspector for debugging only. Existing saves initialize safely to a baseline.
+
+Read the detailed research and staged design in
+[Architecture and physiology](docs/architecture-and-physiology.md), including Eco
+ecology, event-owned memory, nutrition sources, endocrine limitations and the
+proposed server-authoritative simulation roadmap.
+
 ## World overhaul v1 — seeded island survival
 
 The experimental world is now a **deterministic 80×52 tile island**, with the legacy 40×26 starting settlement retained as a safe arrival clearing. Outside it, a seeded terrain generator creates **meadow, forest, marsh, rocky upland, beaches, and water**. Terrain is not arbitrary wallpaper: deep water blocks movement; resources are distributed by habitat; walking to a source uses the same pathfinding and physical collision as other NPC behavior.
