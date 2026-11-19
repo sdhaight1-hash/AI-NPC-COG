@@ -104,3 +104,20 @@ test('model options cannot disclose obscured source stocks or hidden targets',()
  assert.equal(P.filterAffordances(state,a,options).some(x=>
   x.key==='collect_wood'),true,'Earlier firsthand evidence may guide retrieval');
 });
+
+test('verified physical receipts produce anonymous environmental sound',()=>{
+ const {P,state,a,world}=setup();
+ world.edits['6:5:0']='wall';
+ state.receipts=[{status:'COMPLETED',action:'build_fire',
+  actorId:'person_2',clock:state.clock,
+  privateReason:'must never be audible'}];
+ const packet=P.snapshot(state,a);
+ assert.equal(packet.people.length,0);
+ assert.equal(packet.heard.length,1);
+ assert.equal(packet.heard[0].kind,'construction');
+ assert.equal(packet.heard[0].actorId,undefined);
+ assert.equal(JSON.stringify(packet).includes('privateReason'),false);
+ assert.equal(JSON.stringify(packet).includes('person_2'),false);
+ state.clock+=3;
+ assert.equal(P.snapshot(state,a).heard.length,0);
+});
