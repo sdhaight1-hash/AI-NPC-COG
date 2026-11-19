@@ -54,10 +54,11 @@ function makeBrowser(options={}) {
   };
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
   const physics=readFileSync(new URL('../public/physics.js',import.meta.url),'utf8');
+  const frontier=readFileSync(new URL('../public/frontier.js',import.meta.url),'utf8');
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(art+'\n'+physics+'\n'+rules+'\n'+source +
-    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo};',context);
+  vm.runInNewContext(art+'\n'+physics+'\n'+frontier+'\n'+rules+'\n'+source +
+    '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
 
@@ -103,7 +104,7 @@ test('an unfinished chat request is never written to persistent state',()=>{
     {role:'npc',content:'previous completed response',source:'rein'}
   );
   browser.save();
-  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
   assert.equal(stored.npcs[0].chat.length,1);
   assert.equal(stored.npcs[0].chat[0].content,'previous completed response');
 });
@@ -183,7 +184,7 @@ test('agents can gather finite food, eat it, and build an object from earned mat
   assert.equal(npc.inventory.wood,0);
   assert.equal(npc.inventory.stone,0);
   browser.save();
-  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+  const stored=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
   assert.equal(stored.world.structures.length,count+1);
   assert.equal(stored.npcs.find(n=>n.id==='rowan').inventory.wood,0);
 });
@@ -348,7 +349,7 @@ test('a complete model-generated NPC exchange commits to both agents exactly onc
  assert.ok(a.needs.social<before);
  assert.equal(a.task,null);
  browser.save();
- const saved=JSON.parse(browser.saved.get('ai-npc-cog-v1'));
+ const saved=JSON.parse(browser.saved.get('ai-npc-cog-v2'));
  assert.equal(saved.npcs.find(n=>n.id==='jonas').peerLog.length,1);
  assert.equal(saved.npcs.find(n=>n.id==='mara').lastPeerAt,saved.clock);
 });
@@ -394,10 +395,10 @@ test('ongoing plans and verified exchanges survive a browser restart',()=>{
 test('invalid restored goals are rejected without breaking the world',()=>{
  const before=makeBrowser();
  before.save();
- const data=JSON.parse(before.saved.get('ai-npc-cog-v1'));
+ const data=JSON.parse(before.saved.get('ai-npc-cog-v2'));
  data.npcs[0].plan={key:'become_superuser',steps:-1};
  data.npcs[0].peerLog=[{with:'anonymous',first:'x',second:'y',at:'today'}];
- before.saved.set('ai-npc-cog-v1',JSON.stringify(data));
+ before.saved.set('ai-npc-cog-v2',JSON.stringify(data));
  const after=makeBrowser({saved:before.saved});
  assert.equal(after.state.npcs[0].plan,null);
  assert.equal(after.state.npcs[0].peerLog.length,0);
