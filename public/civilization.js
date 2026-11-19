@@ -23,7 +23,7 @@ function spawnPosition(world,residents,index,origin=null){
  const positions=[];
  if(origin){
   // Nearby means nearby on the torus, including across its wrapping seam.
-  for(let radius=0;radius<=9;radius++)for(let dy=-radius;dy<=radius;dy++)
+  for(let radius=0;radius<=4;radius++)for(let dy=-radius;dy<=radius;dy++)
   for(let dx=-radius;dx<=radius;dx++){
    if(Math.max(Math.abs(dx),Math.abs(dy))!==radius)continue;
    const p={x:root.Frontier.wrap(origin.x+dx,world.width),
@@ -73,7 +73,13 @@ function founders(world,clock=490){
   const food=world.nodes.some(n=>n.kind==='food'&&root.Frontier.distance(world,p,n)<=12);
   const water=world.nodes.some(n=>n.kind==='water'&&root.Frontier.distance(world,p,n)<=16);
   const wood=world.nodes.some(n=>n.kind==='wood'&&root.Frontier.distance(world,p,n)<=12);
-  if(food&&water&&wood)candidates.push(p);
+  if(food&&water&&wood){
+   let capacity=0;
+   for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++)
+    if(suitable(world,{x:root.Frontier.wrap(x+dx,world.width),
+      y:root.Frontier.wrap(y+dy,world.height)}))capacity++;
+   if(capacity>=6)candidates.push(p);
+  }
  }
  if(!candidates.length)throw Error('World generation produced no viable founder region');
  const origin=candidates[Math.floor(seedValue(world,0,177)*candidates.length)];
