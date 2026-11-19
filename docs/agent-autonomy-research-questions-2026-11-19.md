@@ -4,6 +4,8 @@
 **Baseline:** `main` at `7051b751c627c5e801ab9a4cc385c6032211eb2f` (previous research PR #68 integrated).  
 **Prior work:** [Initial cognitive audit](embodied-cognition-research-agenda-2026-11-19.md) and [first research follow-up](cognitive-executive-followup-research-2026-11-19.md).
 
+**Results of this investigation:** [Deep review of intentions, curiosity, memory and cooperation](agent-autonomy-deep-investigation-2026-11-19.md); [testable benchmark contract](agent-autonomy-benchmark-contract-2026-11-19.md). The original questions below remain as the pre-investigation record.
+
 ## Why another investigation?
 
 The earlier research establishes *what components* we need, but not their exact decision boundaries, learning dynamics, or evidence for selecting one architecture under **one shared 4B local model and multiple embodied NPCs**. Avoid building a speculative all-purpose framework without testing whether any additional layer changes grounded behavior.
