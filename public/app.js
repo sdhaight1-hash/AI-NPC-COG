@@ -72,6 +72,8 @@ function position(n){
 function updateMovement(n,elapsed){return WorldRuntime.move(state,n,elapsed);}
 function sceneFor(n){
  const sensed=Perception.snapshot(state,n);
+ const audible=sensed.heard.slice(-4).map(e=>e.kind+' '+e.proximity+
+  ' to the '+e.direction).join('; ')||'Nothing distinctive';
  const others=sensed.people.map(p=>p.name+' at '+p.x+','+p.y+
   ' ('+p.activity+')').join(', ')||'Nobody visible';
  // Vision identifies silhouettes and locations, not exact unseen resource stocks.
@@ -106,7 +108,7 @@ function sceneFor(n){
   '. Finished goods: '+(n.craftedItems||[]).slice(-5).map(p=>
    p.kind+' quality '+p.quality+'/5').join(', ')+'. Personally inspected: '+
   (n.knowledge?.observations||[]).slice(-4).map(o=>o.text).join('; ')+
-  '. Visible people: '+others+
+  '. Heard: '+audible+'. Visible people: '+others+
   '. Perceived resources: '+nearby+
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
