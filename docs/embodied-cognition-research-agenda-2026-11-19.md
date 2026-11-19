@@ -1,8 +1,10 @@
 # Embodied NPC cognitive executive — audit and research agenda (2026-11-19)
 
-**Status:** Initial findings committed prior to new investigation. Design/research only; no runtime changes.  
+**Status:** Initial findings preserved as first commit; follow-up external research and code inspection now committed. Design/research only; no runtime changes.  
 **Baseline:** `main` at `0c99315090a928b3ffb42d1ee45181cdf98f9085` (G4.1 blueprint declarations merged).  
 **Scope:** Attention/cue arbitration, deterministic-vs-LLM authority, structured personality, emotional/social needs, self-directed goals, inventory/encumbrance, benchmarks.
+
+**Follow-up evidence:** [Cognitive executive research and implementation recommendations](cognitive-executive-followup-research-2026-11-19.md), including checked academic sources, source-code mechanisms, bounded schemas, pseudocode, and acceptance experiments.
 
 ## Summary of source-grounded findings
 
