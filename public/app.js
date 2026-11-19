@@ -195,6 +195,13 @@ function scheduleIdleAgents(){
  if(!state.connected){
   // Offline world rules need no serialized model inference lane.
   for(const n of due){
+   if(n.needs.social>=80&&n.energy>=25){
+    const partner=availableActivities(n).find(o=>o.key==='socialize'&&
+     o.target?.needs.social>=45&&o.target?.energy>=20);
+    if(partner&&setAction(n,'socialize','offline routine')){
+     n.thoughtAt=state.clock+18;continue;
+    }
+   }
    if(Projects.maybeStart(state,n)){
     WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
     n.thoughtAt=state.clock+18;continue;
