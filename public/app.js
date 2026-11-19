@@ -42,7 +42,8 @@ const initialNPCs = [
   thoughtAt:8*60+10+i*5,lastSeen:0},i));
 
 const state={clock:8*60+10, day:1, speed:1, paused:false, connected:false,
-  auto:true, backgroundBusy:false, conversationBusy:false, selected:'mara', lastDecisionMs:0,
+  auto:true, backgroundBusy:false, conversationBusy:false, debugPhysics:false,
+  selected:'mara', lastDecisionMs:0,
   zoom:1, camera:{x:0,y:0}, player:{x:21,y:12,path:[],travel:0},
   npcs:initialNPCs, world:AgentWorld.newWorld(), events:[], nextUI:0, nextSave:0, lastSocial:0};
 const $=id=>document.getElementById(id);
@@ -587,6 +588,25 @@ function drawWorld(){
    !item.player&&state.selected===item.actor.id,now);
  }
  VillageArt.drawAmbient(ctx,state.world,state.clock,now);
+ if(state.debugPhysics){
+  // Debug overlay uses the same authoritative collision map as the physics engine.
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(isBlocked(x,y)){
+   ctx.fillStyle='rgba(223,67,89,.12)';
+   ctx.fillRect(x*TILE,y*TILE,TILE,TILE);
+   ctx.strokeStyle='rgba(245,103,116,.45)';
+   ctx.lineWidth=.5;
+   ctx.strokeRect(x*TILE+.5,y*TILE+.5,TILE-1,TILE-1);
+  }
+  for(const agent of [state.player,...state.npcs]){
+   const b=agent.body;if(!b)continue;
+   ctx.beginPath();ctx.arc(b.x*TILE,b.y*TILE,b.radius*TILE,0,Math.PI*2);
+   ctx.strokeStyle=agent===state.player?'#72e7ee':'#ffe4a3';
+   ctx.lineWidth=.8;ctx.stroke();
+   ctx.beginPath();ctx.moveTo(b.x*TILE,b.y*TILE);
+   ctx.lineTo((b.x+b.vx*.22)*TILE,(b.y+b.vy*.22)*TILE);
+   ctx.stroke();
+  }
+ }
  ctx.restore();
 }
 function renderEvents(){
@@ -843,6 +863,11 @@ function setZoom(next){
 }
 $('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
 $('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
+$('physicsDebug').addEventListener('click',()=>{
+ state.debugPhysics=!state.debugPhysics;
+ $('physicsDebug').textContent=state.debugPhysics?'Physics: Debug on':'Physics: Debug off';
+ $('physicsDebug').setAttribute('aria-pressed',String(state.debugPhysics));
+});
 $('artToggle').addEventListener('click',()=>{
  if(!installedAtlas){
   record('Optional atlas not installed; original art remains active','routine');
