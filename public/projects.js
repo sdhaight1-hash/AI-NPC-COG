@@ -14,6 +14,47 @@
     {id:'build',requires:['wood','learn','binding'],produces:'nearby shelter',
      action:'build_shelter'}
    ]},
+  workbench:{
+   goal:'A usable woodworking bench within eight tiles',
+   nodes:[
+    {id:'fiber',requires:[],produces:'fiber >= 3',action:'collect_fiber'},
+    {id:'cord',requires:['fiber'],produces:'cord >= 1',action:'craft_cord'},
+    {id:'wood',requires:[],produces:'wood >= 3',action:'collect_wood'},
+    {id:'stone',requires:[],produces:'stone >= 1',action:'collect_stone'},
+    {id:'build',requires:['cord','wood','stone'],produces:'nearby workbench',
+     action:'craft_workbench'}
+   ]},
+  storage:{
+   goal:'A placed storage crate, made from finite components',
+   nodes:[
+    {id:'fiber_bench',requires:[],produces:'fiber >= 3',action:'collect_fiber'},
+    {id:'cord_bench',requires:['fiber_bench'],produces:'cord >= 1',action:'craft_cord'},
+    {id:'wood_bench',requires:[],produces:'wood >= 3',action:'collect_wood'},
+    {id:'stone_bench',requires:[],produces:'stone >= 1',action:'collect_stone'},
+    {id:'bench',requires:['cord_bench','wood_bench','stone_bench'],
+     produces:'nearby workbench',action:'craft_workbench'},
+    {id:'stone_blade',requires:[],produces:'stone >= 2',action:'collect_stone'},
+    {id:'blade',requires:['stone_blade'],produces:'blade >= 1',action:'craft_blade'},
+    {id:'fiber_hatchet',requires:[],produces:'fiber >= 3',action:'collect_fiber'},
+    {id:'cord_hatchet',requires:['fiber_hatchet'],
+     produces:'cord >= 1',action:'craft_cord'},
+    {id:'wood_hatchet',requires:[],produces:'wood >= 1',action:'collect_wood'},
+    {id:'hatchet',requires:['blade','cord_hatchet','wood_hatchet'],
+     produces:'hatchet >= 1',action:'craft_hafted_hatchet'},
+    {id:'wood_planks',requires:['bench','hatchet'],
+     produces:'wood >= 2',action:'collect_wood'},
+    {id:'planks',requires:['wood_planks','hatchet','bench'],
+     produces:'plank >= 3',action:'craft_planks'},
+    {id:'fiber_crate',requires:['planks'],produces:'fiber >= 3',action:'collect_fiber'},
+    {id:'cord_crate',requires:['fiber_crate'],
+     produces:'cord >= 1',action:'craft_cord'},
+    {id:'crate',requires:['planks','cord_crate'],
+     produces:'crate >= 1',action:'craft_crate'},
+    {id:'clear_site',requires:['crate'],produces:'space clear of structures',
+     action:'explore'},
+    {id:'build',requires:['clear_site','crate'],
+     produces:'placed crate nearby',action:'place_crate'}
+   ]},
   campfire:{
    goal:'A campfire within five tiles',
    nodes:[
@@ -57,6 +98,35 @@
    if(id==='learn')return knows('shelter');
    if(id==='binding')return have('fiber',3);
    if(id==='build')return isNear(state,n,'shelter');
+  }
+  if(kind==='workbench'){
+   if(id==='fiber')return have('fiber',3)||have('cord',1);
+   if(id==='cord')return have('cord',1)||isNear(state,n,'workbench');
+   if(id==='wood')return have('wood',3)||isNear(state,n,'workbench');
+   if(id==='stone')return have('stone',1)||isNear(state,n,'workbench');
+   if(id==='build')return isNear(state,n,'workbench');
+  }
+  if(kind==='storage'){
+   const bench=isNear(state,n,'workbench');
+   if(id==='fiber_bench')return have('fiber',3)||have('cord',1)||bench;
+   if(id==='cord_bench')return have('cord',1)||bench;
+   if(id==='wood_bench')return have('wood',3)||bench;
+   if(id==='stone_bench')return have('stone',1)||bench;
+   if(id==='bench')return bench;
+   if(id==='stone_blade')return have('stone',2)||have('blade',1)||have('hatchet',1);
+   if(id==='blade')return have('blade',1)||have('hatchet',1);
+   if(id==='fiber_hatchet')return have('fiber',3)||have('cord',1)||have('hatchet',1);
+   if(id==='cord_hatchet')return have('cord',1)||have('hatchet',1);
+   if(id==='wood_hatchet')return have('wood',1)||have('hatchet',1);
+   if(id==='hatchet')return have('hatchet',1);
+   if(id==='wood_planks')return have('wood',2)||have('plank',3)||have('crate',1);
+   if(id==='planks')return have('plank',3)||have('crate',1);
+   if(id==='fiber_crate')return have('fiber',3)||have('cord',1)||have('crate',1);
+   if(id==='cord_crate')return have('cord',1)||have('crate',1);
+   if(id==='crate')return have('crate',1)||isNear(state,n,'crate');
+   if(id==='clear_site')return !state.world.structures.some(s=>
+    root.Frontier.distance(state.world,n,s)<2);
+   if(id==='build')return isNear(state,n,'crate');
   }
   if(kind==='campfire'){
    if(id==='wood')return have('wood',2)||knows('campfire');
