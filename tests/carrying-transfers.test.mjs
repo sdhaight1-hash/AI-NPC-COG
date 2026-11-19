@@ -146,3 +146,25 @@ test('final crafting stage waits for actual carrying space without losing its wo
  assert.equal(n.inventory.cord,1);
  assert.ok(k.AgentWorld.carrying(n).volumeL<=45);
 });
+
+test('a distant personally built workbench remains actionable without exposing foreign unseen workshops',()=>{
+ const {k,s,n}=fixture();
+ n.inventory.wood=2;n.inventory.hatchet=1;
+ const reachable=k.WorldRuntime.reachability(s,n);
+ const site=s.world.nodes.find(x=>x.kind==='wood'&&
+  k.Frontier.distance(s.world,n,x)>12&&reachable(x));
+ assert.ok(site);
+ const bench={id:'workbench_99',type:'workbench',x:site.x,y:site.y,
+  craftQuality:2,maker:s.npcs[1].id};
+ s.world.structures.push(bench);
+ assert.ok(!k.Crafting.options(n,s.world).some(o=>o.key==='craft_planks'),
+  'Unseen distant foreign workshop is not an affordance');
+ bench.maker=n.id;
+ assert.equal(k.Crafting.options(n,s.world).find(o=>o.key==='craft_planks')?.ref,
+  bench.id);
+ assert.equal(k.WorldRuntime.available(s,n).find(o=>o.key==='craft_planks')?.ref,
+  bench.id,'The maker remembers their own physical station');
+ assert.equal(k.WorldRuntime.begin(s,n,'craft_planks'),true);
+ assert.ok(n.path.length>0,'The maker must travel instead of crafting remotely');
+ assert.equal(n.workpiece,null,'No free item or work from choosing the trip');
+});
