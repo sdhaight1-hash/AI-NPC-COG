@@ -17,10 +17,13 @@ if not defined NODE (
 )
 if not defined NODE goto missing_node
 
-if not exist "%ROOT%public\assets\kenney-tiny-town.png" (
+if not exist "%ROOT%public\assets\kenney-tiny-town.png" if not exist "%ROOT%_runtime\art-download-failed.flag" (
     echo Preparing optional CC0 pixel art on first start...
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\install-art.ps1"
-    if errorlevel 1 echo Optional tileset unavailable. Procedural art remains enabled.
+    if errorlevel 1 (
+        echo Optional tileset unavailable. Original pixel art stays active.
+        echo Retry by double-clicking install-art.bat.>"%ROOT%_runtime\art-download-failed.flag"
+    )
 )
 
 echo.
