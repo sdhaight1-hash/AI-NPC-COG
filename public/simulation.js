@@ -18,6 +18,7 @@
   const before=state.clock;
   state.clock+=elapsed;state.world.now=state.clock;
   state.day=Math.floor(state.clock/1440)+1;
+  root.Reservations?.expire(state);
   state.world.weather=Frontier.weather(state.world,state.clock);
   AgentWorld.regenerate(state.world,elapsed);
   const arrivals=Civilization.advanceArrivals(state,before,state.clock);
@@ -30,7 +31,11 @@
    const recovered=AgentWorld.stepNeeds(n,state.world,elapsed);
    if(recovered==='Recovered')ports.onRecovery?.(n);
    const death=Civilization.updateHealth(state,n,elapsed);
-   if(death){deaths.push({id:n.id,cause:death});ports.onDeath?.(n,death);continue;}
+   if(death){
+    root.Reservations?.releaseActor(state,n.id);
+    root.Activities?.finish(state,n,false,'ACTOR_DEAD');
+    deaths.push({id:n.id,cause:death});ports.onDeath?.(n,death);continue;
+   }
    if(!n.peerPending){
     if(n.task&&!n.path.length){
      root.Activities?.progress(state,n);
@@ -48,7 +53,8 @@
   const npcs=root.Civilization.founders(world,490);
   return {clock:490,day:1,paused:false,auto:true,npcs,dead:[],
    nextPersonId:6,world,events:[],selected:npcs[0]?.id||null,
-   commandSeq:0,receiptSeq:0,effectRevision:0,receipts:[]};
+   commandSeq:0,receiptSeq:0,effectRevision:0,receipts:[],
+   reservationSeq:0,reservations:[]};
  }
  // Canonical key ordering handles property insertion differences across
  // saves and VM realms. Non-finite numbers and cycles are invalid state.
