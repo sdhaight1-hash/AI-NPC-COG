@@ -238,6 +238,10 @@
  }
  function survival(state,n,hooks={}){
   if(n.peerPending||n.peerReservedFor)return false;
+  // Avoid a full flood-fill every simulated minute when no reflex is possible.
+  // These are exactly the thresholds used by Cognition.instinct.
+  if(n.needs.thirst<85&&n.bio?.hydrationBudgetMl>=350&&
+   n.needs.hunger<85&&n.bio?.longTermKcal>=150&&n.energy>18)return false;
   const urgent=root.Cognition.instinct(n,available(state,n));
   if(!urgent)return false;
   const critical=n.needs.thirst>=90||n.needs.hunger>=95||
