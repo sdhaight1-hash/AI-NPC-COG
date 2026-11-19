@@ -91,6 +91,7 @@ test('world simulation advances a legal shelter project without granting resourc
  assert.equal(n.inventory.wood,0);
  assert.ok(s.receipts.some(x=>x.status==='COMPLETED'&&x.action==='build_shelter'));
  assert.ok(n.project.completedActions>=2);
+ assert.ok(s.receipts.filter(x=>x.action==='craft_stage'&&x.status==='COMPLETED').length>=8);
 });
 
 test('critical thirst interrupts a physical project task and resumes remaining work',()=>{
