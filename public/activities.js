@@ -43,6 +43,7 @@
   const [a]=stack.splice(index,1);
   a.state='RUNNING';a.lastTick=state.clock;a.reason=null;
   n.currentActivity=a;
+  root.WorldReceipts.lifecycle(state,n,a,'RESUMED');
   return a;
  }
  function interrupt(state,n,reason='INTERRUPTED'){
@@ -54,6 +55,7 @@
   (n.suspendedActivities ||= []).push(a);
   n.suspendedActivities=n.suspendedActivities.slice(-4);
   n.currentActivity=null;
+  root.WorldReceipts.lifecycle(state,n,a,'INTERRUPTED',a.reason);
   return a;
  }
  function finish(state,n,success=true,reason=null){
