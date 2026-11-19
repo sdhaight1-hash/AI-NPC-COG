@@ -17,7 +17,7 @@
  };
  const category=k=>CATEGORIES[k]||(k.startsWith('craft_')||k.startsWith('experiment_')
   ||k.startsWith('stash_')||k.startsWith('withdraw_')?'craft':
-  k==='pickup_item'||k==='drop_wood'?'craft':'curiosity');
+  k==='pickup_item'||k.startsWith('drop_')?'craft':'curiosity');
  const personalityBias=(n,kind)=>{
   const p=String(n.personality||'').toLowerCase();
   if(kind==='social')return /expressive|gentle/.test(p)?16:/reserved|independent/.test(p)?-10:0;
