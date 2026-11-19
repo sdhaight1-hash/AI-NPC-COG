@@ -595,8 +595,9 @@ test('a model decision is rejected if its personal resource target changed durin
 
 test('new critical physiology supersedes an obsolete pending model decision',async()=>{
  let resolveDecision;
+ const response=new Promise(resolve=>resolveDecision=resolve);
  const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
-  new Promise(resolve=>{resolveDecision=resolve}):{connected:true}})});
+  response:{connected:true}})});
  b.state.connected=true;
  const n=b.state.npcs[0];
  const waiting=b.deliberate(n);
@@ -611,8 +612,9 @@ test('new critical physiology supersedes an obsolete pending model decision',asy
 
 test('unrelated actors and world receipts do not invalidate a personal model choice',async()=>{
  let resolveDecision;
+ const response=new Promise(resolve=>resolveDecision=resolve);
  const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
-  new Promise(resolve=>{resolveDecision=resolve}):{connected:true}})});
+  response:{connected:true}})});
  b.state.connected=true;
  const [n,other]=b.state.npcs;
  const waiting=b.deliberate(n);
