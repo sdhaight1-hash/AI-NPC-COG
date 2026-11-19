@@ -10,7 +10,7 @@ const state={clock:490,speed:60,day:1,paused:false,auto:true,connected:false,
  backgroundBusy:false,conversationBusy:false,debugGrid:false,
  model:'rein',modelLabel:'Rein-NPC-4B',
  npcs:founders,dead:[],nextPersonId:6,world,events:[],selected:founders[0].id,
- zoom:1,viewZ:0,follow:true,camera:{x:0,y:0},nextUI:0,nextSave:0,lastDecisionMs:0};
+ zoom:1,viewZ:0,follow:true,selectedObject:null,camera:{x:0,y:0},nextUI:0,nextSave:0,lastDecisionMs:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
 const dist=(a,b)=>Frontier.distance(state.world,a,b);
@@ -19,7 +19,7 @@ const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
 const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
  fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_wood_stone:15,
  experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
- build_fire:20,build_shelter:75,share_food:2,socialize:3,explore:1,none:1};
+ build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,pickup_item:2,explore:1,none:1};
 let installedAtlas=null,showAtlas=true;
 function selectedNpc(){return state.npcs.find(n=>n.id===state.selected)||null;}
 function selectNpc(id){
@@ -161,7 +161,9 @@ function sceneFor(n){
   ' Inventory: '+Object.entries(n.inventory).map(([k,v])=>k+' '+v).join(', ')+
   '. Skills earned by actions: '+Object.entries(n.skills).filter(([,v])=>v>0)
    .map(([k,v])=>k+' '+v).join(', ')+
-  '. Known crafting methods: '+known+'. Near people: '+others+
+  '. Known crafting methods: '+known+'. Personally inspected: '+
+  (n.knowledge?.observations||[]).slice(-4).map(o=>o.text).join('; ')+
+  '. Near people: '+others+
   '. Perceived resources: '+nearby+'. Recollections: '+memories+
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
@@ -169,7 +171,7 @@ function sceneFor(n){
 function backgroundOptions(n){
  const options=availableActivities(n).filter(o=>o.key!=='none');
  const priority={drink:100,fill_water:80,eat:90,forage:70,
-  rest:60,explore:45,experiment_wood_stone:43,
+  rest:60,explore:45,inspect:62,pickup_item:63,drop_wood:12,experiment_wood_stone:43,
   experiment_wood_fiber:43,experiment_wood_stone_fiber:43,craft_hatchet:45,
   collect_wood:35,collect_stone:33,collect_fiber:33,
   socialize:40,share_food:35,make_shelter:42,build_shelter:50,
@@ -178,6 +180,7 @@ function backgroundOptions(n){
   ((o.key==='drink'||o.key==='fill_water')?n.needs.thirst*.5:0)+
   ((o.key==='eat'||o.key==='forage')?n.needs.hunger*.4:0)+
   (o.key==='rest'?(100-n.energy)*.5:0)+
+  (o.key==='socialize'?n.needs.social*.65:0)+
   (Frontier.hash(n.x,n.y,Math.floor(state.clock/33)+o.key.length*17)-.5)*22;
  options.sort((a,b)=>urgency(b)-urgency(a));
  const result=options.slice(0,9);
@@ -203,11 +206,24 @@ function survivalReflex(n){
  }else if(n.energy<18&&has('rest'))action='rest';
  return action?setAction(n,action,'survival reflex'):false;
 }
+function socialInitiative(n){
+ if(!state.connected||n.needs.social<50||n.energy<25||
+  n.task||n.plan||n.path.length||n.peerPending||n.peerReservedFor||
+  state.clock<(n.lastPeerAt??-100000)+90)return false;
+ return setAction(n,'socialize','social initiative');
+}
 function scheduleIdleAgents(){
  if(!state.auto||state.conversationBusy||state.paused)return;
  // Survival is a mechanical reaction, not a fictitious model decision.
  for(const n of state.npcs)survivalReflex(n);
- const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&
+ // A social need can initiate a meeting, never fabricate dialogue.
+ if(state.connected&&!state.backgroundBusy){
+  const initiator=state.npcs.find(n=>n.needs.social>=50&&
+   !n.task&&!n.plan&&!n.path.length&&!n.peerReservedFor&&!n.peerPending&&
+   state.clock>=n.thoughtAt);
+  if(initiator)socialInitiative(initiator);
+ }
+ const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&!n.peerReservedFor&&
   n.action!=='rest'&&state.clock>=n.thoughtAt)
   .sort((a,b)=>a.thoughtAt-b.thoughtAt);
  if(!state.connected){
@@ -228,7 +244,7 @@ function finishPlan(n,reason,type='social'){
  n.goal='Reconsidering my next action';n.thoughtAt=state.clock+3;
 }
 function setAction(n,action,source='rein',scores=null){
- if(!state.npcs.includes(n))return false;
+ if(!state.npcs.includes(n)||n.task||n.peerReservedFor)return false;
  const option=availableActivities(n).find(v=>v.key===action);
  if(!option)return false;
  if(['stock_food','make_campfire','make_shelter'].includes(action)){
@@ -250,6 +266,7 @@ function setAction(n,action,source='rein',scores=null){
   n.action=action;n.source=source;n.scores=scores;
   n.task={key:action,ref:option.ref||null,readyAt:n.path.length?null:
    state.clock+(DURATIONS[action]||2)};
+  if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
   n.goal=action.replaceAll('_',' ')+' (self-chosen)';
  }
  record(n.name+' chose '+action.replaceAll('_',' ')+' ['+source+']',
@@ -374,6 +391,7 @@ async function peerExchange(n,other){
   if(n.task?.key==='socialize')n.task=null;
   n.action='none';n.thoughtAt=state.clock+8;
  }finally{
+  if(other.peerReservedFor===n.id)delete other.peerReservedFor;
   n.peerPending=false;other.peerPending=false;state.backgroundBusy=false;
   state.lastDecisionMs=performance.now();
  }
@@ -538,7 +556,7 @@ function renderChat(){
  }
 }
 function serializePerson(n){
- const {travel,motion,blockedFor,peerPending,peerRetryAt,...stored}=n;
+ const {travel,motion,blockedFor,peerPending,peerReservedFor,peerRetryAt,...stored}=n;
  return stored;
 }
 function save(){
@@ -600,6 +618,12 @@ function restore(){
    n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
     [...new Set(old.knowledge.recipes.filter(v=>
       ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
+   if(Array.isArray(old.knowledge?.observations))
+    n.knowledge.observations=old.knowledge.observations.filter(o=>o&&
+     typeof o.id==='string'&&AgentWorld.objectById(state.world,o.id)&&
+     typeof o.text==='string'&&Number.isFinite(o.at))
+     .slice(-40).map(o=>({id:o.id,kind:String(o.kind||'').slice(0,30),
+      at:o.at,text:o.text.slice(0,240)}));
    if(Array.isArray(old.memories))n.memories=old.memories.slice(-24);
    if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
@@ -637,7 +661,9 @@ function step(dt){
  const arrivals=Civilization.advanceArrivals(state,before,state.clock);
  for(const n of arrivals)record(n.name+' arrived in the wilderness','social');
  for(const n of [...state.npcs]){
-  if(!n.peerPending)updateMovement(n,elapsed);
+  if(n.peerReservedFor&&!state.npcs.some(peer=>peer.id===n.peerReservedFor&&
+   peer.task?.key==='socialize'&&peer.task.ref===n.id))delete n.peerReservedFor;
+  if(!n.peerPending&&!n.peerReservedFor)updateMovement(n,elapsed);
   AgentWorld.stepNeeds(n,state.world,elapsed);
   const death=Civilization.updateHealth(state,n,elapsed);
   if(death){record(n.name+' died of '+death,'warning');continue;}
