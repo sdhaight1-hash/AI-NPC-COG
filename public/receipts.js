@@ -86,17 +86,20 @@
    action:input.action,targetId:input.targetId??null,
    status:input.status,reason:input.reason??null,
    source:input.source??null,
+   inferenceMs:Number.isFinite(input.inferenceMs)&&input.inferenceMs>=0?
+    Math.min(60000,input.inferenceMs):null,
    effectRevision:state.effectRevision||0,delta:input.delta||{}};
   state.receipts.push(receipt);
   if(state.receipts.length>MAX)state.receipts.splice(0,state.receipts.length-MAX);
   return receipt;
  }
- function accept(state,n,action,commandId,ref=null){
-  return append(state,{actorId:n.id,commandId,action,targetId:ref,status:'ACCEPTED'});
+ function accept(state,n,action,commandId,ref=null,source='simulation'){
+  return append(state,{actorId:n.id,commandId,action,targetId:ref,
+   status:'ACCEPTED',source:String(source).slice(0,32)});
  }
- function decision(state,n,action,source,status='DECIDED',reason=null){
-  return append(state,{actorId:n.id,commandId:null,action,source,
-   status,reason});
+ function decision(state,n,action,source,status='DECIDED',reason=null,inferenceMs=null){
+  return append(state,{actorId:n.id,commandId:null,action,
+   source:String(source).slice(0,32),status,reason,inferenceMs});
  }
  function committed(state,commandId){
   return state.receipts?.find(r=>r.commandId===commandId&&
