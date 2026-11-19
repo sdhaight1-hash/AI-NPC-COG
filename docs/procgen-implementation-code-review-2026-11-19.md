@@ -52,3 +52,31 @@ For a toroidal 80×52 world, a whole-map decoration solver may be simpler than p
 ## 5. General graphics principles
 
 Vector source paths, polygons, Bézier outlines and signed distances can be stored at authoring resolution; runtime display as raster atlases or PixiJS textures. PixiJS itself [recommends caching costly graphics shapes as textures](https://pixijs.com/8.x/guides/components/scene-objects/graphics), and [performance guidance](https://pixijs.com/8.x/guides/concepts/performance-tips) warns that many complex graphics shapes and repeated cache updates may be slow. At 4,160 cells Canvas2D remains the baseline; GPU is an **experiment**, not an automatic improvement.
+
+## 6. World generation identity and region queries (#70)
+
+Revision 1 names the original generator, including its 80 × 52 torus and z range
+of −4 through 3. Three legacy seed fingerprints pin both terrain and initial
+resource placement. A save without a descriptor is accepted as revision 1
+when the seed and dimensions agree. An incompatible descriptor stops restore
+before applying the checkpoint. Browser autosave preserves the original bytes.
+
+`Frontier.baseRegion` samples one z level in row-major order using absolute
+coordinates. Both horizontal axes wrap, including negative origins. The
+generated terrain array is still the live baseline. Finite stock depletion
+and tile changes are persisted as mutable world state. Region queries never
+apply edits or recreate a resource depleted by gameplay.
+
+For future 16 or 32 tile ownership, wrap a tile to canonical coordinates,
+then use floor division to find its region. A 16-tile partition has a final
+16 × 4 southern row. A 32-tile partition has a final 16-tile eastern column
+and a final 20-tile southern row. Borders use cropped dimensions, and sample
+requests can cross either seam. Cache load order and render eviction have
+no effect on mutable state.
+
+A Node 26 smoke measurement on the 4,160-cell map compared 500 full-world
+scans after 50 warmups. Cached and dense reads stayed below 0.1 ms per scan
+in both partitions. Recomputing the same surface regions cost about 0.86 ms.
+A fully cached partition stores the same 4,160 tile values with additional
+array overhead (20 arrays at size 16, six at size 32). The measured scope
+was terrain sampling, with browser frame rate and larger worlds left open.

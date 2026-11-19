@@ -660,13 +660,19 @@ function renderChat(){
 }
 function serializePerson(n){return Persistence.save({...state,npcs:[n]}).npcs[0];}
 function save(){
+ if(state.saveLoadFailed)return;
  try{localStorage.setItem(STORE,JSON.stringify(Persistence.save(state)));}
  catch{ /* Retain current world when browser storage is unavailable. */ }
 }
 function validSavedPath(path,start){return Persistence.validSavedPath(state,path,start);}
 function restore(){
- try{return Persistence.restore(state,JSON.parse(localStorage.getItem(STORE)||'null'));}
- catch{return false;}
+ try{
+  const raw=localStorage.getItem(STORE);
+  if(raw===null||Persistence.restore(state,JSON.parse(raw)))return true;
+ }catch{ /* The incompatible checkpoint stays in storage. */ }
+ state.saveLoadFailed=true;
+ state.paused=true;
+ return false;
 }
 function step(dt){
  if(state.paused||dt<=0)return;
@@ -836,12 +842,13 @@ function tick(now){
 }
 try{
  // Restore before rendering the terrain, so saved worlds paint the right map.
- restore();
+ const restored=restore();
  drawStaticWorld();loadTileset();
  state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
  for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
  renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
- record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
+ if(restored)record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
+ else record('Saved world could not be loaded. Its checkpoint was preserved and autosave is disabled.','error');
 }catch(error){
  // A transient startup canvas/UI failure must not prevent clock startup.
  console.error('AI-NPC-COG startup failure:',error);

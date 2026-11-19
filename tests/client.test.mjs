@@ -629,3 +629,18 @@ test('unrelated actors and world receipts do not invalidate a personal model cho
  assert.equal(b.activity(n).decisions,1);
  assert.ok(n.task||n.plan,'Accepted none decision should allow self-directed work');
 });
+
+test('an incompatible world generator checkpoint is preserved by browser autosave',()=>{
+ const initial=makeBrowser();
+ initial.save();
+ const key='ai-npc-cog-v3';
+ const checkpoint=JSON.parse(initial.saved.get(key));
+ checkpoint.world.generator.revision+=1;
+ const raw=JSON.stringify(checkpoint);
+ initial.saved.set(key,raw);
+ const reopened=makeBrowser({saved:initial.saved});
+ assert.equal(reopened.state.paused,true);
+ assert.match(reopened.state.events[0].text,/checkpoint was preserved/);
+ reopened.save();
+ assert.equal(reopened.saved.get(key),raw);
+});
