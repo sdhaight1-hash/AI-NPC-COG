@@ -116,6 +116,7 @@ function restore(state,saved){
      readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
    }
    root.Activities.restore(n,old,state.clock);
+   n.project=root.Projects.restore(old.project,state.clock);
    n.plan=AgentWorld.validatePlan(old.plan);
    if(n.task&&!n.task.commandId)n.task.commandId='cmd_'+(++state.commandSeq);
    if(n.task?.commandId){
@@ -125,7 +126,12 @@ function restore(state,saved){
    if(n.workpiece&&(!n.plan||n.plan.key!=='craft_project'||
     n.plan.recipe!==n.workpiece.recipe))
     n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
-   if(!n.workpiece&&n.plan?.key==='craft_project')n.plan=null;
+   if(!n.workpiece&&n.plan?.key==='craft_project'){
+    n.plan=n.project?.status==='ACTIVE'&&n.project.goal==='make_workbench'?
+     {key:n.project.goal,steps:n.project.completedOps}:null;
+   }
+   if(n.project?.status==='ACTIVE'&&!n.plan)
+    n.plan={key:n.project.goal,steps:n.project.completedOps};
    if(n.plan&&(!n.agency.goal||n.agency.goal.key!==n.plan.key))
     n.agency.goal={key:n.plan.key,source:'restored project',
      reason:'security',startedAt:state.clock,progress:n.plan.steps};
