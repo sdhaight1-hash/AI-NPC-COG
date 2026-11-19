@@ -45,7 +45,7 @@
     ' ('+(npc.workpiece.stage+1)+'/'+spec.stages.length+' stages)',
     target:station||null,ref:station?.id||null}];
   }
-  return Object.entries(RECIPES).flatMap(([id,spec])=>{
+  const work=Object.entries(RECIPES).flatMap(([id,spec])=>{
    if(!hasInputs(npc,spec)||npc.energy<18||
     (spec.tool&&(npc.inventory[spec.tool]||0)<1))return [];
    if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)return [];
@@ -58,6 +58,24 @@
     '; '+spec.stages.length+' production stages'+(spec.station?' at '+spec.station:''),
     target:station||null,ref:station?.id||null}];
   });
+  if(npc.inventory.crate>0&&world.structures.length<80&&
+   !world.structures.some(s=>root.Frontier.distance(world,npc,s)<2))
+   work.push({key:'place_crate',
+    when:'Place a crafted wooden crate on the ground'});
+  const crate=world.structures.find(s=>s.type==='crate'&&
+   root.Frontier.distance(world,npc,s)<=8);
+  if(crate){
+   const occupied=Object.values(crate.contents||{}).reduce((sum,v)=>sum+v,0);
+   for(const kind of ['wood','stone','fiber']){
+    if((npc.inventory[kind]||0)>0&&occupied<crate.capacity)
+     work.push({key:'stash_'+kind,when:'Store one '+kind+' in an existing crate',
+      target:crate,ref:crate.id});
+    if((crate.contents?.[kind]||0)>0&&npc.inventory[kind]<1000)
+     work.push({key:'withdraw_'+kind,when:'Retrieve one '+kind+' from a crate',
+      target:crate,ref:crate.id});
+   }
+  }
+  return work;
  }
  function getRecipe(id){return RECIPES[id]||null;}
  function begin(npc,world,id,stationId=null){
@@ -113,7 +131,10 @@
    world.structures.length>=80)
    return {ok:false,message:'World structure limit reached'};
   const practiced=npc.skills.crafting||0;
-  const technique=Math.min(5,1+Math.floor(practiced/4));
+  const workshop=part.station?
+   world.structures.find(s=>s.id===part.station):null;
+  const technique=Math.min(5,1+Math.floor(practiced/4)+
+   (workshop?.craftQuality>=4?1:0));
   part.workmanship+=technique;
   npc.energy=Math.max(0,npc.energy-4);
   npc.skills.crafting=practiced+1;
@@ -126,7 +147,7 @@
   const output=spec.output;
   if(output.structure){
    world.structures.push({id:'workbench_'+(world.structures.length+1),
-    type:'workbench',x:npc.x,y:npc.y,craftQuality:quality});
+    type:'workbench',x:npc.x,y:npc.y,craftQuality:quality,maker:npc.id});
   }else{
    npc.craftedItems ||= [];
    for(let i=0;i<output.count;i++)npc.craftedItems.push({
@@ -137,6 +158,41 @@
   npc.workpiece=null;
   return {ok:true,message:'Finished '+spec.name+' (quality '+quality+'/5)'+
    (output.kind?'; produced '+output.count+' '+output.kind:'; workshop constructed')};
+ }
+ function interact(npc,world,action,targetId){
+  if(action==='place_crate'){
+   if(npc.inventory.crate<1||world.structures.length>=80||
+    world.structures.some(s=>root.Frontier.distance(world,npc,s)<2))
+    return {ok:false,message:'No valid location or crate available'};
+   const index=npc.craftedItems.findIndex(item=>item.kind==='crate');
+   if(index===-1)return {ok:false,message:'No crafted crate available'};
+   const item=npc.craftedItems.splice(index,1)[0];
+   npc.inventory.crate--;
+   world.structures.push({id:'crate_'+(world.structures.length+1),
+    type:'crate',x:npc.x,y:npc.y,craftQuality:item.quality,
+    maker:item.maker,capacity:8+item.quality*4,
+    contents:{wood:0,stone:0,fiber:0}});
+   return {ok:true,message:'Placed a quality '+item.quality+'/5 storage crate'};
+  }
+  const match=/^(stash|withdraw)_(wood|stone|fiber)$/.exec(action);
+  if(!match)return {ok:false,message:'Unknown storage interaction'};
+  const crate=world.structures.find(s=>s.id===targetId&&s.type==='crate');
+  if(!crate||root.Frontier.distance(world,npc,crate)>1)
+   return {ok:false,message:'Crate is no longer within reach'};
+  const [,verb,kind]=match;
+  const occupied=Object.values(crate.contents).reduce((sum,v)=>sum+v,0);
+  if(verb==='stash'){
+   if((npc.inventory[kind]||0)<1||occupied>=crate.capacity)
+    return {ok:false,message:'No material or crate space remains'};
+   npc.inventory[kind]--;crate.contents[kind]++;
+  }else{
+   if(crate.contents[kind]<1||(npc.inventory[kind]||0)>=1000)
+    return {ok:false,message:'No stored material or inventory space'};
+   crate.contents[kind]--;npc.inventory[kind]++;
+  }
+  return {ok:true,message:(verb==='stash'?'Stored ':'Retrieved ')+
+   'one '+kind+' ('+Object.values(crate.contents).reduce((a,b)=>a+b,0)+
+   '/'+crate.capacity+' crate slots used)'};
  }
  function restore(npc,source){
   npc.craftedItems=Array.isArray(source?.craftedItems)?
@@ -166,5 +222,5 @@
     materialQuality:p.materialQuality,station:typeof p.station==='string'?p.station:null,
     x:npc.x,y:npc.y,startedAt:p.startedAt}:null;
  }
- root.Crafting={RECIPES,MATERIALS,options,getRecipe,begin,advance,restore};
+ root.Crafting={RECIPES,MATERIALS,options,getRecipe,begin,advance,interact,restore};
 })(globalThis);
