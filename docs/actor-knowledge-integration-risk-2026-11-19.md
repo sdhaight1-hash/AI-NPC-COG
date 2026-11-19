@@ -44,3 +44,9 @@ Existing `EvidenceMemory` remains the strongest source of physical evidence; leg
 6. **No context leaks:** authoritative `WorldReceipts.snapshot().others` must never become an input to the actor's language prompt or model-facing cue.
 
 This is an **integration seam**, not evidence that the current memory system already misbehaves in a particular observed player recording. Confirm via deterministic counterfactual tests before changing code.
+
+## Implementation checkpoint — toroidal recall locality (2026-11-19)
+
+[PR #80](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/80) replaces unwrapped Manhattan distance in `Cognition.recall` with the actual periodic shortest x/y distance, using the canonical `Frontier.WIDTH` and `HEIGHT`. An episodic memory recorded at x=width−1 or y=height−1 now receives the same location-priority bonus as any adjacent memory when the actor stands on coordinate zero. A VM test compares near-seam memories with a genuine faraway memory.
+
+**Not implemented:** merged belief authority, learned semantic/episodic weighting or memory-conditional world execution. This is a focused correctness fix only.

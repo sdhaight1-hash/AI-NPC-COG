@@ -106,3 +106,21 @@ test('hydration instinct scouts, stocks and drinks before dehydration is lethal'
  npc.needs.thirst=20;
  assert.equal(C.instinct(npc,options),null,'Healthy hydrated actors are not compulsively interrupted');
 });
+
+test('episodic locality ranks personally remembered places across both toroidal seams',()=>{
+ const {npc,Cognition:C,Frontier:F}=setup();
+ npc.x=0;npc.y=0;
+ npc.memories=[
+  {text:'far inland',at:500,x:20,y:20,salience:1,kind:'observation'},
+  {text:'adjacent across eastern seam',at:500,x:F.WIDTH-1,y:0,
+   salience:1,kind:'observation'},
+  {text:'adjacent across southern seam',at:500,x:0,y:F.HEIGHT-1,
+   salience:1,kind:'observation'}
+ ];
+ const found=C.recall(npc,'',500,3);
+ assert.ok(found.findIndex(m=>m.text==='far inland')>0);
+ assert.ok(found.findIndex(m=>m.text==='far inland')>
+  found.findIndex(m=>m.text==='adjacent across eastern seam'));
+ assert.ok(found.findIndex(m=>m.text==='far inland')>
+  found.findIndex(m=>m.text==='adjacent across southern seam'));
+});
