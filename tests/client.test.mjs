@@ -471,3 +471,16 @@ test('transient canvas failure cannot permanently stop the simulation frame loop
   'After a rendering error, the world clock still advances');
  assert.ok(b.frames.length>initialFrames+10);
 });
+
+test('at 1x speed the HUD shows advancing seconds even before the minute changes',()=>{
+ const b=makeBrowser();
+ b.state.speed=1;
+ b.tick(1000);
+ const initial=b.elements.get('worldTime').textContent;
+ for(let ms=1050;ms<=4100;ms+=50)b.tick(ms);
+ const after=b.elements.get('worldTime').textContent;
+ assert.match(after,/^\d{2}:\d{2}:\d{2}$/);
+ assert.notEqual(after,initial,'Visible seconds distinguish slow time from a freeze');
+ assert.equal(after.slice(0,5),initial.slice(0,5),
+  'A few seconds should not advance an entire simulated minute at 1x');
+});
