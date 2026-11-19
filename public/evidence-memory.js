@@ -18,13 +18,27 @@
   salience=2,fact=null}={}){
   if(!kinds.has(type)||typeof text!=='string'||!text.trim())return null;
   const receipt=sourceReceipt(sim,n,receiptId);
-  // Structured observations are trusted only when they have the completed
-  // physical command receipt belonging to the same actor.
   if((type==='action'||type==='inspection'||fact)&&!receipt)return null;
+  if(receipt&&(type==='action'||type==='inspection')){
+   if(type==='inspection'){
+    if(receipt.action!=='inspect'||receipt.targetId!==ref)return null;
+    const observed=root.Perception?.inspect(sim,n,ref);
+    if(!observed)return null;
+    // Caller-supplied descriptions and facts never become witnessed truth.
+    text='Inspected '+observed.kind+' at '+observed.x+','+observed.y;
+    fact=Number.isInteger(observed.stock)?{key:'stock',value:observed.stock}:null;
+   }else{
+    if(receipt.action==='inspect')return null;
+    text='Completed '+String(receipt.action||'').slice(0,48);
+    fact=null;
+    ref=receipt.targetId??null;
+   }
+  }else if(fact)return null;
   const memory=state(n);
   const entry={id:'ev_'+(++memory.sequence),type,text:text.slice(0,180),
    at:sim.clock,ref:typeof ref==='string'?ref.slice(0,100):null,
-   receiptId:receipt?.id||null,certainty:receipt?'observed':'reported',
+   receiptId:receipt?.id||null,certainty:receipt&&
+    (type==='action'||type==='inspection')?'observed':'reported',
    salience:Math.max(1,Math.min(5,Number(salience)||2)),
    location:{x:n.x,y:n.y,z:n.z||0}};
   memory.episodes.push(entry);
