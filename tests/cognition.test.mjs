@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 
 function setup(){
  const context={};
- for(const path of ['frontier.js','biology.js','crafting.js','cognition.js','emergence.js','civilization.js']){
+ for(const path of ['frontier.js','biology.js','crafting.js','cognition.js','agency.js','emergence.js','civilization.js']){
   vm.runInNewContext(readFileSync(new URL('../public/'+path,import.meta.url),'utf8'),context);
  }
  const world=context.AgentWorld.newWorld(379210);
