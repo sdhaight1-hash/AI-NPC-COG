@@ -11,7 +11,7 @@
   stash_fiber:2,withdraw_wood:2,withdraw_stone:2,withdraw_fiber:2,
   build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
  const GOALS=new Set(['stock_food','stock_water','stock_wood','stock_stone',
-  'stock_fiber','make_campfire','make_shelter']);
+  'stock_fiber','make_campfire','make_shelter','make_workbench']);
  const pointKey=p=>(p.z||0)+':'+p.x+':'+p.y;
  const distance=(state,a,b)=>root.Frontier.distance(state.world,a,b);
  const wrap=(v,extent)=>root.Frontier.wrap(v,extent);
@@ -183,6 +183,7 @@
   if(GOALS.has(action)){
    if(n.plan)return false;
    n.plan={key:action,steps:0,commandId};n.nextPlanAt=state.clock;
+   n.project=root.Projects.build(action,state.clock);
    n.goal='Pursuing '+action;n.action='none';n.source=source;n.scores=scores;
   }else if(action==='none'){
    n.action='none';n.task=null;n.source=source;n.scores=scores;
@@ -234,7 +235,22 @@
  }
  function finishPlan(state,n,reason,hooks={}){
   if(!n.plan)return;
-  const success=reason==='Plan completed';
+  const isCraftChild=n.plan.key==='craft_project'&&
+   n.project?.goal==='make_workbench'&&n.project.status!=='CANCELLED';
+  if(isCraftChild){
+   const prior=n.plan.key;
+   n.plan={key:n.project.goal,steps:n.project.completedOps};
+   n.nextPlanAt=state.clock+1;
+   n.task=null;n.action='none';
+   n.goal='Resuming '+n.project.goal+' after '+prior;
+   return;
+  }
+  const success=reason==='Plan completed'&&
+   (!n.project||root.Projects.goalMet(n,state.world,n.project));
+  if(n.project){
+   n.project.status=success?'COMPLETE':'ABANDONED';
+   n.project.blockedReason=success?null:String(reason).slice(0,96);
+  }
   root.Agency.finish(n,success,state.clock);
   remember(state,n,'Plan '+n.plan.key+': '+reason,
    {kind:success?'success':'failure',action:n.plan.key,salience:success?4:3});
@@ -260,6 +276,7 @@
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
+  root.Projects.update(n,state.world,n.project,outcome.receipt);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
@@ -288,12 +305,28 @@
  function advancePlan(state,n,hooks={}){
   if(!n.plan||n.task||n.path.length||n.action==='rest'||
    state.clock<(n.nextPlanAt||0))return;
-  const result=root.AgentWorld.nextPlanAction(n,state.world,state.npcs,reachability(state,n));
+  const result=n.plan.key==='make_workbench'&&n.project?
+   root.Projects.choose(n,state.world,n.project,available(state,n)):
+   root.AgentWorld.nextPlanAction(n,state.world,state.npcs,reachability(state,n));
   if(result.status==='done')return finishPlan(state,n,'Plan completed',hooks);
-  if(result.status==='blocked')return finishPlan(state,n,result.reason,hooks);
-  if(!begin(state,n,result.option.key,'plan',null,hooks))
+  if(result.status==='blocked'){
+   if(n.project){
+    root.Projects.blocked(n.project,result.reason,state.clock,result.node);
+    n.nextPlanAt=state.clock+Math.min(45,3+n.project.retries*2);
+    stats(n).blocked++;note(n,'Project blocked: '+result.reason);
+    if(n.project.retries<20)return;
+   }
+   return finishPlan(state,n,'Plan blocked: '+result.reason,hooks);
+  }
+  if(!begin(state,n,result.option.key,'plan',null,hooks)){
+   if(n.project){
+    root.Projects.blocked(n.project,'RESERVATION_OR_PATH_BLOCKED',state.clock,result.node);
+    n.nextPlanAt=state.clock+5;return;
+   }
    finishPlan(state,n,'Subaction unavailable',hooks);
+  }
  }
+
  function survival(state,n,hooks={}){
   if(n.peerPending||n.peerReservedFor)return false;
   // Avoid a full flood-fill every simulated minute when no reflex is possible.
