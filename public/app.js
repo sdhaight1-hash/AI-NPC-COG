@@ -456,8 +456,15 @@ function drawWorld(){
   const x=ox-state.camera.x,y=oy-state.camera.y;
   if(x>vw||y>vh||x+W*TILE<0||y+H*TILE<0)continue;
   ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.drawImage(layer,0,0);
-  if(state.viewZ===0)VillageArt.drawWorldObjects(ctx,state.world,{
-   left:-1,top:-1,right:W+1,bottom:H+1});
+  if(state.viewZ===0){
+   VillageArt.drawWorldObjects(ctx,state.world,{
+    left:-1,top:-1,right:W+1,bottom:H+1});
+   const focused=AgentWorld.objectById(state.world,state.selectedObject);
+   if(focused){
+    ctx.strokeStyle='#fff0a6';ctx.lineWidth=2;
+    ctx.strokeRect(focused.x*TILE+1,focused.y*TILE+1,TILE-2,TILE-2);
+   }
+  }
   for(const n of state.npcs.filter(v=>(v.z||0)===state.viewZ)
    .sort((a,b)=>position(a).y-position(b).y)){
    const p=position(n);
@@ -543,6 +550,15 @@ function updateInspector(){
  }
  renderChat();
 }
+function renderObjectInspector(){
+ const object=AgentWorld.objectById(state.world,state.selectedObject);
+ const info=AgentWorld.describeObject(state.world,object);
+ $('objectName').textContent=info?.name||'Select a resource or object on the map';
+ $('objectDetail').textContent=info?info.description:
+  'Click a tree, berry shrub, spring, stone outcrop, item or constructed object.';
+ $('objectLocation').textContent=info?
+  'Position '+info.x+', '+info.y+' · Physical state persists':'No object selected';
+}
 function renderChat(){
  const n=selectedNpc(),area=$('chatLog');area.replaceChildren();
  if(!n)return;
@@ -551,8 +567,22 @@ function renderChat(){
   row.textContent=ex.at+' · '+ex.first+' / '+ex.second;area.append(row);
  }
  if(!n.peerLog.length){
-  const empty=document.createElement('div');empty.className='empty';
-  empty.textContent='No witnessed conversations yet.';area.append(empty);
+  const publicTalk=state.npcs.flatMap(person=>(person.peerLog||[])
+   .filter(ex=>person.id<ex.with).map(ex=>({...ex,person:person.name})))
+   .sort((a,b)=>b.at.localeCompare(a.at)).slice(0,5);
+  if(publicTalk.length){
+   const heading=document.createElement('div');heading.className='empty';
+   heading.textContent='Latest conversations elsewhere:';area.append(heading);
+   for(const ex of publicTalk){
+    const row=document.createElement('div');row.className='memory';
+    row.textContent=ex.at+' · '+ex.first+' / '+ex.second;area.append(row);
+   }
+  }else{
+   const empty=document.createElement('div');empty.className='empty';
+   empty.textContent=state.connected?'No completed model conversations yet.':
+    'Offline: dialogue requires a connected model.';
+   area.append(empty);
+  }
  }
 }
 function serializePerson(n){
@@ -739,8 +769,11 @@ function setZ(n){state.viewZ=clamp(n,Frontier.MIN_Z,Frontier.MAX_Z);
 canvas.addEventListener('click',event=>{
  const tile=clientToTile(event.clientX,event.clientY,canvas.getBoundingClientRect());
  const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=1);
- if(n)selectNpc(n.id);
- else{state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
+ if(n){state.selectedObject=null;selectNpc(n.id);renderObjectInspector();return;}
+ const object=tile.z===0?[...state.world.items,...state.world.nodes,
+  ...state.world.structures].find(o=>o.x===tile.x&&o.y===tile.y):null;
+ state.selectedObject=object?.id||null;renderObjectInspector();
+ if(!object){state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
   state.camera.y=tile.y*TILE-canvas.height/(2*state.zoom);}
 });
 $('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
@@ -792,6 +825,6 @@ function tick(now){
 drawStaticWorld();restore();loadTileset();
 state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
 for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
-renderResidents();updateInspector();renderChat();renderEvents();updateCamera(true);
+renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
 record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
 checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
