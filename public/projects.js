@@ -12,7 +12,7 @@
      action:'experiment_wood_fiber'},
     {id:'binding',requires:['learn'],produces:'fiber >= 3',action:'collect_fiber'},
     {id:'build',requires:['wood','learn','binding'],produces:'nearby shelter',
-     action:'build_shelter'}
+     action:'craft_shelter'}
    ]},
   workbench:{
    goal:'A usable woodworking bench within eight tiles',
