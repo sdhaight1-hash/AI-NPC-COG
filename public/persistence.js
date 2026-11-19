@@ -85,6 +85,7 @@ function restore(state,saved){
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
    if(validSavedPath(state,old.path,n))n.path=old.path;
+   if(old.travel===null)n.travel=null;
    if(n.path?.length&&old.travel&&typeof old.travel==='object'&&
      Number.isFinite(old.travel.total)&&old.travel.total>0&&old.travel.total<=1&&
      Number.isFinite(old.travel.remaining)&&old.travel.remaining>0&&
@@ -104,7 +105,8 @@ function restore(state,saved){
     n.agency.goal={key:n.plan.key,source:'restored project',
      reason:'security',startedAt:state.clock,progress:n.plan.steps};
    n.action=AgentWorld.KEYS.includes(old.action)?old.action:'none';
-   n.thoughtAt=state.clock+3+state.npcs.length*2;
+   n.thoughtAt=Number.isFinite(old.thoughtAt)&&old.thoughtAt>=0?
+    old.thoughtAt:state.clock+3+state.npcs.length*2;
    state.npcs.push(n);
   }
   state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
