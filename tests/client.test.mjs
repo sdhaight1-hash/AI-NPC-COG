@@ -40,7 +40,7 @@ function makeBrowser(options={}){
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
-  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex};',context);
+  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity};',context);
  return {...context.exposed,saved,events,elements,counters};
 }
 test('fresh start contains five distinct independent founders, no player, no village',()=>{
@@ -299,4 +299,47 @@ test('NPC manufacturing takes multiple real simulation steps and survives a save
  assert.equal(copy.inventory.cord,1);
  assert.equal(copy.craftedItems.filter(item=>item.kind==='cord').length,1);
  assert.equal(copy.workpiece,null);
+});
+
+test('healthy inhabitants have useful non-rest options without prematurely sleeping',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0];
+ n.energy=75;
+ const choices=b.availableActivities(n);
+ assert.ok(choices.some(o=>o.key==='explore'||o.key==='inspect'||o.key==='forage'));
+ assert.equal(choices.some(o=>o.key==='rest'),false,
+  'A mildly tired founder must not immediately enter a long rest cycle');
+ n.energy=45;
+ assert.ok(b.availableActivities(n).some(o=>o.key==='rest'));
+});
+test('activity diagnostics distinguish decisions, abstentions, accepted work and rejection',async()=>{
+ const b=makeBrowser({fetch:async()=>({ok:true,json:async()=>({
+  action:'none',source:'rein',scores:{none:1}
+ })})});
+ const n=b.state.npcs[0],stats=b.activity(n);
+ b.state.connected=true;
+ await b.deliberate(n);
+ assert.equal(stats.decisions,1);
+ assert.equal(stats.none,1);
+ assert.equal(stats.started,0);
+ assert.equal(n.thoughtAt,b.state.clock+3,
+  'Model abstention should be reconsidered instead of waiting 25 game minutes');
+ assert.match(stats.last,/Selected none/);
+ assert.equal(b.setAction(n,'nonexistent','rein'),false);
+ assert.equal(stats.rejected,1);
+ n.needs.thirst=60;
+ assert.equal(b.setAction(n,'drink','rein'),true);
+ assert.equal(stats.started,1);
+ b.step(2);
+ assert.equal(stats.completed,1);
+ assert.match(stats.last,/Completed/);
+});
+test('per-NPC activity diagnostics persist safely across save reloads',()=>{
+ const saved=new Map(),b=makeBrowser({saved}),n=b.state.npcs[0];
+ b.setAction(n,'none','rein');
+ b.setAction(n,'unsupported','rein');
+ b.save();
+ const copy=makeBrowser({saved}).state.npcs.find(p=>p.id===n.id);
+ assert.equal(copy.activityStats.none,1);
+ assert.equal(copy.activityStats.rejected,1);
+ assert.match(copy.activityStats.last,/not available/);
 });
