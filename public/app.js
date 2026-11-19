@@ -178,9 +178,10 @@ function socialInitiative(n){
  return setAction(n,'socialize','social initiative');
 }
 function scheduleIdleAgents(){
- if(!state.auto||state.conversationBusy||state.paused)return;
- // Survival is a mechanical reaction, not a fictitious model decision.
+ if(!state.auto||state.paused)return;
+ // Physiology remains authoritative even while connected dialogue is pending.
  for(const n of state.npcs)survivalReflex(n);
+ if(state.conversationBusy)return;
  // A social need can initiate a meeting, never fabricate dialogue.
  if(state.connected&&!state.backgroundBusy){
   const initiator=state.npcs.find(n=>n.needs.social>=50&&
@@ -213,13 +214,31 @@ function scheduleIdleAgents(){
    const success=setAction(n,peer?'socialize':fallbackBackground(n),'offline routine');
    n.thoughtAt=state.clock+(success?18:3);
   }
- }else if(!state.backgroundBusy&&due.length&&
-  performance.now()-state.lastDecisionMs>=1500){
-  const n=due[0];
-  if(Projects.maybeStart(state,n)){
-   WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
-   n.thoughtAt=state.clock+18;
-  }else void deliberate(n);
+ }else{
+  // Keep the model lane for one NPC, but don't let a serialized inference
+  // backlog freeze every other body for hours at accelerated world speeds.
+  if(!state.backgroundBusy&&due.length&&
+   performance.now()-state.lastDecisionMs>=1500){
+   const n=due[0];
+   if(Projects.maybeStart(state,n)){
+    WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
+    n.thoughtAt=state.clock+18;
+   }else void deliberate(n);
+  }
+  for(const n of due){
+   if(n===state.modelDecisionActor||n.task||n.plan||n.path.length||
+    n.action==='rest'||n.peerPending||n.peerReservedFor||
+    state.clock-n.thoughtAt<8)continue;
+   // After eight simulated minutes waiting, use the same legal, physical
+   // offline agency already exercised headlessly. Do not invent dialogue.
+   if(Projects.maybeStart(state,n)){
+    WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
+    n.thoughtAt=state.clock+18;
+   }else{
+    const ok=setAction(n,fallbackBackground(n),'offline routine');
+    n.thoughtAt=state.clock+(ok?18:3);
+   }
+  }
  }
 }
 function finishPlan(n,reason,type='social'){
@@ -280,7 +299,7 @@ async function checkModel(){
 }
 async function deliberate(n){
  if(!state.npcs.includes(n))return;
- state.backgroundBusy=true;
+ state.backgroundBusy=true;state.modelDecisionActor=n;
  const location=key(n),options=backgroundOptions(n);
  try{
   if(state.connected){
@@ -314,7 +333,8 @@ async function deliberate(n){
   }
  }finally{
   n.thoughtAt=state.clock+(state.connected?(n.action==='none'&&!n.task?3:25):18);
-  state.backgroundBusy=false;state.lastDecisionMs=performance.now();
+  state.backgroundBusy=false;state.modelDecisionActor=null;
+  state.lastDecisionMs=performance.now();
  }
 }
 async function peerExchange(n,other){
