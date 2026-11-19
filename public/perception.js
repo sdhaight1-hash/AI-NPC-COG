@@ -66,7 +66,8 @@
  }
  function inspect(state,n,id){
   const world=state.world;
-  const target=root.AgentWorld.objectById(world,id);
+  const target=[...world.nodes,...world.items,...world.structures,...(world.remains||[])]
+   .find(o=>o.id===id);
   if(!target||(n.z||0)!==(target.z||0)||distance(world,n,target)>1||
    (target.kind==='remains'&&!canSee(state,n,target)))return null;
   const kind=String(target.kind||target.type||'unknown').slice(0,32);
