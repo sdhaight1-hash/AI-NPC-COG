@@ -119,3 +119,31 @@ test('expired suspended freshwater reservation restarts safely instead of trappi
  assert.ok(s.receipts.some(x=>x.commandId===n.lastActivity?.id?.slice(4)&&
   x.action==='drink_source'&&x.status==='COMPLETED'));
 });
+
+test('a freshwater source occupied by another resident remains drinkable from a free adjacent tile',()=>{
+ const {c,state:s,n}=create(),world=s.world;
+ const spring=world.nodes.find(v=>v.kind==='water'&&v.stock>=2&&
+  c.Frontier.neighbors(world,v).length>=2);
+ assert.ok(spring);
+ const neighbor=c.Frontier.neighbors(world,spring)[0];
+ const start=c.Frontier.neighbors(world,neighbor).find(p=>
+  c.Frontier.distance(world,p,spring)===2&&
+  !s.npcs.slice(2).some(other=>other.x===p.x&&other.y===p.y));
+ assert.ok(start,'Fixture needs a legal two-tile approach');
+ const occupant=s.npcs[1];
+ occupant.x=spring.x;occupant.y=spring.y;occupant.z=0;
+ n.x=start.x;n.y=start.y;n.z=0;n.path=[];
+ n.inventory.water=0;n.bio.hydrationBudgetMl=500;n.needs.thirst=96;
+ const initialStock=spring.stock;
+ assert.equal(c.WorldRuntime.pathfind(s,n,spring).length,0,
+  'A live resident occupies the resource tile');
+ assert.equal(c.WorldRuntime.begin(s,n,'drink_source'),true);
+ assert.ok(n.path.length>0);
+ assert.notDeepEqual({x:n.path.at(-1).x,y:n.path.at(-1).y},
+  {x:occupant.x,y:occupant.y},'Approach does not collide with occupant');
+ steps(c,s,3);
+ assert.equal(spring.stock,initialStock-1,'Drinking debits real stock once');
+ assert.equal(n.inventory.water,0);
+ assert.ok(n.bio.hydrationBudgetMl>500);
+ assert.ok(s.receipts.some(r=>r.action==='drink_source'&&r.status==='COMPLETED'));
+});
