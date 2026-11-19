@@ -36,7 +36,10 @@
    const overlap=needles.filter(t=>words.some(w=>w===t||w.startsWith(t)||t.startsWith(w))).length;
    const age=Math.max(0,now-(m.at||0));
    const recency=3/(1+age/240);
-   const distance=Math.abs((n.x||0)-(m.x||0))+Math.abs((n.y||0)-(m.y||0));
+   const dx=Math.abs((n.x||0)-(m.x||0))%root.Frontier.WIDTH;
+   const dy=Math.abs((n.y||0)-(m.y||0))%root.Frontier.HEIGHT;
+   const distance=Math.min(dx,root.Frontier.WIDTH-dx)+
+    Math.min(dy,root.Frontier.HEIGHT-dy);
    const locality=distance<8?1:0;
    return {m,score:overlap*5+(m.salience||1)*1.5+recency+locality+i*.000001};
   }).sort((a,b)=>b.score-a.score).slice(0,Math.max(0,Math.min(8,limit)))
