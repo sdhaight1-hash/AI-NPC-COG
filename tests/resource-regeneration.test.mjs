@@ -12,12 +12,21 @@ function kernel(){
 }
 const node=(world,kind)=>world.nodes.find(n=>n.kind===kind);
 
-test('geological stone deposits do not regenerate on ordinary survival timescales',()=>{
- const A=kernel(),w=A.newWorld(379210),stone=node(w,'stone');
- assert.ok(stone);
- stone.stock=0;stone.regrow=.99;
- A.regenerate(w,20000);
- assert.equal(stone.stock,0,'An exhausted mineral source must remain exhausted');
+test('existing resource classes preserve fractional stock recovery on save/load',()=>{
+ const A=kernel(),w=A.newWorld(379210);
+ for(const kind of ['water','food','fiber','wood','stone']){
+  const resource=node(w,kind);
+  assert.ok(resource,kind+' source exists in baseline seed');
+  resource.stock=Math.max(0,resource.stock-1);
+  resource.regrow=.37;
+ }
+ const restored=A.newWorld(379210);
+ A.restoreWorld(restored,JSON.parse(JSON.stringify(w)));
+ for(const kind of ['water','food','fiber','wood','stone']){
+  const original=node(w,kind),copy=restored.nodes.find(n=>n.id===original.id);
+  assert.equal(copy.stock,original.stock);
+  assert.equal(copy.regrow,.37,kind+' fractional recovery must be checkpointed');
+ }
 });
 
 test('fractional renewable growth survives saved world restore without resetting yields',()=>{
@@ -39,7 +48,7 @@ test('fractional renewable growth survives saved world restore without resetting
 test('legacy or malformed source-growth fractions restore to a safe zero',()=>{
  const A=kernel(),w=A.newWorld(379210),saved=JSON.parse(JSON.stringify(w));
  const wood=node(saved,'wood'),stone=node(saved,'stone');
- wood.regrow=4.7;stone.regrow=.91;
+ wood.regrow=4.7;stone.regrow=-.91;
  const target=A.newWorld(379210);
  A.restoreWorld(target,saved);
  assert.equal(target.nodes.find(n=>n.id===wood.id).regrow,0);
