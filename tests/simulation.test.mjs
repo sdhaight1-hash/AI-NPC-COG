@@ -16,6 +16,12 @@ function kernels(){
 }
 const digest=(runtime,state)=>createHash('sha256')
  .update(runtime.Simulation.canonical(state)).digest('hex');
+function equipFlask(n,clock){
+ n.inventory.flask=1;
+ n.craftedItems ||= [];
+ n.craftedItems.push({kind:'flask',quality:2,maker:n.id,
+  craftedAt:clock,method:'flask',materialQuality:2});
+}
 function fixture(k){
  const state=k.Simulation.initial(379210);
  state.auto=false;
@@ -23,6 +29,7 @@ function fixture(k){
  const n=state.npcs[0],source=state.world.nodes.find(x=>x.kind==='water'&&x.stock>=1);
  assert.ok(source,'Seed has a water node');
  n.x=source.x;n.y=source.y;n.z=0;n.path=[];
+ equipFlask(n,state.clock);
  n.task={key:'fill_water',ref:source.id,readyAt:state.clock+1};
  n.action='fill_water';n.inventory.water=0;
  return {state,sourceId:source.id};
@@ -91,6 +98,7 @@ test('real version-3 save codec preserves a pending physical job and exact outpu
  const resource=base.world.nodes.find(x=>x.kind==='water'&&x.stock>=3);
  assert.ok(resource);
  n.x=resource.x;n.y=resource.y;n.z=0;
+ equipFlask(n,base.clock);
  n.task={key:'fill_water',ref:resource.id,readyAt:base.clock+5};
  n.action='fill_water';
  const before=resource.stock,startingWater=n.inventory.water;
