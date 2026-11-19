@@ -34,6 +34,7 @@
     n.inventory = { food:1,water:2,wood:0,stone:0,fiber:0,hatchet:0 };
     n.skills = { foraging:0,gathering:0,crafting:0,survival:0,
       cooperation:0,socializing:0,building:0,exploring:0 };
+    n.bio = Biology.create(index,n.inventory.food);
     n.visited = [];
     n.task = null;
     n.plan = null;
@@ -137,6 +138,14 @@
       const expertise=n.skills[skillNames[task.key]]||0;
       const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3))+
         (n.inventory.hatchet&&task.key==='collect_wood'?1:0));
+      // Do not commit a food harvest unless both inventory and nutrition
+      // bookkeeping can accept all gathered portions.
+      if(node.kind==='food'){
+        const foodId=node.id.startsWith('berry_')?'berries':
+          Biology.foodForBiome(Frontier.terrainAt(world,node.x,node.y));
+        if(!Biology.addForaged(n.bio,foodId,collected))
+          return {ok:false,message:'Food inventory full'};
+      }
       node.stock-=collected;
       n.inventory[node.kind]+=collected;
       n.energy=clamp(n.energy-3*collected);
@@ -144,6 +153,7 @@
     }else if(task.key==='drink'){
       if(n.inventory.water<1)return {ok:false,message:'No drinkable water'};
       n.inventory.water--;n.needs.thirst=clamp(n.needs.thirst-48);
+      Biology.drink(n.bio,400);
       message='Drank fresh water; thirst now '+Math.round(n.needs.thirst);
     }else if(task.key==='craft_hatchet'){
       if(n.inventory.hatchet||n.inventory.wood<1||n.inventory.stone<1||n.inventory.fiber<1)
@@ -160,13 +170,27 @@
       message='Built a shared shelter at '+n.x+','+n.y;
     }else if(task.key==='eat'){
       if(n.inventory.food<1)return {ok:false,message:'No food left'};
+      // The player and all NPCs digest the same defined food composition.
+      // Legacy food stacks are reconciled with a generic travel ration.
+      if(n.bio.pantry.length!==n.inventory.food)
+        n.bio=Biology.restore(n.bio,n.inventory.food);
+      const meal=Biology.ingest(n.bio,world.now);
+      if(!meal)return {ok:false,message:'No edible food in inventory'};
       n.inventory.food--;n.needs.hunger=clamp(n.needs.hunger-44);
-      message='Ate food; hunger now '+Math.round(n.needs.hunger);
+      message='Ate '+meal.name+' ('+Math.round(meal.kcal)+' kcal); hunger now '+
+        Math.round(n.needs.hunger);
     }else if(task.key==='share_food'||task.key==='socialize'){
       const other=residents.find(v=>v.id===task.ref);
       if(!other||distance(n,other)>2)return {ok:false,message:'The other resident moved away'};
       if(task.key==='share_food'){
         if(n.inventory.food<1)return {ok:false,message:'No food left to share'};
+        if(!other.bio||!n.bio ||other.inventory.food>=1000)
+          return {ok:false,message:'Food transfer unavailable'};
+        if(n.bio.pantry.length!==n.inventory.food)n.bio=Biology.restore(n.bio,n.inventory.food);
+        if(other.bio.pantry.length!==other.inventory.food)
+          other.bio=Biology.restore(other.bio,other.inventory.food);
+        if(!Biology.transferFood(n.bio,other.bio))
+          return {ok:false,message:'Cannot transfer food portion'};
         n.inventory.food--;other.inventory.food++;
         n.needs.social=clamp(n.needs.social-15);
         other.needs.social=clamp(other.needs.social-10);
@@ -232,19 +256,36 @@
     return {key:saved.key,steps:saved.steps};
   }
   function stepNeeds(n,world,dt) {
-    const badWeather=world.weather?.kind==='storm'||world.weather?.kind==='rain';
-    const shelter=world.structures.some(site=>site.type==='shelter'&&distance(n,site)<=4);
-    n.needs.thirst=clamp(n.needs.thirst+dt*(world.weather?.temperature>26?.12:.08));
-    n.needs.hunger=clamp(n.needs.hunger+dt*.065);
-    if(badWeather&&!shelter)n.energy=clamp(n.energy-dt*.055);
+    // Biology owns digestion, fuel, hydration budget, sleep pressure and
+    // normalized endocrine indices; needs are experienced gameplay pressures.
+    const sheltered=world.structures.some(site=>site.type==='shelter'&&distance(n,site)<=4);
+    const warm=world.structures.some(site=>site.type==='campfire'&&distance(n,site)<=3);
+    const phys=Biology.advance(n.bio,dt,{
+      clock:world.now,temperatureC:world.weather?.temperature??20,
+      weather:world.weather?.kind,resting:n.action==='rest',sheltered,
+      moving:!!n.path?.length
+    });
+    const appetite=clamp(n.bio.hormones.ghrelin,0,100)/100;
+    const dryness=1-clamp(n.bio.hydrationBudgetMl/3000,0,1);
+    n.needs.hunger=clamp(n.needs.hunger+dt*(.035+.045*appetite));
+    n.needs.thirst=clamp(n.needs.thirst+dt*(.037+.07*dryness));
     n.needs.social=clamp(n.needs.social+dt*.025);
     n.needs.curiosity=clamp(n.needs.curiosity+dt*.016);
-    n.energy=clamp(n.energy-dt*.045);
+    n.energy=clamp(n.energy-dt*(.045+
+      (n.bio.sleepDebt>70?.024:0)+(n.bio.stress>70?.015:0)+
+      (phys?.energyShortfallKcal>0?.1:0)));
+    if((world.weather?.kind==='storm'||world.weather?.kind==='rain')&&!sheltered)
+      n.energy=clamp(n.energy-dt*.055);
     if(n.action==='rest'){
-      const warm=world.structures.some(site=>site.type==='campfire'&&distance(n,site)<=3);
-      n.energy=clamp(n.energy+dt*(shelter?.66:warm?.52:.26));
-      if(n.energy>=90) {
-        n.action='none';n.goal='Recovered and considering what to do';return 'Recovered';
+      // Nutrition influences recovery only modestly; an early-game unbalanced
+      // diet should not make sleeping or survival impossible.
+      const diet=Biology.nutrition(n.bio,world.now);
+      const recovered=dt*(sheltered?.66:warm?.52:.26)*
+        (.95+.05*diet.adequacy/100);
+      n.energy=clamp(n.energy+recovered);
+      if(n.energy>=90){
+        n.action='none';n.goal='Recovered and considering what to do';
+        return 'Recovered';
       }
     }
     return null;
