@@ -495,6 +495,7 @@ function updateMovement(actor,dt,speed){
  const input=actor===state.player?controlVector():{x:0,y:0};
  if(actor===state.player&&(input.x||input.y)){
   actor.path=[];actor.travel=0;
+  actor.action='none';
   Physics2D.steer(body,input,dt,isBlocked,others,speed);
   actor.x=Math.floor(body.x);actor.y=Math.floor(body.y);
  }else if(actor.path?.length){
@@ -534,13 +535,23 @@ function position(actor){
  const body=actor.body;
  return body?{x:body.x-.5,y:body.y-.5}:{x:actor.x,y:actor.y};
 }
+const fogCanvas=document.createElement('canvas');
+fogCanvas.width=W*TILE;fogCanvas.height=H*TILE;
+const fogContext=fogCanvas.getContext('2d');
+function updateFog(){
+ fogContext.clearRect(0,0,fogCanvas.width,fogCanvas.height);
+ fogContext.fillStyle='#080f10';
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++)
+  if(!Frontier.revealed(state.world,x,y))
+   fogContext.fillRect(x*TILE,y*TILE,TILE,TILE);
+}
 const staticCanvas=document.createElement('canvas');
 staticCanvas.width=W*TILE;staticCanvas.height=H*TILE;
 const staticContext=staticCanvas.getContext('2d');
 ctx.imageSmoothingEnabled=false;
 staticContext.imageSmoothingEnabled=false;
 function drawStaticWorld(){
- VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees);
+ VillageArt.drawWorld(staticContext,{width:W,height:H},buildings,trees,state.world);
 }
 // Optional Kenney CC0 sprites are installed locally once, never fetched at runtime
 // from a third-party host. When absent the original artwork remains usable.
@@ -586,7 +597,11 @@ function drawWorld(){
  // Pixel-align rendered camera without snapping the underlying smooth state.
  ctx.translate(-Math.round(state.camera.x),-Math.round(state.camera.y));
  ctx.drawImage(staticCanvas,0,0);
- VillageArt.drawWorldObjects(ctx,state.world);
+ VillageArt.drawWorldObjects(ctx,state.world,{
+  left:state.camera.x/TILE-2,top:state.camera.y/TILE-2,
+  right:(state.camera.x+canvas.width/state.zoom)/TILE+2,
+  bottom:(state.camera.y+canvas.height/state.zoom)/TILE+2
+ });
  const actors=state.npcs.map(n=>({actor:n,player:false}));
  actors.push({actor:state.player,player:true});
  actors.sort((a,b)=>position(a.actor).y-position(b.actor).y);
@@ -596,6 +611,7 @@ function drawWorld(){
    !item.player&&state.selected===item.actor.id,now);
  }
  VillageArt.drawAmbient(ctx,state.world,state.clock,now);
+ ctx.drawImage(fogCanvas,0,0);
  if(state.debugPhysics){
   // Debug overlay uses the same authoritative collision map as the physics engine.
   for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(isBlocked(x,y)){
@@ -810,7 +826,7 @@ function step(dt){
  state.world.now=state.clock;
  state.world.weather=Frontier.weather(state.world,state.clock);
  AgentWorld.stepNeeds(state.player,state.world,elapsed);
- if(Frontier.reveal(state.world,state.player.x,state.player.y,7)>0)updateFog();
+ if(Frontier.reveal(state.world,state.player.x,state.player.y,8)>0)updateFog();
  AgentWorld.regenerate(state.world,elapsed);
  for(const npc of state.npcs){
   if(!npc.peerPending)updateMovement(npc,dt,2.0);
@@ -928,10 +944,64 @@ $('resetBtn').addEventListener('click',()=>{
  if(!window.confirm('Reset all local NPC memory, relationships, and positions?'))return;
  localStorage.removeItem(STORE);localStorage.removeItem(LEGACY_STORE);window.location.reload();
 });
+function playerOptions(){
+ return AgentWorld.available(state.player,state.world,state.npcs,
+  point=>reachableFrom(state.player,point)).filter(option=>
+   !option.target||manhattan(state.player,option.target)<=1);
+}
+function updatePlayerActions(){
+ const available=new Set(playerOptions().map(option=>option.key));
+ for(const button of document.querySelectorAll('[data-player-action]')){
+  const action=button.dataset.playerAction;
+  button.disabled=!available.has(action)&&action!=='rest';
+ }
+}
+function playerAction(action){
+ if(action==='rest'){
+  state.player.action=state.player.action==='rest'?'none':'rest';
+  record('You '+(state.player.action==='rest'?'rest to recover energy':'get back up'),'social');
+  return;
+ }
+ const option=playerOptions().find(o=>o.key===action);
+ if(!option){record('Move closer or gather required materials first','warning');return;}
+ state.player.task={key:action,ref:option.ref||null};
+ const result=AgentWorld.complete(state.player,state.world,state.npcs);
+ record('You: '+result.message,result.ok?'social':'warning');
+ if(result.ok)save();
+}
+function drawMinimap(){
+ const element=$('miniMap');
+ if(!element||typeof element.getContext!=='function')return;
+ const mapCtx=element.getContext('2d');if(!mapCtx)return;
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+  mapCtx.fillStyle=Frontier.revealed(state.world,x,y)
+   ?Frontier.COLORS[Frontier.terrainAt(state.world,x,y)]
+   :'#0a1517';
+  mapCtx.fillRect(x*2,y*2,2,2);
+ }
+ mapCtx.fillStyle='#ffe6a5';
+ mapCtx.fillRect(state.player.x*2-1,state.player.y*2-1,4,4);
+ for(const npc of state.npcs)if(Frontier.revealed(state.world,npc.x,npc.y)){
+  mapCtx.fillStyle='#e5a6b5';mapCtx.fillRect(npc.x*2,npc.y*2,2,2);
+ }
+}
+for(const button of document.querySelectorAll('[data-player-action]')){
+ button.addEventListener('click',()=>playerAction(button.dataset.playerAction));
+}
+$('newIsland').addEventListener('click',()=>{
+ if(!window.confirm('Generate a new island? This starts a new survival world and resets current progress.'))return;
+ const seed=(Math.floor(Math.random()*2147483646)+1);
+ localStorage.setItem('ai-npc-cog-world-seed',String(seed));
+ localStorage.removeItem(STORE);
+ localStorage.removeItem(LEGACY_STORE);
+ window.location.reload();
+});
 $('chatForm').addEventListener('submit',sendMessage);
 drawStaticWorld();
 loadTileset();
 restore();
+Frontier.reveal(state.world,state.player.x,state.player.y,8);
+updateFog();
 renderResidents();updateInspector();renderChat();
 record('Hearthbrook village initialized — click a resident to inspect their state.');
 checkModel();
