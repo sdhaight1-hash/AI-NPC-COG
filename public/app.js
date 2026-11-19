@@ -19,7 +19,9 @@ const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
 const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
  fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_wood_stone:15,
  experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
- build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,pickup_item:2,build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
+ build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,pickup_item:2,place_crate:6,
+ stash_wood:2,stash_stone:2,stash_fiber:2,
+ withdraw_wood:2,withdraw_stone:2,withdraw_fiber:2,build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
 let installedAtlas=null,showAtlas=true;
 function selectedNpc(){return state.npcs.find(n=>n.id===state.selected)||null;}
 function selectNpc(id){
@@ -188,6 +190,8 @@ function backgroundOptions(n){
   collect_wood:35,collect_stone:33,collect_fiber:33,
   craft_cord:56,craft_blade:55,craft_hafted_hatchet:70,
   craft_workbench:54,craft_planks:56,craft_crate:47,craft_stage:105,
+  place_crate:59,stash_wood:38,stash_stone:35,stash_fiber:35,
+  withdraw_wood:37,withdraw_stone:35,withdraw_fiber:35,
   socialize:40,share_food:35,make_shelter:42,build_shelter:50,
   make_campfire:40,build_fire:48};
  const urgency=o=>priority[o.key]+
