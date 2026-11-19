@@ -159,7 +159,7 @@ test('storage project has an acyclic real production chain with tool repair',()=
 test('storage production actually builds and places a crate through verified stages',()=>{
  const {c,s,n}=setup();
  s.npcs=[n]; // Isolate production from unrelated traffic; keep the real terrain.
- n.inventory.wood=9;n.inventory.stone=4;n.inventory.fiber=12;
+ n.inventory.wood=4;n.inventory.stone=3;n.inventory.fiber=6; // Feasible carried starting load.
  c.Projects.create(s,n,'storage');
  let achieved=false;
  for(let i=0;i<500;i++){
@@ -183,7 +183,7 @@ test('storage production actually builds and places a crate through verified sta
 test('a lost manufactured tool is replaced and the earlier workbench is preserved',()=>{
  const {c,s,n}=setup();
  s.npcs=[n];
- n.inventory.wood=14;n.inventory.stone=8;n.inventory.fiber=18;
+ n.inventory.wood=5;n.inventory.stone=3;n.inventory.fiber=6; // Obtain further supplies physically.
  c.Projects.create(s,n,'storage');
  let toolProduced=false;
  for(let i=0;i<280;i++){
