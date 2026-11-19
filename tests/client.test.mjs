@@ -55,9 +55,10 @@ function makeBrowser(options={}) {
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
   const physics=readFileSync(new URL('../public/physics.js',import.meta.url),'utf8');
   const frontier=readFileSync(new URL('../public/frontier.js',import.meta.url),'utf8');
+  const biology=readFileSync(new URL('../public/biology.js',import.meta.url),'utf8');
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(art+'\n'+physics+'\n'+frontier+'\n'+rules+'\n'+source +
+  vm.runInNewContext(art+'\n'+physics+'\n'+frontier+'\n'+biology+'\n'+rules+'\n'+source +
     '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange,updateMovement,ensureBody,moveTo,playerAction,playerOptions,reachability};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
