@@ -5,10 +5,15 @@ import vm from 'node:vm';
 function makeBrowser(options={}){
  const events=new Map(),saved=options.saved||new Map();
  const counters={staticRects:0,screenImages:0};
+ const frames=[];
+ let failScreenDraw=!!options.failScreenDrawOnce;
  const fakeCtx=kind=>new Proxy({
   measureText:s=>({width:String(s).length*8}),
   fillRect(){if(kind==='static')counters.staticRects++;},
-  drawImage(){if(kind==='screen')counters.screenImages++;}
+  drawImage(){if(kind==='screen'){
+   if(failScreenDraw){failScreenDraw=false;throw Error('Canvas temporarily unavailable');}
+   counters.screenImages++;
+  }}
  },{get(obj,key){return obj[key]??(()=>{});},set(obj,k,v){obj[k]=v;return true;}});
  const screen=fakeCtx('screen'),staticCtx=fakeCtx('static');
  const canvas={width:640,height:416,getContext:()=>screen,
@@ -27,7 +32,7 @@ function makeBrowser(options={}){
   }};
  const window={addEventListener(type,fn){events.set('window:'+type,fn);},
   confirm:()=>true,location:{reload(){}}};
- const context={document,window,console,requestAnimationFrame(){},setInterval(){},
+ const context={document,window,console,requestAnimationFrame(fn){frames.push(fn);},setInterval(){},
   performance:{now:()=>0},
   localStorage:{
    getItem:k=>saved.get(k)||null,
@@ -41,7 +46,7 @@ function makeBrowser(options={}){
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
   'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity};',context);
- return {...context.exposed,saved,events,elements,counters};
+ return {...context.exposed,saved,events,elements,counters,frames};
 }
 test('fresh start contains five distinct independent founders, no player, no village',()=>{
  const b=makeBrowser();
@@ -437,10 +442,8 @@ test('real browser frame loop advances the displayed clock across scheduled offl
  for(let ms=1050;ms<=16100;ms+=50)b.tick(ms);
  assert.ok(b.state.clock>=start+14,
   'Simulation clock must advance even during NPC scheduling and world rendering');
- assert.equal(b.elements.get('worldTime').textContent,
-  String(b.state.clock).length>0?
-   String(b.elements.get('worldTime').textContent):'',
-  'Clock indicator stays accessible');
+ assert.match(b.elements.get('worldTime').textContent,/^\\d{2}:\\d{2}$/);
+ assert.ok(b.frames.length>250,'Every browser frame must schedule its successor');
  assert.match(b.elements.get('worldStatus').textContent,/World running|Offline|deliberating/);
 });
 test('browser clock advances with social demand and never requires an LLM',()=>{
@@ -455,4 +458,16 @@ test('browser clock advances with social demand and never requires an LLM',()=>{
  for(let ms=1050;ms<=7100;ms+=50)b.tick(ms);
  assert.ok(b.state.clock>start+5);
  assert.notEqual(b.elements.get('worldTime').textContent,'');
+});
+
+test('transient canvas failure cannot permanently stop the simulation frame loop',()=>{
+ const b=makeBrowser({failScreenDrawOnce:true});
+ const first=b.state.clock,initialFrames=b.frames.length;
+ b.tick(1000);
+ assert.equal(b.frames.length,initialFrames+1,
+  'A render error must not kill requestAnimationFrame scheduling');
+ for(let ms=1050;ms<=2100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>first,
+  'After a rendering error, the world clock still advances');
+ assert.ok(b.frames.length>initialFrames+10);
 });
