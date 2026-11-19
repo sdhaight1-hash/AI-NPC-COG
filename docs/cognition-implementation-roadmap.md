@@ -1,6 +1,8 @@
 # Cognition implementation roadmap — code-grounded gates
 
-**Status:** Design/backlog only. No simulation implementation is represented as complete. **Parent epic:** [#21](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/21). Read [the audited code contracts](cognition-codebase-hardening.md) and [research review](cognition-research-audit-2026.md) first.
+**Status:** Historical planning specification, not the live completion ledger. G0.1–G3.6 have merged implementation slices, and G4.1 blueprint declarations are on `main` as of 2026-11-19; remaining gaps and milestone states require code/CI validation. The gates below describe intended behavior and do not themselves prove it. **Parent epic:** [#21](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/21). Read [the audited code contracts](cognition-codebase-hardening.md) and [research review](cognition-research-audit-2026.md) first.
+
+**Current research update:** [2026-11-19 code-grounded cognitive audit](embodied-cognition-research-agenda-2026-11-19.md) and [follow-up implementation/paper investigation](cognitive-executive-followup-research-2026-11-19.md). The November 18 code references in this document are historical; check current `main` before implementing a ticket.
 
 ## Baseline and scope rule
 
