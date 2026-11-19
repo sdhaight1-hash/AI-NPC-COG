@@ -53,9 +53,10 @@ function makeBrowser(options={}) {
     fetch:options.fetch || (async()=>({ok:true,json:async()=>({connected:false})}))
   };
   const art=readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8');
+  const physics=readFileSync(new URL('../public/physics.js',import.meta.url),'utf8');
   const rules=readFileSync(new URL('../public/emergence.js',import.meta.url),'utf8');
   const source=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
-  vm.runInNewContext(art+'\n'+rules+'\n'+source +
+  vm.runInNewContext(art+'\n'+physics+'\n'+rules+'\n'+source +
     '\nglobalThis.__expose={state,step,drawWorld,setAction,pathfind,backgroundOptions,save,validSavedPath,setZoom,clientToTile,updateCamera,availableActivities,completeActivity,sendMessage,advancePlan,peerExchange};',context);
   return { ...context.__expose, counters, events, saved, elements };
 }
