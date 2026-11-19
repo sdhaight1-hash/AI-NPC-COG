@@ -573,3 +573,55 @@ test('early thirst response drinks only through a completed physical activity',(
  assert.ok(b.state.receipts.some(r=>r.action==='drink'&&r.status==='COMPLETED'&&
   r.actorId===n.id),'Water effects require an authoritative completed receipt');
 });
+
+test('a model decision is rejected if its personal resource target changed during inference',async()=>{
+ let resolveDecision;
+ const response=new Promise(resolve=>resolveDecision=resolve);
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
+  response:{connected:true}})});
+ b.state.connected=true;
+ const n=b.state.npcs[0],source=b.state.world.nodes.find(x=>x.kind==='food'&&x.stock>0);
+ assert.ok(source);
+ n.x=source.x;n.y=source.y;n.path=[];n.needs.hunger=80;
+ assert.ok(b.backgroundOptions(n).some(x=>x.key==='forage'));
+ const inFlight=b.deliberate(n);
+ source.stock=0;
+ resolveDecision({action:'forage',source:'rein',durationMs:100});
+ await inFlight;
+ assert.equal(b.activity(n).rejected,1);
+ assert.equal(n.task,null,'Old target must not create a new activity');
+ assert.ok(b.state.receipts.some(x=>x.status==='REJECTED'&&x.action==='forage'));
+});
+
+test('new critical physiology supersedes an obsolete pending model decision',async()=>{
+ let resolveDecision;
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
+  new Promise(resolve=>{resolveDecision=resolve}):{connected:true}})});
+ b.state.connected=true;
+ const n=b.state.npcs[0];
+ const waiting=b.deliberate(n);
+ n.bio.hydrationBudgetMl=100;n.needs.thirst=96;
+ resolveDecision({action:'none',source:'rein',durationMs:100});
+ await waiting;
+ assert.equal(b.activity(n).rejected,1);
+ assert.equal(n.task,null,'Obsolete choice must not interfere with urgent survival');
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.task?.key,'drink');
+});
+
+test('unrelated actors and world receipts do not invalidate a personal model choice',async()=>{
+ let resolveDecision;
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
+  new Promise(resolve=>{resolveDecision=resolve}):{connected:true}})});
+ b.state.connected=true;
+ const [n,other]=b.state.npcs;
+ const waiting=b.deliberate(n);
+ other.inventory.wood+=1;
+ b.state.effectRevision=(b.state.effectRevision||0)+1;
+ resolveDecision({action:'none',source:'rein',durationMs:100});
+ await waiting;
+ assert.equal(b.activity(n).rejected,0,
+  'Changes unrelated to this NPC must not waste the shared model slot');
+ assert.equal(b.activity(n).decisions,1);
+ assert.ok(n.task||n.plan,'Accepted none decision should allow self-directed work');
+});
