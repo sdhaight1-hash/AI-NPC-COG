@@ -178,3 +178,31 @@ test('storage production actually builds and places a crate through verified sta
  assert.equal(s.receipts.filter(x=>x.action==='place_crate'&&
   x.status==='COMPLETED').length,1);
 });
+
+test('a lost manufactured tool is replaced and the earlier workbench is preserved',()=>{
+ const {c,s,n}=setup();
+ s.npcs=[n];
+ n.inventory.wood=14;n.inventory.stone=8;n.inventory.fiber=18;
+ c.Projects.create(s,n,'storage');
+ let toolProduced=false;
+ for(let i=0;i<280;i++){
+  n.energy=100;tick(c,s);
+  if(n.inventory.hatchet>0){toolProduced=true;break;}
+ }
+ assert.equal(toolProduced,true,n.project.blockedReason||'Hatchet was never produced');
+ assert.equal(s.world.structures.filter(x=>x.type==='workbench').length,1);
+ n.inventory.hatchet=0;
+ n.craftedItems=n.craftedItems.filter(item=>item.kind!=='hatchet');
+ let recovered=false;
+ for(let i=0;i<450;i++){
+  n.energy=100;tick(c,s);
+  if(n.project.status==='COMPLETED'){recovered=true;break;}
+ }
+ assert.equal(recovered,true,n.project.blockedReason||'Tool repair never finished');
+ assert.equal(s.world.structures.filter(x=>x.type==='workbench').length,1,
+  'A repaired dependency must not reset the completed workbench');
+ assert.equal(s.world.structures.filter(x=>x.type==='crate').length,1);
+ const starts=s.receipts.filter(x=>x.status==='COMPLETED'&&
+  x.action==='craft_hafted_hatchet');
+ assert.equal(starts.length,2,'An actual second hatchet must be physically made');
+});
