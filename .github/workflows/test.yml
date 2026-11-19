@@ -19,6 +19,9 @@ jobs:
       - run: node --check public/biology.js
       - run: node --check public/frontier.js
       - run: node --check public/civilization.js
+      - run: node --check public/simulation.js
+      - run: node --check scripts/headless.mjs
+      - run: node scripts/headless.mjs 10000 379210
       - run: node --test tests/*.test.mjs
   windows-installer:
     runs-on: windows-latest

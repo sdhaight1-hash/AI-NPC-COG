@@ -33,38 +33,12 @@ function nearest(n,range=8){
  return state.npcs.filter(p=>p!==n&&dist(p,n)<=range).sort((a,b)=>dist(a,n)-dist(b,n))[0]||null;
 }
 function isBlocked(x,y,z=0){return !Frontier.traversable(state.world,wrapX(x),wrapY(y),z);}
-function pathfind(start,end){
- const s={x:wrapX(start.x),y:wrapY(start.y),z:start.z||0};
- const e={x:wrapX(end.x),y:wrapY(end.y),z:end.z||0};
- if(isBlocked(e.x,e.y,e.z))return [];
- const queue=[s],back=new Map([[key(s),null]]);
- for(let i=0;i<queue.length;i++){
-  const p=queue[i];if(key(p)===key(e))break;
-  for(const next of Frontier.neighbors(state.world,p)){
-   if(back.has(key(next)))continue;
-   back.set(key(next),p);queue.push(next);
-  }
- }
- if(!back.has(key(e)))return [];
- const path=[];let current=e;
- while(current&&key(current)!==key(s)){
-  path.push(current);current=back.get(key(current));
- }
- return path.reverse();
-}
+function pathfind(start,end){return WorldRuntime.pathfind(state,start,end);}
 function reachable(n,point){
  if(isBlocked(point.x,point.y,point.z||0))return false;
  return dist(n,point)===0||pathfind(n,point).length>0;
 }
-function reachability(n){
- const queue=[{x:n.x,y:n.y,z:n.z||0}],seen=new Set([key(queue[0])]);
- for(let i=0;i<queue.length;i++){
-  for(const next of Frontier.neighbors(state.world,queue[i])){
-   if(!seen.has(key(next))){seen.add(key(next));queue.push(next);}
-  }
- }
- return point=>seen.has(key({x:wrapX(point.x),y:wrapY(point.y),z:point.z||0}));
-}
+function reachability(n){return WorldRuntime.reachability(state,n);}
 function availableActivities(n){return AgentWorld.available(n,state.world,state.npcs,reachability(n));}
 function timeString(){
  const d=Civilization.stamp(state.clock);
@@ -85,25 +59,8 @@ function remember(n,entry,meta={}){
  memory.time='Y'+Civilization.stamp(state.clock).year+' '+timeString();
  return memory;
 }
-function moveTo(n,target){
- const path=pathfind(n,target);
- if(!path.length&&dist(n,target)>0)return false;
- n.path=path;n.travel=null;
- if(path.length){
-  const next=path[0],dx=next.x-n.x,dy=next.y-n.y;
-  const hx=Math.abs(dx)>W/2?(dx>0?dx-W:dx+W):dx;
-  const hy=Math.abs(dy)>H/2?(dy>0?dy-H:dy+H):dy;
-  n.facing=Math.abs(hx)>Math.abs(hy)?(hx>0?'right':'left'):(hy>0?'down':'up');
- }
- return true;
-}
-function approach(n,target){
- const options=Frontier.neighbors(state.world,target);
- const routes=options.map(p=>({p,path:pathfind(n,p)}))
-  .filter(v=>v.path.length>0||dist(n,v.p)===0)
-  .sort((a,b)=>a.path.length-b.path.length);
- return routes.length?moveTo(n,routes[0].p):false;
-}
+function moveTo(n,target){return WorldRuntime.moveTo(state,n,target);}
+function approach(n,target){return WorldRuntime.approach(state,n,target);}
 function position(n){
  if(!n.travel||!n.path?.length)return {x:n.x,y:n.y};
  const next=n.path[0],fraction=clamp(1-n.travel.remaining/n.travel.total,0,1);
@@ -112,44 +69,7 @@ function position(n){
  if(dy>H/2)dy-=H;if(dy<-H/2)dy+=H;
  return {x:n.x+dx*fraction,y:n.y+dy*fraction};
 }
-function updateMovement(n,elapsed){
- if(!n.path?.length)return;
- let budget=elapsed;
- for(let moves=0;moves<100&&budget>0&&n.path.length;moves++){
-  const next=n.path[0];
-  if(isBlocked(next.x,next.y,next.z||0)){
-   n.path=[];n.travel=null;n.task=null;n.goal='Route invalidated';
-   activity(n).blocked++;activityNote(n,'Movement: destination became blocked');
-   n.thoughtAt=state.clock+3;break;
-  }
-  if(!n.travel){
-   const terrain=Frontier.terrainAt(state.world,next.x,next.y);
-   const minutes=terrain==='ridge'?0.14:terrain==='marsh'?0.12:0.07;
-   n.travel={remaining:minutes,total:minutes};
-  }
-  if(budget<n.travel.remaining){
-   n.travel.remaining-=budget;break;
-  }
-  budget-=n.travel.remaining;
-  if(state.npcs.some(other=>other!==n&&other.x===next.x&&other.y===next.y&&
-    (other.z||0)===(next.z||0))){
-   n.blockedFor=(n.blockedFor||0)+elapsed;
-   n.travel=null;
-   if(n.blockedFor>5){
-    n.path=[];n.task=null;n.goal='Route blocked by another inhabitant';
-    activity(n).blocked++;activityNote(n,'Movement: another inhabitant blocked passage');
-    n.thoughtAt=state.clock+3;n.blockedFor=0;
-   }
-   break;
-  }
-  n.x=next.x;n.y=next.y;n.z=next.z||0;
-  n.path.shift();n.travel=null;n.blockedFor=0;
-  Frontier.reveal(state.world,n.x,n.y,7);
- }
- n.motion=n.path.length?1:0;
- if(n.task&&!n.path.length&&n.task.readyAt===null)
-  n.task.readyAt=state.clock+actionDuration(n,n.task.key);
-}
+function updateMovement(n,elapsed){return WorldRuntime.move(state,n,elapsed);}
 function sceneFor(n){
  const others=state.npcs.filter(p=>p!==n&&dist(n,p)<=8)
   .map(p=>p.name+' '+dist(n,p)+' tiles away').join(', ')||'Nobody nearby';
@@ -189,13 +109,7 @@ function sceneFor(n){
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
 }
-function actionDuration(n,key){
- if(key==='craft_stage'&&n.workpiece){
-  const spec=Crafting.getRecipe(n.workpiece.recipe);
-  return spec?.stages[n.workpiece.stage]?.minutes||3;
- }
- return DURATIONS[key]||2;
-}
+function actionDuration(n,key){return WorldRuntime.actionDuration(n,key);}
 function backgroundOptions(n){
  // The same legal affordances serve the model and the autonomous executor.
  // Personal need, traits, remembered outcomes and ongoing goals order them.
@@ -279,55 +193,7 @@ function finishPlan(n,reason,type='social'){
  n.goal='Reconsidering my next action';n.thoughtAt=state.clock+3;
 }
 function setAction(n,action,source='rein',scores=null){
- if(!state.npcs.includes(n)||n.task||n.peerReservedFor){
-  activity(n).rejected++;activityNote(n,'Cannot start '+action+': already occupied');
-  return false;
- }
- const option=availableActivities(n).find(v=>v.key===action);
- if(!option){
-  activity(n).rejected++;activityNote(n,'Action '+action+' no longer available');
-  return false;
- }
- if(['stock_food','stock_water','stock_wood','stock_stone','stock_fiber',
-  'make_campfire','make_shelter'].includes(action)){
-  if(n.plan)return false;
-  n.plan={key:action,steps:0};n.nextPlanAt=state.clock;
-  n.goal='Pursuing '+action;n.action='none';n.source=source;n.scores=scores;
- }else if(action==='none'){
-  n.action='none';n.task=null;n.source=source;n.scores=scores;
- }else if(action==='rest'){
-  n.action='rest';n.task=null;n.path=[];n.travel=null;
-  n.source=source;n.scores=scores;n.goal='Resting';
- }else{
-  const target=option.target;
-  if(target&&dist(n,target)>1){
-   const good=(action==='share_food'||action==='socialize')
-    ?approach(n,target):moveTo(n,target);
-   if(!good){
-    activity(n).rejected++;activityNote(n,'No reachable path for '+action);
-    remember(n,'Failed to reach a destination for '+action,
-     {kind:'failure',action,ref:option.ref,salience:3});
-    return false;
-   }
-  }
-  n.action=action;n.source=source;n.scores=scores;
-  n.task={key:action,ref:option.ref||null,readyAt:n.path.length?null:
-   state.clock+actionDuration(n,action)};
-  if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
-  n.goal=action.replaceAll('_',' ')+' (self-chosen)';
- }
- Agency.begin(n,action,state.clock,source);
- if(action!=='none'&&source==='plan'&&n.plan)
-  n.goal='Pursuing '+n.plan.key+' · '+action.replaceAll('_',' ');
- if(action==='none'){
-  activity(n).none++;activityNote(n,'Selected none ['+source+']');
- }else{
-  activity(n).started++;activityNote(n,'Started '+action+' ['+source+']');
- }
- record(n.name+' chose '+action.replaceAll('_',' ')+' ['+source+']',
-  ['rein','hivemind'].includes(source)?'ai':'routine');
- if(['rein','hivemind'].includes(source))remember(n,'Chose '+action+' from perceived options');
- return true;
+ return WorldRuntime.begin(state,n,action,source,scores,{onRecord:renderEvents});
 }
 function completeActivity(n){
  if(!n.task||n.path.length||n.task.readyAt===null||
@@ -343,39 +209,10 @@ function completeActivity(n){
   }
   void peerExchange(n,other);return;
  }
- const finished={key:n.task.key,ref:n.task.ref};
- const outcome=AgentWorld.complete(n,state.world,state.npcs);
- Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
- if(outcome.ok){
-  activity(n).completed++;activityNote(n,'Completed: '+outcome.message);
-  remember(n,outcome.message,{kind:'success',action:finished.key,ref:finished.ref,
-   salience:finished.key==='inspect'?3:2});
-  record(n.name+': '+outcome.message,'social');
-  if(n.plan){
-   n.plan.steps++;n.nextPlanAt=state.clock+1;
-   if(n.plan.steps>=24)finishPlan(n,'Plan step limit reached','warning');
-  }else{
-   Agency.finish(n,true,state.clock);
-   n.thoughtAt=state.clock+2;
-  }
-  }else{
-  activity(n).failed++;activityNote(n,'Task failed: '+outcome.message);
-  remember(n,'Could not finish '+finished.key+': '+outcome.message,
-   {kind:'failure',action:finished.key,ref:finished.ref,salience:3});
-  record(n.name+': '+outcome.message+' [rejected]','warning');
-  if(n.plan)finishPlan(n,'Plan blocked: '+outcome.message,'warning');
-  else Agency.finish(n,false,state.clock);
-  n.thoughtAt=state.clock+4;
- }
- n.action='none';
+ return WorldRuntime.complete(state,n,{onRecord:renderEvents});
 }
 function advancePlan(n){
- if(!n.plan||n.task||n.path.length||n.action==='rest'||
-  state.clock<(n.nextPlanAt||0))return;
- const result=AgentWorld.nextPlanAction(n,state.world,state.npcs,reachability(n));
- if(result.status==='done')return finishPlan(n,'Plan completed');
- if(result.status==='blocked')return finishPlan(n,result.reason,'warning');
- if(!setAction(n,result.option.key,'plan'))finishPlan(n,'Subaction unavailable','warning');
+ return WorldRuntime.advancePlan(state,n,{onRecord:renderEvents});
 }
 async function jsonPost(route,body){
  const response=await fetch(route,{method:'POST',headers:{'content-type':'application/json'},
@@ -684,147 +521,33 @@ function renderChat(){
   }
  }
 }
-function serializePerson(n){
- const {travel,motion,blockedFor,peerPending,peerReservedFor,peerRetryAt,...stored}=n;
- return stored;
-}
+function serializePerson(n){return Persistence.save({...state,npcs:[n]}).npcs[0];}
 function save(){
- try{
-  const pack={version:3,seed:state.world.seed,clock:state.clock,
-   nextPersonId:state.nextPersonId,npcs:state.npcs.map(serializePerson),
-   dead:state.dead,world:state.world,events:state.events,
-   selected:state.selected,viewZ:state.viewZ};
-  localStorage.setItem(STORE,JSON.stringify(pack));
- }catch{ /* No destructive reset when storage is unavailable. */ }
+ try{localStorage.setItem(STORE,JSON.stringify(Persistence.save(state)));}
+ catch{ /* Retain current world when browser storage is unavailable. */ }
 }
-function validSavedPath(path,start){
- if(!Array.isArray(path)||path.length>W*H*8)return false;
- let prev={x:start.x,y:start.y,z:start.z||0};
- for(const tile of path){
-  if(!tile||!Frontier.neighbors(state.world,prev).some(p=>key(p)===key(tile)))
-   return false;
-  prev=tile;
- }
- return true;
-}
+function validSavedPath(path,start){return Persistence.validSavedPath(state,path,start);}
 function restore(){
- try{
-  const saved=JSON.parse(localStorage.getItem(STORE)||'null');
-  if(!saved||saved.version!==3||saved.seed!==state.world.seed||
-    !Number.isFinite(saved.clock)||saved.clock<490||
-    !Number.isInteger(saved.nextPersonId)||saved.nextPersonId<6||
-    !Array.isArray(saved.npcs)||!Array.isArray(saved.dead))return;
-  AgentWorld.restoreWorld(state.world,saved.world);
-  Frontier.restore(state.world,saved.world);
-  state.clock=saved.clock;state.world.now=saved.clock;
-  const seen=new Set();
-  const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
-  state.npcs=[];
-  for(const old of saved.npcs.slice(0,5000)){
-   if(!old||typeof old.id!=='string'||!/^person_[1-9]\d*$/.test(old.id)||
-     seen.has(old.id)||archived.has(old.id)||!Number.isInteger(old.x)||!Number.isInteger(old.y)||
-     !Number.isInteger(old.z)||isBlocked(old.x,old.y,old.z))continue;
-   if(!Number.isFinite(old.birthAt)||old.birthAt>state.clock||
-     !Number.isFinite(old.health)||old.health<=0)continue;
-   seen.add(old.id);
-   const n=Civilization.person(state.world,Number(old.id.slice(7)),
-    Number.isFinite(old.spawnAt)?old.spawnAt:490,old);
-   n.x=old.x;n.y=old.y;n.z=old.z;
-   n.name=String(old.name||n.name).slice(0,80);
-   n.birthAt=old.birthAt;n.health=clamp(old.health);n.alive=true;
-   for(const k of ['mood','energy','trust'])if(Number.isFinite(old[k]))n[k]=clamp(old[k]);
-   for(const k of ['goal','source','personality','facing'])
-    if(typeof old[k]==='string')n[k]=old[k].slice(0,300);
-   for(const k of Object.keys(n.needs))
-    if(Number.isFinite(old.needs?.[k]))n.needs[k]=clamp(old.needs[k]);
-   for(const k of Object.keys(n.inventory))
-    if(Number.isInteger(old.inventory?.[k])&&old.inventory[k]>=0)
-     n.inventory[k]=Math.min(old.inventory[k],1000);
-   for(const k of Object.keys(n.skills))
-    if(Number.isInteger(old.skills?.[k])&&old.skills[k]>=0)
-     n.skills[k]=Math.min(old.skills[k],100000);
-   n.bio=Biology.restore(old.bio,n.inventory.food);
-   if(old.activityStats&&typeof old.activityStats==='object'){
-    const a=activity(n);
-    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','errors'])
-     if(Number.isInteger(old.activityStats[k])&&old.activityStats[k]>=0)
-      a[k]=Math.min(old.activityStats[k],10000000);
-    if(typeof old.activityStats.last==='string')
-     a.last=old.activityStats.last.slice(0,110);
-   }
-   Crafting.restore(n,old);
-   n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
-    [...new Set(old.knowledge.recipes.filter(v=>
-      ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
-   if(Array.isArray(old.knowledge?.observations))
-    n.knowledge.observations=old.knowledge.observations.filter(o=>o&&
-     typeof o.id==='string'&&AgentWorld.objectById(state.world,o.id)&&
-     typeof o.text==='string'&&Number.isFinite(o.at))
-     .slice(-40).map(o=>({id:o.id,kind:String(o.kind||'').slice(0,30),
-      at:o.at,text:o.text.slice(0,240)}));
-   Cognition.restore(n,old.memories);
-   Agency.restore(n,old.agency,state.clock);
-   if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
-   if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
-   if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
-   if(validSavedPath(old.path,n))n.path=old.path;
-   if(AgentWorld.KEYS.includes(old.task?.key)&&
-     (old.task.ref===null||typeof old.task.ref==='string')){
-    n.task={key:old.task.key,ref:old.task.ref,
-     readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
-   }
-   n.plan=AgentWorld.validatePlan(old.plan);
-   if(n.workpiece&&(!n.plan||n.plan.key!=='craft_project'||
-    n.plan.recipe!==n.workpiece.recipe))
-    n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
-   if(!n.workpiece&&n.plan?.key==='craft_project')n.plan=null;
-   if(n.plan&&(!n.agency.goal||n.agency.goal.key!==n.plan.key))
-    n.agency.goal={key:n.plan.key,source:'restored project',
-     reason:'security',startedAt:state.clock,progress:n.plan.steps};
-   n.action=AgentWorld.KEYS.includes(old.action)?old.action:'none';
-   n.thoughtAt=state.clock+3+state.npcs.length*2;
-   state.npcs.push(n);
-  }
-  state.dead=saved.dead.filter(v=>v&&typeof v.id==='string'&&!seen.has(v.id)).slice(-10000);
-  const maxId=Math.max(5,...state.npcs.map(n=>Number(n.id.slice(7))),
-   ...state.dead.filter(v=>/^person_[1-9]\d*$/.test(v.id))
-    .map(v=>Number(v.id.slice(7))));
-  state.nextPersonId=Math.max(saved.nextPersonId,maxId+1);
-  state.events=Array.isArray(saved.events)?saved.events.slice(0,100):[];
-  state.selected=state.npcs.some(n=>n.id===saved.selected)
-   ?saved.selected:state.npcs[0]?.id||null;
-  if(Number.isInteger(saved.viewZ)&&saved.viewZ>=Frontier.MIN_Z&&
-   saved.viewZ<=Frontier.MAX_Z)state.viewZ=saved.viewZ;
- }catch{ /* Damaged save is ignored; a fresh world remains available. */ }
+ try{return Persistence.restore(state,JSON.parse(localStorage.getItem(STORE)||'null'));}
+ catch{return false;}
 }
 function step(dt){
  if(state.paused||dt<=0)return;
- const elapsed=dt*state.speed/60,before=state.clock;
- state.clock+=elapsed;state.world.now=state.clock;
- state.day=Math.floor(state.clock/1440)+1;
- state.world.weather=Frontier.weather(state.world,state.clock);
- AgentWorld.regenerate(state.world,elapsed);
- const arrivals=Civilization.advanceArrivals(state,before,state.clock);
- for(const n of arrivals)record(n.name+' arrived in the wilderness','social');
- for(const n of [...state.npcs]){
-  if(n.peerReservedFor&&!state.npcs.some(peer=>peer.id===n.peerReservedFor&&
-   peer.task?.key==='socialize'&&peer.task.ref===n.id))delete n.peerReservedFor;
-  if(!n.peerPending&&!n.peerReservedFor)updateMovement(n,elapsed);
-  const recovery=AgentWorld.stepNeeds(n,state.world,elapsed);
-  if(recovery==='Recovered'){
-   activity(n).completed++;activityNote(n,'Finished resting and recovered');
-  }
-  const death=Civilization.updateHealth(state,n,elapsed);
-  if(death){record(n.name+' died of '+death,'warning');continue;}
-  if(!n.peerPending){
-   if(n.task&&!n.path.length)completeActivity(n);
-   else if(n.plan&&!n.task&&!n.path.length)advancePlan(n);
-  }
- }
- if(!state.npcs.some(n=>n.id===state.selected)){
-  state.selected=state.npcs[0]?.id||null;renderResidents();
- }
- scheduleIdleAgents();
+ const elapsed=dt*state.speed/60;
+ Simulation.advance(state,elapsed,{
+  onArrival:n=>record(n.name+' arrived in the wilderness','social'),
+  move:updateMovement,
+  onRecovery:n=>{activity(n).completed++;activityNote(n,'Finished resting and recovered');},
+  onDeath:(n,death)=>record(n.name+' died of '+death,'warning'),
+  complete:completeActivity,
+  advancePlan,
+  afterActors:()=>{
+   if(!state.npcs.some(n=>n.id===state.selected)){
+    state.selected=state.npcs[0]?.id||null;renderResidents();
+   }
+  },
+  schedule:scheduleIdleAgents
+ });
 }
 function drawMinimap(){
  const c=$('miniMap'),m=c.getContext('2d');
