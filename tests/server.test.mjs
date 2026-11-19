@@ -52,3 +52,14 @@ test('invalid or duplicated action keys are rejected', () => {
   ] }));
   assert.throws(() => buildDecisionPrompt({ ...input, options: [{ key: 'oops', when: 'Only option' }] }));
 });
+
+test('Hivemind decisions accept only advertised action keys', async () => {
+  const { parseHivemindAction } = await import('../server.mjs');
+  assert.deepEqual(parseHivemindAction('greet', input.options),
+    { action: 'greet', confidence: null, scores: null });
+  assert.equal(parseHivemindAction('{"action":"none"}', input.options).action,'none');
+  for (const value of ['greet and steal','I choose greet','unknown',
+    '{"action":"steal"}','{"action":"greet","extra":true}','']) {
+    assert.throws(() => parseHivemindAction(value, input.options));
+  }
+});
