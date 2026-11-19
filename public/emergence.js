@@ -20,7 +20,7 @@
     return {version:3,now:0,seed:island.seed,width:island.width,height:island.height,
       terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
-      nodes:island.resources,
+      nodes:island.resources,construction:root.Construction?.fresh(),
       structures:[],items:[],itemSeq:1};
   }
   function newAgent(n, index=0) {
@@ -541,6 +541,7 @@
         node.stock=old.stock;
       }
     }
+    root.Construction?.restore(target,saved.construction);
     target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache','workbench','crate'].includes(s.type)&&
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
       s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'

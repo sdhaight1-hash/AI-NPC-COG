@@ -38,10 +38,13 @@ function restore(state,saved){
     !Number.isFinite(saved.clock)||saved.clock<490||
     !Number.isInteger(saved.nextPersonId)||saved.nextPersonId<6||
     !Array.isArray(saved.npcs)||!Array.isArray(saved.dead))return;
+  // Use the validated simulation clock before restoring dated blueprints.
+  // Saved world.now can be forged and is not a reliable clock.
+  state.world.now=saved.clock;
   AgentWorld.restoreWorld(state.world,saved.world);
   Frontier.restore(state.world,saved.world);
   root.WorldRuntime.invalidateNavigation(state.world);
-  state.clock=saved.clock;state.world.now=saved.clock;
+  state.clock=saved.clock;
   state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;
   state.receiptSeq=Number.isSafeInteger(saved.receiptSeq)&&saved.receiptSeq>=0?saved.receiptSeq:0;
   state.effectRevision=Number.isSafeInteger(saved.effectRevision)&&saved.effectRevision>=0?saved.effectRevision:0;

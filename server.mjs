@@ -268,6 +268,7 @@ const STATIC = {
   '/civilization.js': ['public/civilization.js', 'text/javascript; charset=utf-8'],
   '/biology.js': ['public/biology.js', 'text/javascript; charset=utf-8'],
   '/frontier.js': ['public/frontier.js', 'text/javascript; charset=utf-8'],
+  '/construction.js': ['public/construction.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['public/style.css', 'text/css; charset=utf-8']
 };
 function json(res, status, payload) {
