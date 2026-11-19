@@ -181,6 +181,15 @@ test('NPC-to-NPC dialogue is witnessed and committed only after a complete valid
  a.task={key:'socialize',ref:c.id,readyAt:b.state.clock};
  await b.peerExchange(a,c);
  assert.equal(a.peerLog.length,1);assert.equal(c.peerLog.length,1);
+ const speakerMemory=a.evidenceMemory.episodes.find(e=>e.type==='interaction');
+ const listenerMemory=c.evidenceMemory.episodes.find(e=>e.type==='interaction');
+ assert.ok(speakerMemory&&listenerMemory,'Both participants heard the exchange');
+ assert.equal(speakerMemory.receiptId,listenerMemory.receiptId);
+ assert.equal(speakerMemory.certainty,'reported');
+ assert.equal(listenerMemory.certainty,'reported');
+ assert.equal(listenerMemory.ref,a.id);
+ assert.equal(speakerMemory.ref,c.id);
+ assert.equal(c.evidenceMemory.facts.length,0);
  assert.equal(a.task,null);
  assert.equal(a.relationships[c.id],undefined,
   'Speech alone never creates an automatic friendship');
