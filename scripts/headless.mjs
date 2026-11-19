@@ -2,7 +2,7 @@
 // Usage: node scripts/headless.mjs [ticks=10000] [seed=379210]
 import {createHash} from 'node:crypto';
 for(const name of ['frontier','biology','crafting','cognition','agency',
- 'emergence','civilization','world-runtime','simulation']){
+ 'emergence','civilization','world-runtime','simulation','persistence']){
  await import('../public/'+name+'.js');
 }
 const ticks=Number(process.argv[2]??10000);
