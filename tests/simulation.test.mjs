@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 // No document, localStorage, fetch, wall clock, or model process is supplied.
 function kernels(){
  const source=['frontier.js','biology.js','crafting.js','cognition.js',
-  'agency.js','emergence.js','civilization.js','world-runtime.js','simulation.js']
+  'agency.js','emergence.js','civilization.js','world-runtime.js','simulation.js','persistence.js']
   .map(name=>readFileSync(new URL('../public/'+name,import.meta.url),'utf8')).join('\n');
  const context=vm.createContext({});
  vm.runInContext(source,context);
