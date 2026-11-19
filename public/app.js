@@ -144,6 +144,8 @@ function sceneFor(npc){
  const around=state.npcs.filter(n=>n.id!==npc.id&&manhattan(n,npc)<=8)
   .map(n=>n.name+' ('+manhattan(n,npc)+' tiles away)').join(', ')||'Nobody nearby';
  const memories=npc.memories.slice(-4).map(m=>m.time+': '+m.text).join('; ')||'No notable memories';
+ const bodyCues=Biology.sensation(npc.bio,npc.needs);
+ const diet=Biology.nutrition(npc.bio,state.clock);
  const nearby=state.world.nodes.filter(node=>node.stock>0&&manhattan(node,npc)<=15)
   .map(n=>n.kind+' at '+n.x+','+n.y+' ('+n.stock+' left)').slice(0,8).join('; ')||'Nothing identified';
  return 'Small settlement, day '+state.day+' at '+timeString()+'. '+
@@ -152,7 +154,10 @@ function sceneFor(npc){
   Math.round(npc.energy)+'/100 (low is tired), social need '+Math.round(npc.needs.social)+
   '/100 (high is lonely), thirst '+Math.round(npc.needs.thirst)+'/100, curiosity '+
   Math.round(npc.needs.curiosity)+'/100. Biome: '+Frontier.terrainAt(state.world,npc.x,npc.y)+
-  '. Weather: '+state.world.weather.kind+' ('+state.world.weather.temperature+'C). Inventory: '+
+  '. Weather: '+state.world.weather.kind+' ('+state.world.weather.temperature+
+  'C). Felt bodily state: '+bodyCues+
+  '. Diet in the last 24h: '+diet.meals+' meals, '+diet.diversity+
+  ' different foods; nutrition needs may affect future recovery. Inventory: '+
   Object.entries(npc.inventory).map(([k,v])=>k+' '+v).join(', ')+'. '+AgentWorld.focus(npc)+
   '. Earned experience: '+Object.entries(npc.skills).map(([k,v])=>k+' '+v).join(', ')+
   ' (practice increases gathering yield). Current intention: '+npc.goal+
@@ -167,11 +172,11 @@ function backgroundOptions(npc){
  // urgent survival choices PLUS social and exploration opportunities when legal.
  const all=availableActivities(npc).filter(o=>o.key!=='none');
  const urgency=new Map([
-  ['drink',npc.needs.thirst>55?115:35],
+  ['drink',npc.needs.thirst>55||npc.bio.hydrationBudgetMl<650?115:35],
   ['fill_water',npc.needs.thirst>50?95:25],
-  ['eat',npc.needs.hunger>55?105:35],
+  ['eat',npc.needs.hunger>55||npc.bio.hormones.ghrelin>73?105:35],
   ['forage',npc.needs.hunger>50?90:30],
-  ['rest',npc.energy<30?100:20],
+  ['rest',npc.energy<30||npc.bio.sleepDebt>72?100:20],
   ['socialize',npc.needs.social>48?70:38],
   ['share_food',npc.needs.social>50?61:32],
   ['explore',npc.needs.curiosity>45?65:28],
@@ -715,6 +720,12 @@ function updateInspector(){
  $('experienceVal').textContent=Object.entries(npc.skills).filter(([,v])=>v>0)
    .map(([k,v])=>k+' '+v).join(' · ')||'None yet';
  $('socialVal').textContent=Math.round(npc.needs.social)+'/100';
+ const diet=Biology.nutrition(npc.bio,state.clock);
+ $('bioSensation').textContent=Biology.sensation(npc.bio,npc.needs);
+ $('bioNutrition').textContent=diet.kcal+' kcal · '+diet.meals+
+   ' meals · '+diet.diversity+' kinds · '+diet.adequacy+'% gameplay coverage';
+ $('bioHormones').textContent=Object.entries(npc.bio.hormones)
+   .map(([k,v])=>k+' '+Math.round(v)).join(' · ');
  $('decisionSource').textContent=npc.source==='rein'?'Rein-NPC (live)':npc.source==='offline routine'?'Offline routine':'Simulation';
  $('talkDistance').textContent=manhattan(state.player,npc)+' tiles away';
  const scores=$('npcDecisions');scores.replaceChildren();
@@ -764,7 +775,8 @@ function save(){
  try{
   const pack={clock:state.clock,day:state.day,
    player:{x:state.player.x,y:state.player.y,energy:state.player.energy,
-    needs:state.player.needs,inventory:state.player.inventory,skills:state.player.skills},
+    needs:state.player.needs,inventory:state.player.inventory,
+    skills:state.player.skills,bio:state.player.bio},
    world:state.world,
    npcs:state.npcs.map(n=>({
     id:n.id,x:n.x,y:n.y,mood:n.mood,energy:n.energy,trust:n.trust,goal:n.goal,
@@ -772,7 +784,7 @@ function save(){
     memories:n.memories,chat:n.chat.filter(item=>item.source!=='pending'),
     relationships:n.relationships,path:n.path,needs:n.needs,inventory:n.inventory,
     skills:n.skills,visited:n.visited,task:n.task,
-    plan:n.plan,peerLog:n.peerLog,lastPeerAt:n.lastPeerAt
+    plan:n.plan,peerLog:n.peerLog,lastPeerAt:n.lastPeerAt,bio:n.bio
    }))
   };
   localStorage.setItem(STORE,JSON.stringify(pack));
@@ -806,6 +818,7 @@ function restore(){
   for(const k of Object.keys(state.player.skills))
    if(Number.isInteger(data.player?.skills?.[k])&&data.player.skills[k]>=0)
     state.player.skills[k]=Math.min(100000,data.player.skills[k]);
+  state.player.bio=Biology.restore(data.player?.bio,state.player.inventory.food);
   Frontier.restore(state.world,data.world);
   for(const npc of state.npcs){
    const prev=data.npcs?.find(n=>n.id===npc.id);if(!prev)continue;
@@ -829,6 +842,7 @@ function restore(){
    for(const key of Object.keys(npc.skills))
     if(Number.isInteger(prev.skills?.[key])&&prev.skills[key]>=0)
      npc.skills[key]=Math.min(prev.skills[key],100000);
+   npc.bio=Biology.restore(prev.bio,npc.inventory.food);
    if(Array.isArray(prev.visited))npc.visited=prev.visited.filter(x=>typeof x==='string').slice(-32);
    // Old job-based save files have no task. Do not resurrect their scripted routes.
    if(prev.task&&AgentWorld.KEYS.includes(prev.task.key)&&
@@ -902,7 +916,8 @@ function updateHUD(now){
    ' · Thirst '+Math.round(p.needs.thirst)+' · Energy '+Math.round(p.energy)+
    ' · Food '+p.inventory.food+' · Water '+p.inventory.water+
    ' · Wood '+p.inventory.wood+' · Stone '+p.inventory.stone+
-   ' · Fiber '+p.inventory.fiber+(p.inventory.hatchet?' · Hatchet':'');
+   ' · Fiber '+p.inventory.fiber+(p.inventory.hatchet?' · Hatchet':'')+
+   ' · Feeling: '+Biology.sensation(p.bio,p.needs);
  updatePlayerActions();drawMinimap();
  $('worldStatus').textContent=state.paused?'Simulation paused':state.conversationBusy?'Conversing with NPC…':state.backgroundBusy?'Background thinking…':'World running';
  $('footerNote').textContent=state.connected?'Model decisions are labeled Rein.':'No model connected: deterministic routines active.';
