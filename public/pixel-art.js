@@ -510,6 +510,14 @@
         rect(ctx,'#d9bd82',x+7,y+10,2,3);
         continue;
       }
+      if(site.type==='workbench'){
+        rect(ctx,'#322d27',x+1,y+12,15,4);
+        rect(ctx,'#ac8556',x+1,y+6,14,5);
+        rect(ctx,'#e7bc7d',x+2,y+6,12,2);
+        rect(ctx,'#6a4e35',x+3,y+10,2,6);
+        rect(ctx,'#6a4e35',x+11,y+10,2,6);
+        continue;
+      }
       if(site.type==='cache'){
         rect(ctx,'#302d25',x+1,y+11,15,4);
         rect(ctx,'#7e6039',x+2,y+6,13,8);
