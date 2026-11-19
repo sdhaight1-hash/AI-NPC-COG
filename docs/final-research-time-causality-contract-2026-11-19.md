@@ -84,3 +84,10 @@ advance(state, requestedMinutes):
 5. Rebaseline #63 survival and #72 environmental budgets on identical seeds; do not conflate changes to time integration with resource-rate tuning.
 
 **Decision frozen for coding:** no general-purpose discrete-event engine, no server conversion and no mixed time-step optimization until the existing fixed-step invariants and costs are measured.
+
+## Implementation checkpoint — PR #76 (2026-11-19)
+
+- **Changed:** `public/simulation.js` now processes direct `elapsed>1` calls as consecutive full simulated minutes plus a final fractional slice; `elapsed<=1` preserves the existing single-slice browser behavior. Direct inputs over 1,440 simulated minutes raise `RangeError` **before** mutation.
+- **Added test:** `tests/time-partition.test.mjs` compares full simulation state and work events for a 720-minute call versus 720 one-minute calls, due physical work, monthly arrival and fractional 0.02-minute ticks; rejects unbounded catch-up. Existing tests that relied on the old one-action-per-call artifact were updated to check physically committed work rather than the last log line.
+- **Scope intentionally deferred:** exact equivalence between arbitrary fractional partitions and refined mid-minute weather/event boundaries; those are not claimed by this patch. Current weather still changes based on the end-of-slice timestamp, and no new system-wide event queue is introduced.
+- **Validation:** GitHub PR [#76](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/76) is the source of truth for actual test/merge status; this document by itself does not claim CI completion or hardware benchmarking.
