@@ -16,3 +16,20 @@
 .speed.active{background:#52664a}
 .panel{box-shadow:0 12px 30px #07120d55}
 .brand .mark{background:#354638;border-color:#7a7851}
+
+/* Village visual polish: warm wood/forest chrome lets the pixel scene lead. */
+:root{--panel:#172720;--panel2:#21372b;--border:#3e614e;--text:#f1ead6;--muted:#b3bfac;--accent:#edc98b}
+body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),linear-gradient(135deg,#0c1711,#192d23 70%,#111c17)}
+.topbar{background:linear-gradient(90deg,#10211aee,#263e30d9);box-shadow:0 5px 16px #04110a40}
+.panel{border-color:#48654c;box-shadow:0 12px 40px #030f075c}
+.world-frame{border:4px solid #786747;box-shadow:0 0 0 1px #c4a46c55,0 10px 32px #05170e99}
+.world-frame canvas{image-rendering:pixelated}
+.simulation .panel-head{background:linear-gradient(110deg,#20372b,#17261e)}
+.panel-head h1{font-family:Georgia,'Palatino Linotype',serif;font-weight:650;letter-spacing:.012em;color:#fff3d8}
+.eyebrow{color:#d9bd77}
+.clock-group strong{color:#f7e2b5}
+.art-toggle{background:#544a2e;border-color:#b09967;color:#f5dfae}
+.art-toggle:hover{background:#74643b}
+.map-hint{max-width:92%;line-height:1.35}
+.resident.active{border-color:#eecb8d}
+.event-log,.memories{scrollbar-width:thin;scrollbar-color:#577b5b #1c2c24}
