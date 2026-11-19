@@ -259,6 +259,28 @@ test('urgent reflexes cannot interrupt an existing NPC task',()=>{
  assert.equal(n.task,task);
 });
 
+test('offline residents spend time together with receipts but no simulated speech',()=>{
+ const b=makeBrowser(),[a,other]=b.state.npcs;
+ b.state.connected=false;b.state.auto=true;
+ for(const n of b.state.npcs){
+  n.thoughtAt=b.state.clock+200;n.needs.social=5;
+  n.task=null;n.plan=null;n.path=[];n.action='none';
+ }
+ a.needs.social=95;a.energy=95;a.thoughtAt=b.state.clock;
+ other.needs.social=90;other.energy=95;
+ other.x=a.x;other.y=a.y;other.z=a.z;
+ b.scheduleIdleAgents();
+ assert.equal(a.task?.key,'socialize');
+ assert.equal(other.peerReservedFor,a.id);
+ b.step(4);
+ assert.equal(a.peerLog.length,0);
+ assert.equal(other.peerLog.length,0);
+ assert.ok(b.state.receipts.some(r=>r.action==='socialize'&&
+  r.status==='COMPLETED'&&r.actorId===a.id));
+ assert.ok(a.needs.social<95);
+ assert.ok(other.needs.social<90);
+});
+
 test('socially motivated residents approach each other and complete model-generated dialogue',async()=>{
  const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/peer-exchange'?
   {first:'I found fresh water near the marsh.',second:'We should collect some.',durationMs:8}:
