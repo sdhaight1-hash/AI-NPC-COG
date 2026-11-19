@@ -26,7 +26,9 @@
   function newAgent(n, index=0) {
     n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
       social:35+(index*7)%32, curiosity:40+(index*11)%36 };
-    n.inventory = { food:1,water:2,wood:0,stone:0,fiber:0,hatchet:0,
+    // Every new resident begins with a functioning body, not free possessions.
+    // Real hydration/glycogen are physiological reserves; pantry is inventory.
+    n.inventory = { food:0,water:0,wood:0,stone:0,fiber:0,hatchet:0,
       cord:0,blade:0,plank:0,crate:0 };
     n.skills = { foraging:0,gathering:0,crafting:0,survival:0,
       socializing:0,building:0,exploring:0 };
