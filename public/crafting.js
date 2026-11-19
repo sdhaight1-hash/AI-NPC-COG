@@ -9,7 +9,7 @@
   blade:{name:'Knapped stone blade',inputs:{stone:2},stages:[
    {name:'Select a suitable stone core',minutes:3},{name:'Flake the cutting edge',minutes:7},
    {name:'Retouch and inspect edge',minutes:4}],output:{kind:'blade',count:1}},
-  hatchet:{name:'Hafted stone hatchet',inputs:{blade:1,cord:1,wood:1},stages:[
+  hafted_hatchet:{name:'Hafted stone hatchet',inputs:{blade:1,cord:1,wood:1},stages:[
    {name:'Shape a wooden handle',minutes:6},{name:'Seat the knapped blade',minutes:6},
    {name:'Bind and test the haft',minutes:5}],output:{kind:'hatchet',count:1}},
   workbench:{name:'Primitive woodworking bench',inputs:{wood:3,stone:1,cord:1},stages:[
@@ -48,7 +48,7 @@
   return Object.entries(RECIPES).flatMap(([id,spec])=>{
    if(!hasInputs(npc,spec)||npc.energy<18||
     (spec.tool&&(npc.inventory[spec.tool]||0)<1))return [];
-   if(id==='hatchet'&&npc.inventory.hatchet>0)return [];
+   if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)return [];
    const station=spec.station?stationNear(npc,world,spec.station):null;
    if(spec.station&&!station)return [];
    if(id==='workbench'&&world.structures.some(s=>s.type==='workbench'&&
@@ -65,7 +65,7 @@
   if(!spec||npc.workpiece||npc.energy<18||!hasInputs(npc,spec)||
    (spec.tool&&(npc.inventory[spec.tool]||0)<1))
    return {ok:false,message:'Manufacturing prerequisites are missing'};
-  if(id==='hatchet'&&npc.inventory.hatchet>0)
+  if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)
    return {ok:false,message:'Already carrying a hatchet'};
   let station=null;
   if(spec.station){
@@ -148,8 +148,15 @@
      materialQuality:Math.max(1,Math.min(5,Number(item.materialQuality)||2))})):[];
   // An item count can be read from inventory only if the persisted item
   // records back it. This also rejects corrupt saves that mint components.
-  for(const kind of KINDS)npc.inventory[kind]=
+  for(const kind of KINDS.filter(k=>k!=='hatchet'))npc.inventory[kind]=
    npc.craftedItems.filter(item=>item.kind===kind).length;
+  // Original v3 saves may contain a legitimate legacy hatchet with no
+  // quality record. Preserve the tool rather than erasing it on migration.
+  const recordedHatchets=npc.craftedItems.filter(item=>item.kind==='hatchet').length;
+  if((npc.inventory.hatchet||0)>recordedHatchets)
+   npc.craftedItems.push({kind:'hatchet',quality:2,maker:npc.id,
+    craftedAt:npc.spawnAt||0,method:'legacy',materialQuality:2});
+  npc.inventory.hatchet=npc.craftedItems.filter(item=>item.kind==='hatchet').length;
   const p=source?.workpiece,spec=RECIPES[p?.recipe];
   npc.workpiece=spec&&Number.isInteger(p.stage)&&p.stage>=0&&
    p.stage<spec.stages.length&&Number.isFinite(p.workmanship)&&p.workmanship>=0&&
