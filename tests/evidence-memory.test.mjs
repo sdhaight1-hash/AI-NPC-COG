@@ -301,3 +301,64 @@ test('historical failed gather cannot be replayed after later depletion',()=>{
  assert.equal(E.fromFailedReceipt(sim,b,failed),0);
  assert.equal(E.state(b).claims[0].status,'unverified');
 });
+
+test('verified resource reports calibrate speaker reliability without creating friendship',()=>{
+ const {E,sim,a,b,world}=setup();
+ a.name='Asha';b.name='Mara';
+ world.nodes.push({id:'stone_2',kind:'stone',stock:5,max:8,x:3,y:3});
+ const initial=E.speakerReliability(b,a.id);
+ assert.equal(initial.score,.5);
+ assert.equal(initial.samples,0);
+ const first=committed(sim,a,'inspect','spring_1','evt_920');
+ E.fromReceipt(sim,a,first);
+ const second=committed(sim,a,'inspect','stone_2','evt_921');
+ E.fromReceipt(sim,a,second);
+ sim.clock++;
+ const speech=committed(sim,a,'socialize',b.id,'evt_922');
+ E.fromDialogue(sim,a,b,speech,
+  'Water [source:spring_1], stone [source:stone_2]','I will check.');
+ const prior=E.speakerReliability(b,a.id);
+ assert.equal(prior.samples,0);
+ assert.equal(prior.unverified,2);
+ assert.equal(prior.score,.5);
+ sim.clock++;
+ const observed=committed(sim,b,'inspect','spring_1','evt_923');
+ E.fromReceipt(sim,b,observed);
+ const positive=E.speakerReliability(b,a.id);
+ assert.equal(positive.samples,1);
+ assert.equal(positive.supported,1);
+ assert.equal(positive.score,2/3);
+ assert.equal(E.speakerReliability(a,b.id).samples,0);
+ // Simulated resource reclassification tests a real contradictory inspection.
+ world.nodes[1].kind='water';
+ sim.clock++;
+ const contrary=committed(sim,b,'inspect','stone_2','evt_924');
+ E.fromReceipt(sim,b,contrary);
+ const mixed=E.speakerReliability(b,a.id);
+ assert.equal(mixed.samples,2);
+ assert.equal(mixed.supported,1);
+ assert.equal(mixed.contradicted,1);
+ assert.equal(mixed.score,.5);
+ assert.equal(b.relationships,undefined);
+ assert.equal(b.trust,undefined);
+ assert.equal(E.fromReceipt(sim,b,contrary),null);
+ assert.equal(E.speakerReliability(b,a.id).samples,2);
+ const clone={id:b.id,x:b.x,y:b.y,z:0};
+ E.restore(clone,JSON.parse(JSON.stringify(E.state(b))),sim.clock);
+ assert.deepEqual(E.speakerReliability(clone,a.id),mixed);
+});
+test('stale source or unsupported claimed verification does not affect reliability',()=>{
+ const {E,sim,a,b}=setup();a.name='Asha';b.name='Mara';
+ const inspection=committed(sim,a,'inspect','spring_1','evt_930');
+ E.fromReceipt(sim,a,inspection);
+ sim.clock++;
+ const speech=committed(sim,a,'socialize',b.id,'evt_931');
+ E.fromDialogue(sim,a,b,speech,'Try [source:spring_1]','Okay');
+ const claim=E.state(b).claims[0];
+ claim.status='stale';claim.failureReceiptId='evt_932';
+ assert.equal(E.speakerReliability(b,a.id).score,.5);
+ assert.equal(E.speakerReliability(b,a.id).stale,1);
+ claim.status='supported';claim.verificationReceiptId='made_up';
+ assert.equal(E.speakerReliability(b,a.id).samples,0,
+  'A claim status without an actual firsthand inspection cannot boost a speaker');
+});
