@@ -75,15 +75,28 @@ function generate(seed=DEFAULT_SEED){
   ['wood',42,23,8],['stone',41,26,8],['food',45,20,7]])add(kind,x,y,max);
  return {width:WIDTH,height:HEIGHT,seed,terrain,resources};
 }
+const DAYS_PER_MONTH=9,DAYS_PER_YEAR=108,SEASONS=['Spring','Summer','Autumn','Winter'];
+function calendar(clock){
+ const totalDay=Math.max(0,Math.floor(clock/1440)),dayOfYear=totalDay%DAYS_PER_YEAR;
+ const month=Math.floor(dayOfYear/DAYS_PER_MONTH);
+ return {year:Math.floor(totalDay/DAYS_PER_YEAR)+1,month:month+1,
+  dayOfMonth:dayOfYear%DAYS_PER_MONTH+1,dayOfYear:dayOfYear+1,
+  season:SEASONS[Math.floor(month/3)],seasonDay:dayOfYear%27+1,totalDay:totalDay+1};
+}
 function weather(map,clock){
- const day=Math.floor(clock/1440);
- const hour=((clock%1440)+1440)%1440/60;
- const roll=hash(day,42,map.seed);
- const rain=roll>.60,storm=roll>.91;
- const kind=storm?'storm':rain?'rain':roll<.13?'fog':'clear';
- const temperature=Math.round(15+9*Math.cos((hour-14)*Math.PI/12)
-  +(hash(day,30,map.seed)-.5)*8-(rain?3:0));
- return {kind,temperature,rain,day};
+ const date=calendar(clock),day=date.totalDay-1;
+ const hour=((clock%1440)+1440)%1440/60,roll=hash(day,42,map.seed);
+ const seasonalWarmth=Math.cos(2*Math.PI*(date.dayOfYear-41)/DAYS_PER_YEAR);
+ const base=9+12*seasonalWarmth;
+ const wetChance=date.season==='Spring'?.48:date.season==='Autumn'?.47:
+  date.season==='Winter'?.43:.25;
+ const precipitation=roll>1-wetChance,storm=precipitation&&roll>.94;
+ const temperature=Math.round(base+6*Math.cos((hour-14)*Math.PI/12)
+  +(hash(day,30,map.seed)-.5)*6-(precipitation?2:0));
+ const snow=precipitation&&temperature<=0;
+ const kind=snow?'snow':storm?'storm':precipitation?'rain':roll<.12?'fog':'clear';
+ return {kind,temperature,rain:precipitation&&!snow,snow,day,
+  season:date.season,year:date.year};
 }
 function reveal(map,x,y,radius=6){
  const discovered=map.discovered||(map.discovered={});
@@ -108,5 +121,5 @@ function restore(map,data){
  }
  return true;
 }
-root.Frontier={WIDTH,HEIGHT,DEFAULT_SEED,COLORS,generate,terrainAt,weather,reveal,revealed,restore,hash};
+root.Frontier={WIDTH,HEIGHT,DEFAULT_SEED,COLORS,DAYS_PER_MONTH,DAYS_PER_YEAR,calendar,generate,terrainAt,weather,reveal,revealed,restore,hash};
 })(globalThis);
