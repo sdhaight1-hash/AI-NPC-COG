@@ -24,7 +24,7 @@
    ref:task.ref??null,state:'RUNNING',workRequired:minutes,workDone:0,
    startedAt:state.clock,lastTick:state.clock,reason:null,
    workpieceRecipe:n.workpiece?.recipe??null,
-   workpieceStage:n.workpiece?.stage??null};
+   workpieceStage:n.workpiece?.stage??null,reservationIds:[]};
   n.currentActivity=a;
   return a;
  }
@@ -78,7 +78,9 @@
    startedAt:Number.isFinite(a.startedAt)&&a.startedAt<=clock?a.startedAt:clock,
    lastTick:clock,reason:typeof a.reason==='string'?a.reason.slice(0,48):null,
    workpieceRecipe:typeof a.workpieceRecipe==='string'?a.workpieceRecipe:null,
-   workpieceStage:Number.isInteger(a.workpieceStage)?a.workpieceStage:null
+   workpieceStage:Number.isInteger(a.workpieceStage)?a.workpieceStage:null,
+   reservationIds:Array.isArray(a.reservationIds)?a.reservationIds.filter(x=>
+    typeof x==='string'&&/^res_[1-9]\d*$/.test(x)).slice(0,40):[]
   });
   if(Array.isArray(source?.suspendedActivities)){
    n.suspendedActivities=source.suspendedActivities.filter(valid).slice(-4).map(copy);
