@@ -140,8 +140,11 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
   const rendererSource = await renderer.text();
   assert.match(rendererSource, /root\.VillageArt=/);
   const htmlSource = await (await fetch(origin + '/')).text();
-  assert.ok(htmlSource.indexOf('/physics.js') < htmlSource.indexOf('/app.js'),
-    'Physics must load before app.js');
+  assert.ok(htmlSource.indexOf('/civilization.js') < htmlSource.indexOf('/app.js'),
+    'Population lifecycle must initialize before app.js');
+  const population = await fetch(origin + '/civilization.js');
+  assert.equal(population.status,200);
+  assert.match(await population.text(),/root\.Civilization=/);
   assert.ok(htmlSource.indexOf('/pixel-art.js') < htmlSource.indexOf('/app.js'),
     'The art renderer must load before app.js');
   assert.ok(htmlSource.indexOf('/frontier.js') < htmlSource.indexOf('/emergence.js'),
