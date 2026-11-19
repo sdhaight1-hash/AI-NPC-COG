@@ -206,7 +206,7 @@
       return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
-    if(task.key.startsWith('craft_')){
+    if(task.key==='craft_stage'||root.Crafting.getRecipe(task.key.slice(6))){
       let outcome;
       if(task.key==='craft_stage'){
         outcome=root.Crafting.advance(n,world);
