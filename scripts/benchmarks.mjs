@@ -157,8 +157,13 @@ export function runSoak(seed=379210,days=30){
  invariant(state);
  const completed=state.receipts.filter(r=>r.status==='COMPLETED').length;
  assert.ok(completed>0,'Autonomous residents must finish physical work');
+ const deathCauses={};
+ for(const d of state.dead)deathCauses[d.cause]=(deathCauses[d.cause]||0)+1;
+ const firstDeathAt=state.dead.length?Math.min(...state.dead.map(d=>d.deathAt)):null;
  return {scenario:'autonomous_'+days+'_day_soak',pass:true,elapsedTicks:ticks,
   initialFounders:5,alive:state.npcs.length,deaths:state.dead.length,
+  founderSurvivors:state.npcs.filter(n=>n.spawnKind==='founder').length,
+  deathCauses,firstDeathDay:firstDeathAt===null?null:1+Math.floor(firstDeathAt/1440),
   arrivals:Math.max(0,state.nextPersonId-6),worldHash:hash(state),
   retainedReceipts:state.receipts.length,completed,
   modelCalls:0};
