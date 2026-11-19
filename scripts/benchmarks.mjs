@@ -147,11 +147,50 @@ export function assertCraftConservation(initialFiber,finalFiber,producedCord){
 }
 export function runSoak(seed=379210,days=30){
  const state=setup(seed);state.auto=true;
- const ticks=days*1440;
+ const ticks=days*1440,deathDetails=[],criticalWindows=new Map();
  assert.ok(Number.isInteger(ticks)&&ticks>0&&ticks<=1440*120);
  for(let i=0;i<ticks;i++){
+  // Keep only a small terminal window for actors approaching physiological death.
+  // This is a diagnostic snapshot, not a new gameplay source of knowledge.
+  for(const actor of state.npcs){
+   if(actor.health>=25||actor.bio?.hydrationBudgetMl>=220)continue;
+   const previous=criticalWindows.get(actor.id)||[];
+   previous.push({clock:state.clock,health:actor.health,energy:actor.energy,
+    hydration:actor.bio.hydrationBudgetMl,action:actor.action,
+    task:actor.task?.key||null,plan:actor.plan?.key||null,
+    pathLength:actor.path?.length||0,source:actor.source,
+    thoughtAt:actor.thoughtAt,notes:actor.activityStats?.last||null,
+    visibleWater:WorldRuntime.available(state,actor)
+     .filter(o=>o.key==='drink_source').map(o=>o.ref),
+    reservedWater:(state.reservations||[])
+     .filter(x=>x.actorId===actor.id&&x.kind==='water'&&x.status==='ACTIVE')
+     .map(x=>x.commandId)});
+   if(previous.length>28)previous.shift();
+   criticalWindows.set(actor.id,previous);
+  }
   // Check cheaply every hour; action-specific receipts are checked separately.
-  Simulation.advance(state,1);
+  Simulation.advance(state,1,{onDeath:(actor,cause)=>{
+   const nearest=state.world.nodes.filter(s=>s.kind==='water')
+    .map(s=>({id:s.id,stock:s.stock,
+     distance:globalThis.Frontier.distance(state.world,actor,s)}))
+    .sort((a,b)=>a.distance-b.distance||a.id.localeCompare(b.id))[0]||null;
+   const waterPath=nearest?.id?WorldRuntime.pathfind(state,actor,
+    state.world.nodes.find(x=>x.id===nearest.id)):null;
+   let possibleActions=[];
+   try{possibleActions=WorldRuntime.available(state,actor).map(o=>o.key);}catch{}
+   deathDetails.push({actorId:actor.id,clock:state.clock,cause,
+    position:{x:actor.x,y:actor.y,z:actor.z},
+    action:actor.action,task:actor.task?.key||null,
+    plan:actor.plan?.key||null,peerPending:!!actor.peerPending,
+    peerReservedFor:actor.peerReservedFor||null,possibleActions,
+    nearestWaterPath:waterPath?.length??null,
+    needs:{...actor.needs},energy:actor.energy,
+    hydrationMl:actor.bio?.hydrationBudgetMl??null,
+    inventory:{...actor.inventory},nearestWater:nearest,
+    recentActions:state.receipts.filter(r=>r.actorId===actor.id)
+     .slice(-12).map(r=>({clock:r.clock,action:r.action,status:r.status,reason:r.reason})),
+    lastCriticalSnapshots:criticalWindows.get(actor.id)||[]});
+  }});
   if(i%60===0)invariant(state);
  }
  invariant(state);
@@ -166,7 +205,7 @@ export function runSoak(seed=379210,days=30){
   deathCauses,firstDeathDay:firstDeathAt===null?null:1+Math.floor(firstDeathAt/1440),
   arrivals:Math.max(0,state.nextPersonId-6),worldHash:hash(state),
   retainedReceipts:state.receipts.length,completed,
-  modelCalls:0};
+  deathDetails,modelCalls:0};
 }
 if(process.argv[1]?.replaceAll('\\','/').endsWith('/scripts/benchmarks.mjs')){
  const option=process.argv.find(v=>v.startsWith('--seed='));

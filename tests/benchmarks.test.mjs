@@ -32,7 +32,8 @@ test('five-founder autonomy survives a model-free multi-day soak',()=>{
 
 test('finite-source survival prevents early deaths on the baseline first-week seed',()=>{
  const result=runSoak(379210,7);
- assert.equal(result.deaths,0,'Five founders must be able to survive the first week with lawful water procurement');
+ assert.equal(result.deaths,0,'Five founders must survive the first week; death evidence: '+
+  JSON.stringify(result.deathDetails));
  assert.equal(result.founderSurvivors,5,'No original founder dies before a viable survival routine develops');
  assert.ok(result.completed>0);
  assert.equal(result.modelCalls,0);
