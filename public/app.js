@@ -375,7 +375,8 @@ function updateCamera(force=false){
  const tx=(point.x+.5)*TILE-viewW/2,ty=(point.y+.5)*TILE-viewH/2;
  const dx=((((tx-state.camera.x)%(W*TILE))+1.5*W*TILE)%(W*TILE))-.5*W*TILE;
  const dy=((((ty-state.camera.y)%(H*TILE))+1.5*H*TILE)%(H*TILE))-.5*H*TILE;
- state.camera.x+=force?dx:dx*.18;state.camera.y+=force?dy:dy*.18;
+ state.camera.x=Frontier.wrap(state.camera.x+(force?dx:dx*.18),W*TILE);
+ state.camera.y=Frontier.wrap(state.camera.y+(force?dy:dy*.18),H*TILE);
 }
 function clientToTile(clientX,clientY,rect){
  const sx=(clientX-rect.left)*canvas.width/rect.width;
