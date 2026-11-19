@@ -115,11 +115,11 @@ test('crafting knowledge is not granted by materials or skill automatically',()=
  n.inventory.wood=3;n.inventory.stone=2;n.inventory.fiber=3;
  const canReach=()=>true;
  const actions=A.available(n,w,[n],canReach);
- assert.ok(actions.some(a=>a.key==='experiment_tool'));
+ assert.ok(actions.some(a=>a.key==='experiment_wood_stone_fiber'));
  assert.ok(!actions.some(a=>a.key==='craft_hatchet'));
  n.task={key:'craft_hatchet',ref:null};
  assert.equal(A.complete(n,w,[n]).ok,false,'A direct guessed recipe must fail');
- n.task={key:'experiment_tool',ref:null};
+ n.task={key:'experiment_wood_stone_fiber',ref:null};
  assert.equal(A.complete(n,w,[n]).ok,true);
  assert.ok(n.knowledge.recipes.includes('hatchet'));
  assert.ok(A.available(n,w,[n],canReach).some(a=>a.key==='craft_hatchet'));
@@ -136,4 +136,36 @@ test('several independent random worlds have habitable founder clusters and uniq
   assert.ok(people.every(p=>F.traversable(w,p.x,p.y)),'seed '+seed);
   assert.equal(new Set(people.map(p=>p.x+':'+p.y)).size,5,'seed '+seed);
  }
+});
+
+test('primitive shelters and campfires require discoveries; actions cannot bypass knowledge',()=>{
+ const {AgentWorld:A,Civilization:C}=modules(),w=A.newWorld();
+ const n=C.founders(w)[0];n.inventory.wood=14;n.inventory.stone=6;n.inventory.fiber=9;
+ const options=()=>A.available(n,w,[n],()=>true).map(x=>x.key);
+ assert.ok(!options().includes('build_fire'));
+ assert.ok(!options().includes('build_shelter'));
+ assert.ok(!options().includes('make_campfire'));
+ assert.ok(!options().includes('make_shelter'));
+ n.task={key:'build_fire',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,false);
+ n.task={key:'build_shelter',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,false);
+ assert.ok(options().includes('experiment_wood_stone'));
+ assert.ok(options().includes('experiment_wood_fiber'));
+ n.task={key:'experiment_wood_stone',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ assert.ok(n.knowledge.recipes.includes('campfire'));
+ assert.ok(options().includes('build_fire'));
+ n.task={key:'experiment_wood_fiber',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ assert.ok(n.knowledge.recipes.includes('shelter'));
+ assert.ok(options().includes('build_shelter'));
+ n.task={key:'build_fire',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ n.task={key:'build_shelter',ref:null};
+ assert.equal(A.complete(n,w,[n]).ok,true);
+ assert.equal(w.structures.length,2);
+ const other=C.founders(w)[0];
+ assert.deepEqual(Array.from(other.knowledge.recipes),[],
+  'Independent individuals must not inherit learned methods');
 });
