@@ -105,6 +105,7 @@
    const next=n.path[0];
    if(blocked(state,next)){
     root.Activities.interrupt(state,n,'ROUTE_BLOCKED');
+    root.Reservations?.release(state,n.task?.commandId);
     n.path=[];n.travel=null;n.task=null;n.goal='Route invalidated';
     stats(n).blocked++;note(n,'Movement: destination became blocked');
     n.thoughtAt=state.clock+3;break;
@@ -121,6 +122,7 @@
     n.blockedFor=(n.blockedFor||0)+elapsed;n.travel=null;
     if(n.blockedFor>5){
      root.Activities.interrupt(state,n,'ROUTE_BLOCKED');
+     root.Reservations?.release(state,n.task?.commandId);
      n.path=[];n.task=null;n.goal='Route blocked by another inhabitant';
      stats(n).blocked++;note(n,'Movement: another inhabitant blocked passage');
      n.thoughtAt=state.clock+3;n.blockedFor=0;
@@ -303,6 +305,7 @@
   if(n.task?.key===urgent)return false;
   if(n.task||n.path.length||n.action==='rest'){
    root.Activities.interrupt(state,n,'CRITICAL_NEED');
+   root.Reservations?.release(state,n.task?.commandId);
    n.task=null;n.path=[];n.travel=null;n.action='none';
    if(n.plan)n.nextPlanAt=state.clock+2;
    remember(state,n,'Interrupted work to address immediate bodily danger',
