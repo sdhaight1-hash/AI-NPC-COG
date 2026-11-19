@@ -3,6 +3,7 @@
 (function(root){
 'use strict';
 const WIDTH=80,HEIGHT=52,MIN_Z=-4,MAX_Z=3,DEFAULT_SEED=379210;
+const GENERATOR_REVISION=1;
 const COLORS={meadow:'#708e50',forest:'#315e43',marsh:'#647f55',ridge:'#89867a',sand:'#c7b184',water:'#3c8297',stone:'#737c78'};
 const wrap=(v,size)=>((v%size)+size)%size;
 const hash=(x,y,seed=DEFAULT_SEED)=>{
@@ -19,6 +20,47 @@ function noise(x,y,seed,nx=5,ny=4){
  const c=hash(wrap(ax,nx),wrap(ay+1,ny),seed);
  const d=hash(wrap(ax+1,nx),wrap(ay+1,ny),seed);
  return (a+(b-a)*tx)*(1-ty)+(c+(d-c)*tx)*ty;
+}
+function descriptor(seed=DEFAULT_SEED){
+ seed=Number.isInteger(seed)?seed:DEFAULT_SEED;
+ return Object.freeze({seed,revision:GENERATOR_REVISION,topology:'torus',
+  width:WIDTH,height:HEIGHT,zMin:MIN_Z,zMax:MAX_Z});
+}
+function surface(seed,x,y){
+ const elevation=noise(x,y,seed,5,4)*.65+noise(x,y,seed+13,16,13)*.35;
+ const humidity=noise(x+17,y-21,seed+202,5,4);
+ return elevation<.33?'water':
+  elevation<.39?'sand':elevation>.69?'ridge':
+  humidity>.73&&elevation<.48?'marsh':
+  humidity>.44||elevation>.54?'forest':'meadow';
+}
+function underground(seed,x,y,z){
+ return noise(x+z*11,y-z*7,seed+z*173,16,13)>.71?'cave':'stone';
+}
+function baseRegion(spec,{x,y,width,height,z=0}){
+ if(!spec||!Number.isInteger(spec.seed)||!sameDescriptor(spec,descriptor(spec.seed)))
+  throw new RangeError('Unsupported world generator descriptor');
+ if(![x,y,width,height,z].every(Number.isSafeInteger)||
+  width<1||width>WIDTH||height<1||height>HEIGHT||z<MIN_Z||z>MAX_Z)
+  throw new RangeError('Invalid base region');
+ const startX=wrap(x,WIDTH),startY=wrap(y,HEIGHT),tiles=[];
+ for(let dy=0;dy<height;dy++)for(let dx=0;dx<width;dx++){
+  const xx=wrap(startX+dx,WIDTH),yy=wrap(startY+dy,HEIGHT);
+  tiles.push(z===0?surface(spec.seed,xx,yy):z>0?'air':underground(spec.seed,xx,yy,z));
+ }
+ return tiles;
+}
+function sameDescriptor(a,b){
+ return Object.keys(b).every(key=>a?.[key]===b[key]);
+}
+function matchesSave(map,data){
+ if(!data||data.seed!==map.seed||data.width!==map.width||data.height!==map.height||
+  (data.zMin!==undefined&&data.zMin!==MIN_Z)||(data.zMax!==undefined&&data.zMax!==MAX_Z))
+  return false;
+ const expected=map.generator||descriptor(map.seed);
+ // Untagged v3 checkpoints were written by revision 1.
+ if(!Object.hasOwn(data,'generator'))return expected.revision===1;
+ return sameDescriptor(data.generator,expected);
 }
 function terrainAt(map,x,y){
  if(!Number.isInteger(x)||!Number.isInteger(y))return 'water';
@@ -37,8 +79,7 @@ function materialAt(world,x,y,z=0){
  if(Object.hasOwn(world.edits||{},key))return world.edits[key];
  if(z>0)return 'air';
  if(z===0)return terrainAt(world,x,y);
- const cavity=noise(x+z*11,y-z*7,world.seed+z*173,16,13);
- return cavity>.71?'cave':'stone';
+ return underground(world.seed,x,y,z);
 }
 function traversable(world,x,y,z=0){
  const material=materialAt(world,x,y,z);
@@ -65,16 +106,9 @@ function neighbors(world,position){
  return result;
 }
 function generate(seed=DEFAULT_SEED){
- seed=Number.isInteger(seed)?seed:DEFAULT_SEED;
- const terrain=new Array(WIDTH*HEIGHT);
- for(let y=0;y<HEIGHT;y++)for(let x=0;x<WIDTH;x++){
-  const elevation=noise(x,y,seed,5,4)*.65+noise(x,y,seed+13,16,13)*.35;
-  const humidity=noise(x+17,y-21,seed+202,5,4);
-  terrain[y*WIDTH+x]=elevation<.33?'water':
-   elevation<.39?'sand':elevation>.69?'ridge':
-   humidity>.73&&elevation<.48?'marsh':
-   humidity>.44||elevation>.54?'forest':'meadow';
- }
+ const generator=descriptor(seed);
+ seed=generator.seed;
+ const terrain=baseRegion(generator,{x:0,y:0,width:WIDTH,height:HEIGHT});
  const resources=[];
  const used=new Set();
  function add(kind,x,y,max){
@@ -108,10 +142,10 @@ function generate(seed=DEFAULT_SEED){
  if(!resources.some(n=>n.kind==='water')){
   for(let y=0;y<HEIGHT;y++)for(let x=0;x<WIDTH;x++)
    if(terrain[y*WIDTH+x]==='meadow'&&resources.every(r=>r.x!==x||r.y!==y)){
-    add('water',x,y,12);return {width:WIDTH,height:HEIGHT,seed,terrain,resources};
+    add('water',x,y,12);return {width:WIDTH,height:HEIGHT,seed,generator,terrain,resources};
    }
  }
- return {width:WIDTH,height:HEIGHT,seed,terrain,resources};
+ return {width:WIDTH,height:HEIGHT,seed,generator,terrain,resources};
 }
 // Twelve 9-day months, four 27-day seasons, 108 days per game year.
 const DAYS_PER_MONTH=9,DAYS_PER_YEAR=108,SEASONS=['Spring','Summer','Autumn','Winter'];
@@ -150,16 +184,29 @@ function reveal(map,x,y,radius=6){
 }
 function revealed(map,x,y){return !!map.discovered?.[wrap(y,map.height)*map.width+wrap(x,map.width)];}
 function restore(map,data){
- if(!data||data.seed!==map.seed||data.width!==map.width||data.height!==map.height)return false;
+ if(!matchesSave(map,data))return false;
+ const discovered=map.discovered||(map.discovered={});
  if(data.discovered&&typeof data.discovered==='object'){
   for(const key of Object.keys(data.discovered).slice(0,WIDTH*HEIGHT)){
    const i=Number(key);
    if(Number.isInteger(i)&&i>=0&&i<WIDTH*HEIGHT&&data.discovered[key]===1)
-    map.discovered[i]=1;
+    discovered[i]=1;
   }
  }
+ const edits={};
+ const materials=new Set([...Object.keys(COLORS),'air','bedrock','cave','wall']);
+ if(data.edits&&typeof data.edits==='object'){
+  for(const [key,material] of Object.entries(data.edits)){
+   const [x,y,z]=key.split(':').map(Number);
+   if(!materials.has(material)||![x,y,z].every(Number.isInteger)||
+    key!==x+':'+y+':'+z||x<0||x>=WIDTH||y<0||y>=HEIGHT||z<MIN_Z||z>MAX_Z)
+    continue;
+   edits[key]=material;
+  }
+ }
+ map.edits=edits;
  return true;
 }
-root.Frontier={WIDTH,HEIGHT,MIN_Z,MAX_Z,DEFAULT_SEED,COLORS,generate,terrainAt,
+root.Frontier={WIDTH,HEIGHT,MIN_Z,MAX_Z,DEFAULT_SEED,COLORS,generate,baseRegion,matchesSave,terrainAt,
  wrap,hash,distance,materialAt,traversable,neighbors,calendar,DAYS_PER_MONTH,DAYS_PER_YEAR,weather,reveal,revealed,restore};
 })(globalThis);
