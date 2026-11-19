@@ -144,14 +144,34 @@ function sceneFor(npc){
   'the environment validates it and supplies consequences.';
 }
 function backgroundOptions(npc){
- // Rein supports A-J only; the world may expose more legal actions.
- // Preserve urgent survival choices and self-chosen multi-step intentions.
- const rank=['drink','fill_water','eat','forage','rest','stock_food','make_campfire',
-  'make_shelter','build_shelter','collect_wood','collect_fiber','collect_stone',
-  'craft_hatchet','share_food','socialize','explore','build_fire'];
- const options=availableActivities(npc).filter(o=>o.key!=='none')
-  .sort((a,b)=>rank.indexOf(a.key)-rank.indexOf(b.key)).slice(0,9);
- options.push({key:'none',when:'Wait and observe without changing current circumstances'});
+ // Rein's trained choice tokens allow at most A-J. Every character receives
+ // urgent survival choices PLUS social and exploration opportunities when legal.
+ const all=availableActivities(npc).filter(o=>o.key!=='none');
+ const urgency=new Map([
+  ['drink',npc.needs.thirst>55?115:35],
+  ['fill_water',npc.needs.thirst>50?95:25],
+  ['eat',npc.needs.hunger>55?105:35],
+  ['forage',npc.needs.hunger>50?90:30],
+  ['rest',npc.energy<30?100:20],
+  ['socialize',npc.needs.social>48?70:38],
+  ['share_food',npc.needs.social>50?61:32],
+  ['explore',npc.needs.curiosity>45?65:28],
+  ['make_shelter',state.world.weather.kind!=='clear'?65:41],
+  ['build_shelter',65],['make_campfire',34],['build_fire',47],
+  ['craft_hatchet',49],['collect_wood',33],['collect_stone',28],['collect_fiber',31]
+ ]);
+ const score=o=>(urgency.get(o.key)||10)+
+  (Frontier.hash(npc.x,npc.y,Math.floor(state.clock/35)+npc.id.length*37+
+    o.key.length*17)-.5)*22;
+ all.sort((a,b)=>score(b)-score(a));
+ const options=all.slice(0,9);
+ // Avoid trapping people in pure survival micromanagement. If they're able
+ // to explore or socialize, maintain one such choice in the option set.
+ const living=all.find(o=>o.key==='socialize'&&npc.needs.social>=35)||
+  all.find(o=>o.key==='explore');
+ if(living&&!options.some(o=>o.key===living.key)&&options.length===9)
+  options[8]=living;
+ options.push({key:'none',when:'Wait and observe the surroundings'});
  return options.map(({key,when})=>({key,when}));
 }
 function fallbackBackground(npc){
