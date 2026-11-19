@@ -89,6 +89,12 @@
   release(state,commandId);
   return {ok:true,quantity:r.quantity,kind:r.kind,from:r.sourceId,to:actor.id};
  }
+ function expire(state){return reconcile(state);}
+ function releaseActor(state,actorId){
+  const before=ledger(state).length;
+  state.reservations=ledger(state).filter(r=>r.actorId!==actorId);
+  return before-state.reservations.length;
+ }
  function restore(state,saved){
   state.reservations=Array.isArray(saved)?saved.slice(0,4096).map(r=>({
    commandId:r?.commandId,actorId:r?.actorId,sourceId:r?.sourceId,
@@ -96,5 +102,6 @@
   })):[];
   reconcile(state);
  }
- root.ResourceReservations={available,reserve,release,reconcile,collect,restore};
+ root.Reservations=root.ResourceReservations={available,reserve,release,reconcile,
+  expire,releaseActor,collect,restore};
 })(globalThis);
