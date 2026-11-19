@@ -3,7 +3,7 @@
 import {createHash} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
 for(const name of ['frontier','biology','crafting','cognition','agency',
- 'emergence','civilization','receipts','activities','world-runtime','simulation','persistence']){
+ 'emergence','civilization','receipts','activities','resource-reservations','world-runtime','simulation','persistence']){
  await import('../public/'+name+'.js');
 }
 const ticks=Number(process.argv[2]??10000);
