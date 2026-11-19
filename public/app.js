@@ -174,7 +174,7 @@ function backgroundOptions(npc){
  const urgency=new Map([
   ['drink',npc.needs.thirst>55||npc.bio.hydrationBudgetMl<650?115:35],
   ['fill_water',npc.needs.thirst>50?95:25],
-  ['eat',npc.needs.hunger>55||npc.bio.hormones.ghrelin>73?105:35],
+  ['eat',npc.needs.hunger>55||Biology.appetiteDrive(npc.bio)>68?105:35],
   ['forage',npc.needs.hunger>50?90:30],
   ['rest',npc.energy<30||npc.bio.sleepDebt>72?100:20],
   ['socialize',npc.needs.social>48?70:38],
