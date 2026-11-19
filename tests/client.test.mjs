@@ -233,7 +233,7 @@ test('urgent needs act while model inference is busy and use finite world invent
  n.needs.thirst=85;n.inventory.water=2;
  assert.equal(b.survivalReflex(n),true);
  assert.equal(n.action,'drink');
- assert.equal(n.source,'survival reflex');
+ assert.equal(n.source,'survival instinct');
  const before=n.inventory.water;
  b.step(2);
  assert.equal(n.inventory.water,before-1,'Physiological action must consume real water');
@@ -320,15 +320,16 @@ test('activity diagnostics distinguish decisions, abstentions, accepted work and
  await b.deliberate(n);
  assert.equal(stats.decisions,1);
  assert.equal(stats.none,1);
- assert.equal(stats.started,0);
+ assert.equal(stats.started,1,'Self-directed autonomy should turn an abstention into work');
+ assert.ok(n.plan||n.task,'A legal persistent goal or action must follow abstention');
  assert.equal(n.thoughtAt,b.state.clock+3,
-  'Model abstention should be reconsidered instead of waiting 25 game minutes');
- assert.match(stats.last,/Selected none/);
+  'Abstention must not postpone the next model decision for 25 minutes');
+ assert.match(stats.last,/Started/);
  assert.equal(b.setAction(n,'nonexistent','rein'),false);
  assert.equal(stats.rejected,1);
  n.needs.thirst=60;
  assert.equal(b.setAction(n,'drink','rein'),true);
- assert.equal(stats.started,1);
+ assert.equal(stats.started,2);
  b.step(2);
  assert.equal(stats.completed,1);
  assert.match(stats.last,/Completed/);
