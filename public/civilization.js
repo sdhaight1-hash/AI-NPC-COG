@@ -47,9 +47,14 @@ function person(world,index,clock,position){
   'pragmatic','expressive','gentle','skeptical'];
  const trait1=values[Math.floor(seedValue(world,index,99)*values.length)];
  const trait2=values[Math.floor(seedValue(world,index,109)*values.length)];
+ // Independent, reproducible gameplay temperament; words remain descriptions.
+ const traits={
+  socialApproach:Math.round(seedValue(world,index,119)*100)/100,
+  solitudePreference:Math.round(seedValue(world,index,129)*100)/100
+ };
  const npc=root.AgentWorld.newAgent({
   id:'person_'+index,name,x:position.x,y:position.y,z:0,mood:55+Math.floor(a*30),
-  energy:75,trust:50,color:PALETTE[index%PALETTE.length],
+  energy:75,trust:50,color:PALETTE[index%PALETTE.length],traits,
   personality:name+' is an adult individual, '+trait1+' and '+trait2+
    '. No profession, group membership or relationship is assigned.',
   goal:'Assessing an unfamiliar environment',action:'none',source:'simulation',
