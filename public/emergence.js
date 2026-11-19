@@ -36,6 +36,7 @@
     n.task = null;
     n.plan = null;
     n.craftedItems=[];n.workpiece=null;
+    n.project=null;n.completedProjects=[];
     n.peerLog = [];
     n.memories ||= [];
     n.lastPeerAt = -100000;
