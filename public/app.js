@@ -184,7 +184,11 @@ function scheduleIdleAgents(){
   }
  }else if(!state.backgroundBusy&&due.length&&
   performance.now()-state.lastDecisionMs>=1500){
-  void deliberate(due[0]);
+  const n=due[0];
+  if(Projects.maybeStart(state,n)){
+   WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
+   n.thoughtAt=state.clock+18;
+  }else void deliberate(n);
  }
 }
 function finishPlan(n,reason,type='social'){
