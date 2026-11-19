@@ -97,6 +97,9 @@
  // A committed conversation proves only that words were exchanged in person.
  // Its contents remain reported claims, never witnessed world facts.
  function fromDialogue(sim,speaker,listener,receipt,first,second){
+  const verified=receipt&&speaker&&sourceReceipt(sim,speaker,receipt.id);
+  if(!verified||verified.action!==receipt.action||
+   verified.targetId!==receipt.targetId||verified.clock!==receipt.clock)return null;
   if(!speaker||!listener||speaker===listener||
    !sim.npcs?.includes(speaker)||!sim.npcs?.includes(listener)||
    !receipt||receipt.actorId!==speaker.id||receipt.targetId!==listener.id||
