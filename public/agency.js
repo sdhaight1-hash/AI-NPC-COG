@@ -4,12 +4,12 @@
  'use strict';
  const clamp=(n,a=0,b=100)=>Math.max(a,Math.min(b,n));
  const GOALS=new Set(['stock_water','stock_food','stock_wood','stock_stone',
-  'stock_fiber','make_shelter','make_campfire']);
+  'stock_fiber','make_shelter','make_campfire','make_workbench']);
  const CATEGORIES={
   drink:'safety',fill_water:'safety',eat:'safety',forage:'safety',rest:'safety',
   stock_water:'security',stock_food:'security',stock_wood:'craft',
   stock_stone:'craft',stock_fiber:'craft',make_shelter:'security',
-  make_campfire:'security',collect_wood:'craft',collect_stone:'craft',
+  make_campfire:'security',make_workbench:'craft',collect_wood:'craft',collect_stone:'craft',
   collect_fiber:'craft',craft_stage:'craft',build_fire:'craft',
   build_shelter:'craft',build_cache:'craft',craft_hatchet:'craft',
   explore:'curiosity',inspect:'curiosity',socialize:'social',
@@ -68,6 +68,7 @@
    value+=Math.max(0,target-(inv[item]||0))*13+10;
   }
   if(k==='make_shelter')value+=30;
+  if(k==='make_workbench')value+=20;
   if(k==='make_campfire')value+=18;
   if(k==='explore')value+=5;
   if(k==='inspect')value+=8;
