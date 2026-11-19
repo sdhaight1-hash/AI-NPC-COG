@@ -19,7 +19,9 @@ const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
 const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
  fill_water:1,eat:3,drink:1,craft_hatchet:12,experiment_wood_stone:15,
  experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
- build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,pickup_item:2,build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
+ build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,pickup_item:2,place_crate:6,
+ stash_wood:2,stash_stone:2,stash_fiber:2,
+ withdraw_wood:2,withdraw_stone:2,withdraw_fiber:2,build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
 let installedAtlas=null,showAtlas=true;
 function selectedNpc(){return state.npcs.find(n=>n.id===state.selected)||null;}
 function selectNpc(id){
@@ -139,7 +141,7 @@ function updateMovement(n,elapsed){
  }
  n.motion=n.path.length?1:0;
  if(n.task&&!n.path.length&&n.task.readyAt===null)
-  n.task.readyAt=state.clock+(DURATIONS[n.task.key]||2);
+  n.task.readyAt=state.clock+actionDuration(n,n.task.key);
 }
 function sceneFor(n){
  const others=state.npcs.filter(p=>p!==n&&dist(n,p)<=8)
@@ -161,12 +163,23 @@ function sceneFor(n){
   ' Inventory: '+Object.entries(n.inventory).map(([k,v])=>k+' '+v).join(', ')+
   '. Skills earned by actions: '+Object.entries(n.skills).filter(([,v])=>v>0)
    .map(([k,v])=>k+' '+v).join(', ')+
-  '. Known crafting methods: '+known+'. Personally inspected: '+
+  '. Known crafting methods: '+known+
+  '. Manufacturing: '+(n.workpiece?Crafting.RECIPES[n.workpiece.recipe].name+
+   ' stage '+(n.workpiece.stage+1):'no active workpiece')+
+  '. Finished goods: '+(n.craftedItems||[]).slice(-5).map(p=>
+   p.kind+' quality '+p.quality+'/5').join(', ')+'. Personally inspected: '+
   (n.knowledge?.observations||[]).slice(-4).map(o=>o.text).join('; ')+
   '. Near people: '+others+
   '. Perceived resources: '+nearby+'. Recollections: '+memories+
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
+}
+function actionDuration(n,key){
+ if(key==='craft_stage'&&n.workpiece){
+  const spec=Crafting.getRecipe(n.workpiece.recipe);
+  return spec?.stages[n.workpiece.stage]?.minutes||3;
+ }
+ return DURATIONS[key]||2;
 }
 function backgroundOptions(n){
  const options=availableActivities(n).filter(o=>o.key!=='none');
@@ -175,6 +188,10 @@ function backgroundOptions(n){
   build_cache:47,store_wood:37,retrieve_wood:42,experiment_wood_stone:43,
   experiment_wood_fiber:43,experiment_wood_stone_fiber:43,craft_hatchet:45,
   collect_wood:35,collect_stone:33,collect_fiber:33,
+  craft_cord:56,craft_blade:55,craft_hafted_hatchet:70,
+  craft_workbench:54,craft_planks:56,craft_crate:47,craft_stage:105,
+  place_crate:59,stash_wood:38,stash_stone:35,stash_fiber:35,
+  withdraw_wood:37,withdraw_stone:35,withdraw_fiber:35,
   socialize:40,share_food:35,make_shelter:42,build_shelter:50,
   make_campfire:40,build_fire:48};
  const urgency=o=>priority[o.key]+
@@ -266,7 +283,7 @@ function setAction(n,action,source='rein',scores=null){
   }
   n.action=action;n.source=source;n.scores=scores;
   n.task={key:action,ref:option.ref||null,readyAt:n.path.length?null:
-   state.clock+(DURATIONS[action]||2)};
+   state.clock+actionDuration(n,action)};
   if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
   n.goal=action.replaceAll('_',' ')+' (self-chosen)';
  }
@@ -536,6 +553,11 @@ function updateInspector(){
  $('knowledgeVal').textContent=(n.knowledge?.recipes||[]).join(', ')||'No learned recipes';
  $('npcGoal').textContent=n.goal;
  $('npcPlan').textContent=n.plan?n.plan.key+' ('+n.plan.steps+' steps)':'No active plan';
+ $('npcCrafting').textContent=n.workpiece?
+  Crafting.RECIPES[n.workpiece.recipe].name+' · '+(n.workpiece.stage+1)+'/'+
+  Crafting.RECIPES[n.workpiece.recipe].stages.length:'No workpiece';
+ $('npcGoods').textContent=(n.craftedItems||[]).slice(-5).map(p=>
+  p.kind+' ★'+p.quality).join(', ')||'None';
  $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source==='hivemind'?'Hivemind':n.source||'Simulation';
  const scores=$('npcDecisions');scores.replaceChildren();
  if(n.scores)for(const [label,val] of Object.entries(n.scores)){
@@ -646,6 +668,7 @@ function restore(){
     if(Number.isInteger(old.skills?.[k])&&old.skills[k]>=0)
      n.skills[k]=Math.min(old.skills[k],100000);
    n.bio=Biology.restore(old.bio,n.inventory.food);
+   Crafting.restore(n,old);
    n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
     [...new Set(old.knowledge.recipes.filter(v=>
       ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
@@ -666,6 +689,10 @@ function restore(){
      readyAt:Number.isFinite(old.task.readyAt)?Math.max(old.task.readyAt,state.clock):null};
    }
    n.plan=AgentWorld.validatePlan(old.plan);
+   if(n.workpiece&&(!n.plan||n.plan.key!=='craft_project'||
+    n.plan.recipe!==n.workpiece.recipe))
+    n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
+   if(!n.workpiece&&n.plan?.key==='craft_project')n.plan=null;
    n.action=AgentWorld.KEYS.includes(old.action)?old.action:'none';
    n.thoughtAt=state.clock+3+state.npcs.length*2;
    state.npcs.push(n);

@@ -34,7 +34,7 @@ function makeBrowser(options={}){
    setItem(k,v){saved.set(k,v);},
    removeItem(k){saved.delete(k);}
   },fetch:options.fetch||(async()=>({ok:true,json:async()=>({connected:false})}))};
- const source=['pixel-art.js','frontier.js','biology.js','emergence.js',
+ const source=['pixel-art.js','frontier.js','biology.js','crafting.js','emergence.js',
   'civilization.js','app.js'].map(path=>
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
  vm.runInNewContext(source+'\n'+
@@ -277,4 +277,26 @@ test('AI context contains inspected object details without sharing them telepath
   text:'An unusual rock formation found by my own eyes'});
  assert.match(b.sceneFor(a),/unusual rock formation/);
  assert.doesNotMatch(b.sceneFor(other),/unusual rock formation/);
+});
+
+test('NPC manufacturing takes multiple real simulation steps and survives a save',()=>{
+ const saved=new Map(),b=makeBrowser({saved}),npc=b.state.npcs[0];
+ b.state.auto=false;
+ npc.inventory.fiber=3;
+ assert.equal(b.setAction(npc,'craft_cord','rein'),true);
+ assert.equal(npc.inventory.cord,0);
+ b.step(3);
+ assert.ok(npc.workpiece,'Materials must form a persistent unfinished workpiece');
+ assert.equal(npc.inventory.fiber,0,'Fiber is committed at the beginning');
+ assert.equal(npc.inventory.cord,0,'Starting a job does not finish it');
+ for(let i=0;i<30;i++)b.step(1);
+ assert.equal(npc.inventory.cord,1);
+ assert.equal(npc.workpiece,null);
+ assert.equal(npc.craftedItems.filter(item=>item.kind==='cord').length,1);
+ b.save();
+ const restored=makeBrowser({saved});
+ const copy=restored.state.npcs.find(n=>n.id===npc.id);
+ assert.equal(copy.inventory.cord,1);
+ assert.equal(copy.craftedItems.filter(item=>item.kind==='cord').length,1);
+ assert.equal(copy.workpiece,null);
 });
