@@ -7,9 +7,13 @@ function makeBrowser(options={}){
  const counters={staticRects:0,screenImages:0};
  const frames=[];
  let failScreenDraw=!!options.failScreenDrawOnce;
+ let failStaticDraw=!!options.failStaticDrawOnce;
  const fakeCtx=kind=>new Proxy({
   measureText:s=>({width:String(s).length*8}),
-  fillRect(){if(kind==='static')counters.staticRects++;},
+  fillRect(){if(kind==='static'){
+   if(failStaticDraw){failStaticDraw=false;throw Error('Startup background drawing failed');}
+   counters.staticRects++;
+  }},
   drawImage(){if(kind==='screen'){
    if(failScreenDraw){failScreenDraw=false;throw Error('Canvas temporarily unavailable');}
    counters.screenImages++;
@@ -483,4 +487,13 @@ test('at 1x speed the HUD shows advancing seconds even before the minute changes
  assert.notEqual(after,initial,'Visible seconds distinguish slow time from a freeze');
  assert.equal(after.slice(0,5),initial.slice(0,5),
   'A few seconds should not advance an entire simulated minute at 1x');
+});
+
+test('transient startup rendering failure cannot prevent the first browser frame',()=>{
+ const b=makeBrowser({failStaticDrawOnce:true});
+ assert.equal(b.frames.length,1,'Startup must always schedule the first frame');
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=2100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>start,'World simulation can run after a startup-art failure');
 });
