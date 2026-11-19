@@ -287,7 +287,9 @@ async function peerExchange(n,other){
   if(typeof response.first!=='string'||typeof response.second!=='string'||
     !response.first.trim()||!response.second.trim())throw Error('Empty exchange');
   n.task.approved=true;
-  const outcome=AgentWorld.complete(n,state.world,state.npcs);
+  const outcome=WorldReceipts.execute(state,n,
+   {key:n.task.key,ref:n.task.ref,commandId:n.task.commandId},
+   ()=>AgentWorld.complete(n,state.world,state.npcs));
   if(!outcome.ok)throw Error(outcome.message);
   activity(n).completed++;activityNote(n,'Completed conversation with '+other.name);
   Agency.outcome(n,state.world,'socialize',other.id,true,state.clock);
