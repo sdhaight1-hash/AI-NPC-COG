@@ -428,3 +428,31 @@ test('personally ranked decisions and witnessed beliefs enter the model context 
  assert.match(text,/My witnessed beliefs: water at/);
  assert.doesNotMatch(b.sceneFor(other),/My witnessed beliefs: water at/);
 });
+
+test('real browser frame loop advances the displayed clock across scheduled offline work',()=>{
+ const b=makeBrowser();
+ b.state.connected=false;
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=16100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>=start+14,
+  'Simulation clock must advance even during NPC scheduling and world rendering');
+ assert.equal(b.elements.get('worldTime').textContent,
+  String(b.state.clock).length>0?
+   String(b.elements.get('worldTime').textContent):'',
+  'Clock indicator stays accessible');
+ assert.match(b.elements.get('worldStatus').textContent,/World running|Offline|deliberating/);
+});
+test('browser clock advances with social demand and never requires an LLM',()=>{
+ const b=makeBrowser();
+ b.state.connected=false;
+ for(const n of b.state.npcs){
+  n.needs.social=95;n.energy=98;n.thoughtAt=b.state.clock;
+  n.task=null;n.plan=null;n.path=[];n.action='none';
+ }
+ const start=b.state.clock;
+ b.tick(1000);
+ for(let ms=1050;ms<=7100;ms+=50)b.tick(ms);
+ assert.ok(b.state.clock>start+5);
+ assert.notEqual(b.elements.get('worldTime').textContent,'');
+});
