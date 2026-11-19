@@ -96,6 +96,7 @@ function restore(state,saved){
       at:o.at,text:o.text.slice(0,240)}));
    Cognition.restore(n,old.memories);
    Agency.restore(n,old.agency,state.clock);
+   root.Projects?.restore(state,n,old.project);
    if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
