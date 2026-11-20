@@ -1,0 +1,50 @@
+# Crafting decisions for autonomous residents
+
+A resident makes something to solve a problem. They may also repair, reuse, borrow, trade, ask for help, or wait. Cold, hunger, obligations and opportunity determine which response makes sense at that moment. The observer can see why a resident chose a course and what physically happened. Simulation success is a believable response under local knowledge, finite means and human constraints. An unsuccessful craft or a season without technological progress can be a valid outcome.
+
+## Where the runtime starts
+
+- [Crafting](../public/crafting.js) already consumes inputs once into a resumable workpiece, checks tool and station access at work stages, and produces a quality-bearing output. Inputs are mostly per-resident counts, most recipes are offered when the inputs are present, and technique currently derives from general crafting practice. Nearby station selection can consult world structures directly.
+- [Projects](../public/projects.js) tracks named dependency graphs and can fall back to exploration when a gathered resource is unavailable. [Perception](../public/perception.js) distinguishes sensory evidence from detailed inspection. These provide the starting point for bounded, evidence-based plans.
+- [WorldRuntime](../public/world-runtime.js), [Activities](../public/activities.js), [Reservations](../public/reservations.js), and [Receipts](../public/receipts.js) already arbitrate movement, claims, interruption and completion. Claims currently resolve against a source ID and material kind. Some craft inputs collapse to carried counts. Carry provenance through this path as it gains lot identity. Keep the catalog a definition store and route physical changes through the existing runtime.
+
+## What a resident must work out
+
+| Decision | Available evidence | Physical or social consequence |
+| --- | --- | --- |
+| What will solve the problem? | A need, a witnessed defect, a commitment, or a remembered hazard | The same need may lead to a borrowed vessel, a repair, a replacement, or a different activity. A resident can defer and reassess. |
+| What material will work? | Inspection, past attempts, or a report from a person the resident trusts | A method specifies required properties and acceptable alternatives. A substitute changes work time, yield, risk or performance. Hidden properties enter planning only through evidence. |
+| Where can I get it? | Remembered sites and routes, visible signs, reports, or an offer | Carrying capacity, exposure, time, permissions and stale information matter. Unknown resources prompt scouting, inquiry or a fallback when the expected benefit justifies the cost. |
+| Do I know how to do it? | Remembered instructions, witnessed steps, prior results and available instruction | A resident can attempt a familiar procedure, ask to observe, or test a hypothesis. Knowledge of a step and skill at performing it develop separately. |
+| Can I secure time, tools and help? | Visible availability, explicit agreements, prior trust and the resident's own bodily state | A lender can refuse. Helpers can leave. A shared bench has occupancy and output space. Claimed access and consent to use it are distinct. |
+| Should I continue? | Current needs and conditions, elapsed work, expected benefit and safe stopping points | Stored stock, workpieces and irreversible stages survive interruption. Failure can result in repairable defects, salvage, loss, or a later retry with new evidence. |
+
+The planner draws a short list of next actions from personal beliefs, memories, observed objects and communicated commitments. It can reason backward from a desired result into a few actionable dependencies. It checks again when evidence changes and remembers a recent failed approach so it can try something else. An NPC should not learn about a hidden workshop from the presence or absence of an offered action. The model, when available, can choose among grounded intents and propose experiments through supported physical operations. The same rules apply to offline choices.
+
+## Make, move, and account for things
+
+A **method** describes transformations. Each stage specifies input properties and amounts, tool capabilities, workspace and environmental conditions, elapsed work, a safe stopping rule, and outputs or waste. A **work order** is one attempt to satisfy a need. It identifies the actor and any agreed helpers, a site, allocated material, and where the product should go. A **workpiece** is the material already transformed, with identity, location, condition and recorded progress. A resident can know a method without having a work order or knowing where to get inputs.
+
+Use a lot for divisible supplies with a common material and condition. Track unique tools and workpieces by identity. A claim holds an amount or exclusive use for an explicit duration. Physical pickup and delivery change custody and location. Ownership, temporary custody and permission are recorded separately. Unused claims release on abandonment, expiry or death. Delivered materials stay at the site, and already transformed inputs stay with the workpiece or its salvage. Any loss has a cause and a receipt. Travel never transports goods ahead of the actor. Each committed stage records consumed inputs, change in condition or wear, resulting outputs and their destination exactly once. If the destination cannot accept an output, the work remains staged or follows an explicitly allowed placement rule.
+
+Model a physical property when it changes a decision, result, or visible consequence. For early vessel work, wood condition and sealing quality can affect labor and leak resistance. Later kiln work needs elapsed firing, fuel and conditions even while nobody is attending. Use deterministic inputs and a stable attempt identifier for any variable outcome, with no reroll on save/reload. Avoid simulating microsteps that residents cannot observe or act on.
+
+## Learning, cooperation, and history
+
+An inspected example can suggest an idea. A demonstration can reveal the operations a witness actually saw. Directed teaching can explain hidden steps and offer feedback, with time and willingness required from both people. Practice exposes mistakes and develops technique for related work. A successful, tested product is stronger evidence than a plausible explanation. A result can be local, partial or wrong. A trusted report can justify a trial without automatically giving the recipient competence. Reports can become stale as materials and conditions change. Store evidence with actor, time, source, the procedure or property observed, and the outcome. Unwitnessed results remain private unless communicated or recorded in an artifact someone can access.
+
+Analytical research provides motivation for modeling transmission separately from experience. Morgan and colleagues compared teaching and other transmission mechanisms in a controlled stone-tool experiment. Crown's review describes learning material knowledge and complex production sequences in Puebloan pottery. These are examples of distinct learning routes. The simulation should measure its own outcomes rather than reproduce historical rates. [Morgan et al.](https://pmc.ncbi.nlm.nih.gov/articles/PMC4338549/) · [Crown](https://doi.org/10.1146/annurev-anthro-102313-025910)
+
+A request is a social action with its own outcome. A neighbor can loan a tool, trade labor, decline, or teach by agreement. Personal relationships, immediate needs and previous follow-through influence acceptance. Assigned work remains subject to bodily needs and permission. Shared projects emerge from people making and honoring commitments. Specialization becomes worthwhile when repeat demand, practiced skill, local supplies and reliable handoffs make it a sensible use of time. A settlement advances through learned, retained and transmitted methods. A catalog entry or global progress counter does not confer knowledge.
+
+## First acceptance scenario
+
+Use a founder with no possessions, known access to a spring and a reason to carry water away from it. Build on the existing carved flask, blade and cord. A controlled variant supplies a distant material site, a reachable neighbor with a usable blade, and another who knows the method. Change the available evidence, tool condition or willingness to help between replays. A plausible resident might drink directly and defer, scout, borrow a blade, learn a step, or carry stock to a safe place to shape a flask. A harness can separately drive the exact craft path to prove that all physical stages run.
+
+- A resident can complete the chain from observed resources using normal timed actions, then carry water away in the actual finished vessel. Trace inputs to a location and confirm that the source loses the water that the vessel gains.
+- Moving or depleting a remembered lot produces a dated observation and a replan. Hidden locations and private inventories never enter the actor's plan as facts. A refusal does not transfer a tool.
+- A thirsty resident can pause work. Another resident competing for a loan or lot cannot duplicate it. Interrupted or abandoned work leaves the expected material, claims, and custody.
+- Two residents with different exposure to a lesson acquire different evidence. The apprentice's later independent results reflect practice and conditions. Exact seeded replay survives save/reload, including a checkpoint between stages.
+- The observatory can explain goal, evidence, chosen route, costs, blocking reason and final disposition from receipts. The test allows multiple valid decisions and treats hand-scripted actions as execution checks, rather than as proof of autonomous choice.
+
+After this chain, use one station-bound process such as planks or a crate to establish material delivery, shared access and output staging. Expand production methods through [issue #107](https://github.com/sdhaight1-hash/AI-NPC-COG/issues/107) once those checks pass.
