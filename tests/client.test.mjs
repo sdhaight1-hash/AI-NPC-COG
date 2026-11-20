@@ -4,13 +4,14 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 function makeBrowser(options={}){
  const events=new Map(),saved=options.saved||new Map();
- const counters={staticRects:0,screenImages:0};
+ const counters={staticRects:0,screenImages:0,screenRects:0};
  const frames=[];
  let failScreenDraw=!!options.failScreenDrawOnce;
  let failStaticDraw=!!options.failStaticDrawOnce;
  const fakeCtx=kind=>new Proxy({
   measureText:s=>({width:String(s).length*8}),
-  fillRect(){if(kind==='static'){
+  fillRect(){if(kind==='screen')counters.screenRects++;
+   if(kind==='static'){
    if(failStaticDraw){failStaticDraw=false;throw Error('Startup background drawing failed');}
    counters.staticRects++;
   }},
@@ -48,7 +49,7 @@ function makeBrowser(options={}){
   readFileSync(new URL('../public/'+path,import.meta.url),'utf8')).join('\n');
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
-  'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,'+
+  'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,drawConstructionProjection,'+
   'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity};',context);
  const launchedSpeed=context.exposed.state.speed;
  // Most tests explicitly exercise a one-minute-per-second physics fixture,
@@ -721,4 +722,34 @@ test('crafting inspector shows the current operation and resident-specific seal 
  b.selectNpc(maker.id);
  assert.equal(b.elements.get('npcCrafting').textContent,
   'No workpiece · Last trial held water with binding grade 3/5');
+});
+
+
+test('construction drawings are a pure overlay; built tiles and unfinished plans are distinguishable',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0],w=b.state.world;
+ const point={x:n.x,y:n.y,z:n.z||0},other=b.pathfind(n,{
+  x:(n.x+1)%w.width,y:n.y,z:n.z||0})[0]||
+  b.pathfind(n,{x:n.x,y:(n.y+1)%w.height,z:n.z||0})[0];
+ assert.ok(other,'Need a visible walkable construction cell');
+ // This is a rendering-only fixture; physical authority is tested separately.
+ const bp=w.construction.blueprints;
+ bp.push({id:'bp_901',kind:'floor',material:'wood',...point,
+  actorId:n.id,plannedAt:b.state.clock,status:'PLANNED'});
+ const original=JSON.stringify(w.construction);
+ const before=b.counters.screenRects;
+ b.drawWorld();
+ const baseline=b.counters.screenRects-before;
+ assert.equal(JSON.stringify(w.construction),original,
+  'A drawn blueprint can never become a finished building');
+ bp.length=0;
+ w.construction.tiles.push({id:'tile_901',blueprintId:'bp_901',kind:'wall',
+  material:'wood',...other,actorId:n.id,builtAt:b.state.clock,
+  status:'BUILT',commandId:'cmd_901'});
+ const builtState=JSON.stringify(w.construction);
+ const later=b.counters.screenRects;
+ b.drawWorld();
+ assert.ok(b.counters.screenRects-later>baseline,
+  'A completed vector wall adds visible geometry beyond the base world draw');
+ assert.equal(JSON.stringify(w.construction),builtState,
+  'Drawing a wall must not modify its receipt or collision state');
 });
