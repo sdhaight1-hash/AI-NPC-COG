@@ -115,8 +115,11 @@
   const obj=root.AgentWorld.objectById(world,ref);
   if(!old&&!obj)return;
   const b=old||{ref,kind:'unknown',x:n.x,y:n.y,confidence:0,at:clock,status:'uncertain'};
-  // A failure could mean blocked access, not necessarily a depleted deposit.
-  if(obj&&success){
+  // A failed action can establish depletion only from same-level contact.
+  const expected=root.AgentWorld.HARVEST_KINDS?.[action]||(action==='drink_source'?'water':null);
+  const witnessedEmpty=obj&&obj.kind===expected&&obj.stock===0&&
+   (n.z||0)===(obj.z||0)&&root.Frontier.distance(world,n,obj)<=1;
+  if(obj&&(success||witnessedEmpty)){
    b.kind=String(obj.kind||obj.type||'unknown').slice(0,30);
    b.x=obj.x;b.y=obj.y;
    b.stock=Number.isInteger(obj.stock)?Math.max(0,obj.stock):null;

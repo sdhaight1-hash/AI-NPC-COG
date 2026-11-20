@@ -83,12 +83,18 @@
     root.AgentWorld.roomFor(n,'water')>0)?'fill_water':'drink_source';
    const pairs=[['food','forage'],['water',waterAction],
     ['wood','collect_wood'],['stone','collect_stone'],['fiber','collect_fiber']];
+   const avoided=new Set((n.agency?.beliefs||[]).filter(b=>
+    (b.kind==='stone'&&b.status==='depleted')||
+    (b.status==='failed'&&state.clock-b.at>=0&&state.clock-b.at<60)).map(b=>b.ref));
+   const canTake=(kind,action)=>action==='drink_source'||root.AgentWorld.roomFor(n,kind)>0;
    for(const [kind,key] of pairs){
     if(kind==='water'&&key==='drink_source'&&
      n.needs.thirst<10&&n.bio?.hydrationBudgetMl>=2400)continue;
     if(scoped.some(o=>o.key===key))continue;
     const visits=known.filter(e=>e.text.startsWith('Inspected '+kind+' '));
+    if(!visits.length||!canTake(kind,key))continue;
     for(const previous of visits.slice().reverse()){
+     if(avoided.has(previous.ref))continue;
      const target=state.world.nodes.find(node=>node.id===previous.ref&&node.kind===kind);
      if(!target||distance(state,n,target)>18||
       !reachability(state,n)(target))continue;
@@ -109,7 +115,7 @@
     const key=Object.fromEntries(pairs)[claim.kind];
     if(claim.kind==='water'&&key==='drink_source'&&
      n.needs.thirst<10&&n.bio?.hydrationBudgetMl>=2400)continue;
-    if(!key||scoped.some(o=>o.key===key&&o.ref===claim.sourceId)||
+    if(!key||!canTake(claim.kind,key)||avoided.has(claim.sourceId)||
      scoped.some(o=>o.key===key))continue;
     const target=state.world.nodes.find(x=>
      x.id===claim.sourceId&&x.kind===claim.kind);
