@@ -5,7 +5,7 @@
   const clamp = (x, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x));
   const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water','drink_source',
-    'eat','drink','rest','share_food','socialize','teach_flask','build_fire','craft_hatchet',
+    'eat','drink','rest','share_food','give_wood','give_fiber','socialize','teach_flask','build_fire','craft_hatchet',
     'build_shelter','build_tile','design_home','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
@@ -19,7 +19,8 @@
     craft_hatchet:'crafting',build_shelter:'building',build_tile:'building',
     design_home:'building',
     build_cache:'building',inspect:'exploring',
-    socialize:'socializing',teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
+    socialize:'socializing',give_wood:'socializing',give_fiber:'socializing',
+    teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
     const island=Frontier.generate(seed);
@@ -246,6 +247,24 @@
     const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0&&roomFor(recipient,'food')>0)
       add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
+    // A donation is offered only on visual evidence of unfinished physical
+    // work by a nearby builder. Do not read another actor's hidden plans aloud.
+    if(n.energy>=20&&n.needs.thirst<85&&n.needs.hunger<85){
+      const helperTarget=nearestResident(n,residents,p=>
+       p.alive!==false&&p.project?.kind==='home'&&p.energy>=18&&
+       p.needs.thirst<85&&p.needs.hunger<85&&
+       root.Perception?.canSee({world,clock:world.now},n,p)&&
+       world.construction?.blueprints.some(b=>b.actorId===p.id)&&
+       world.construction?.tiles.some(t=>t.actorId===p.id&&
+        root.Perception?.canSee({world,clock:world.now},n,t)));
+      if(helperTarget){
+        for(const kind of ['wood','fiber'])
+         if(n.inventory[kind]>0)
+          add('give_'+kind,'Offer one carried '+kind+
+           ' to support visible unfinished building by '+helperTarget.name,
+           helperTarget,helperTarget.id);
+      }
+    }
     const other=nearestResident(n,residents,p=>!p.task&&!p.plan&&
       !p.path?.length&&!p.peerPending&&!p.peerReservedFor);
     if(other && world.now-(n.lastPeerAt ?? -100000)>=90)
@@ -525,6 +544,23 @@
       n.needs.social=clamp(n.needs.social-14);
       student.needs.social=clamp(student.needs.social-10);
       message='Explained tested flask sealing steps to '+student.name;
+    }else if(task.key==='give_wood'||task.key==='give_fiber'){
+      const kind=task.key.slice(5),partner=residents.find(p=>p.id===task.ref);
+      if(!partner||partner===n||partner.alive===false||
+       partner.project?.kind!=='home'||partner.energy<18||
+       partner.needs.thirst>=85||partner.needs.hunger>=85||
+       n.needs.thirst>=85||n.needs.hunger>=85||
+       !sameLevel(n,partner)||distance(n,partner)>2||
+       !root.Perception?.canSee({world,clock:world.now},n,partner)||
+       !world.construction?.blueprints.some(b=>b.actorId===partner.id)||
+       !world.construction?.tiles.some(t=>t.actorId===partner.id&&
+        root.Perception?.canSee({world,clock:world.now},n,t))||
+       n.inventory[kind]<1||roomFor(partner,kind)<1)
+       return {ok:false,message:'BUILD_HELP_UNAVAILABLE: no witnessed active building or free material capacity'};
+      n.inventory[kind]--;partner.inventory[kind]++;
+      n.needs.social=clamp(n.needs.social-7);
+      partner.needs.social=clamp(partner.needs.social-4);
+      message='Gave one real '+kind+' to '+partner.name+' for unfinished construction';
     }else if(task.key==='share_food'||task.key==='socialize'){
       const other=residents.find(v=>v.id===task.ref);
       if(!other||distance(n,other)>2)return {ok:false,message:'The other resident moved away'};
