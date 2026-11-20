@@ -153,7 +153,10 @@ function restore(state,saved){
     n.plan.recipe!==n.workpiece.recipe))
     n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
    if(!n.workpiece&&n.plan?.key==='craft_project')n.plan=null;
-   if(n.plan&&(!n.agency.goal||n.agency.goal.key!==n.plan.key))
+   // Keep a real, valid goal's original source and start time. A running
+   // craft_project plan is a subplan, not an authority to rewrite its parent.
+   // Only legacy saves missing goal metadata require a synthetic goal.
+   if(n.plan&&!n.agency.goal)
     n.agency.goal={key:n.plan.key,source:'restored project',
      reason:'security',startedAt:state.clock,progress:n.plan.steps};
    n.action=AgentWorld.KEYS.includes(old.action)?old.action:'none';
