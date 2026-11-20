@@ -32,11 +32,19 @@
   crate:{name:'Timber storage crate',inputs:{plank:3,cord:1},station:'workbench',stages:[
    {name:'Lay out the boards',minutes:5},{name:'Assemble the crate sides',minutes:9},
    {name:'Bind and fit the lid',minutes:6}],output:{kind:'crate',count:1}},
-  flask:{name:'Carved wooden water flask',inputs:{wood:1,cord:1},tool:'blade',stages:[
+  flask:{name:'Carved wooden water flask',knowledge:'flask',inputs:{wood:1,cord:1},tool:'blade',stages:[
    {name:'Choose and hollow solid seasoned timber',minutes:8},
    {name:'Fit a snug wooden stopper and seal the joint',minutes:9},
    {name:'Bind the stopper and test for leaks',minutes:6}
-  ],output:{kind:'flask',count:1}}
+  ],output:{kind:'flask',count:1}},
+  // A novice can try physical operations without knowing the finished product
+  // or receiving the deliberate flask recipe from the global catalog.
+  hollow_wood_trial:{name:'Hollow and test a wooden container',experimentalFor:'flask',
+   inputs:{wood:1,cord:1},tool:'blade',stages:[
+    {name:'Inspect grain and choose a hollowing direction',minutes:8},
+    {name:'Carve a cavity and bind a trial stopper',minutes:10},
+    {name:'Fill, tilt and test the seal',minutes:8}
+   ],output:{kind:'flask',count:1}}
  });
  const MATERIALS=Object.freeze({
   wood:{hardness:2,flexibility:3},stone:{hardness:5,flexibility:0},
@@ -135,6 +143,7 @@
   }
   const work=Object.entries(RECIPES).flatMap(([id,spec])=>{
    if(!hasInputs(npc,spec)||npc.energy<18||
+    (spec.experimentalFor&&npc.knowledge?.recipes?.includes(spec.experimentalFor))||
     (spec.knowledge&&!npc.knowledge?.recipes?.includes(spec.knowledge))||
     (spec.tool&&(npc.inventory[spec.tool]||0)<1))return [];
    if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)return [];
@@ -171,6 +180,7 @@
  function begin(npc,world,id,stationId=null){
   const spec=RECIPES[id];
   if(!spec||npc.workpiece||npc.energy<18||!hasInputs(npc,spec)||
+   (spec.experimentalFor&&npc.knowledge?.recipes?.includes(spec.experimentalFor))||
    (spec.knowledge&&!npc.knowledge?.recipes?.includes(spec.knowledge))||
    (spec.tool&&(npc.inventory[spec.tool]||0)<1))
    return {ok:false,message:'Manufacturing prerequisites are missing'};
@@ -252,6 +262,10 @@
     ...(output.kind==='flask'?{vesselId:'vessel_'+world.itemSeq++,waterUnits:0}:{})});
    npc.inventory[output.kind]=(npc.inventory[output.kind]||0)+output.count;
   }
+  // Only a completed, resource-consuming trial demonstrates a repeatable
+  // method. WorldReceipts snapshots the resulting actor-private method delta.
+  if(spec.experimentalFor&&!npc.knowledge.recipes.includes(spec.experimentalFor))
+   npc.knowledge.recipes.push(spec.experimentalFor);
   npc.workpiece=null;
   return {ok:true,message:'Finished '+spec.name+' (quality '+quality+'/5)'+
    (output.kind?'; produced '+output.count+' '+output.kind:'; workshop constructed')};
