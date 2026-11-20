@@ -678,3 +678,31 @@ test('connected routine work does not repoll a resident after a saved review',as
  assert.equal(calls,1,'No new actor-private cue warrants another model call');
  assert.ok(resident.task||resident.plan||resident.action!=='none','Routine work still starts');
 });
+
+test('1x, 60x, 240x and 3600x agree on a physical drink and a calendar arrival',()=>{
+ const profiles=[1,60,240,3600].map(speed=>{
+  const b=makeBrowser({fixtureSpeed:speed}),s=b.state,n=s.npcs[0];
+  s.auto=false;s.clock=9*1440-2;s.world.now=s.clock;
+  const water=s.world.nodes.find(node=>node.kind==='water'&&node.stock>=3);
+  const before=water.stock;
+  Object.assign(n,{x:water.x,y:water.y,z:0});
+  n.needs.thirst=90;n.bio.hydrationBudgetMl=500;
+  assert.equal(b.setAction(n,'drink_source','test'),true);
+  // Every browser frame contributes 50 ms at the selected speed.
+  for(let i=0;i<3600/speed;i++)b.step(.05);
+  const completed=s.receipts.filter(r=>r.action==='drink_source'&&r.status==='COMPLETED');
+  assert.equal(completed.length,1);
+  return {clock:s.clock,arrival:s.npcs.find(v=>v.id==='person_6')?.spawnAt,
+   alive:s.npcs.length,waterDebited:before-water.stock,held:n.inventory.water,
+   actionAt:completed[0].clock,hydration:n.bio.hydrationBudgetMl};
+ });
+ for(const result of profiles){
+  assert.ok(Math.abs(result.clock-(9*1440+1))<.00001);
+  assert.equal(result.arrival,9*1440);
+  assert.equal(result.alive,6);
+  assert.equal(result.waterDebited,1);
+  assert.equal(result.held,0);
+  assert.ok(Math.abs(result.actionAt-(9*1440-1))<=1.00001);
+  assert.ok(Math.abs(result.hydration-profiles[0].hydration)<=2);
+ }
+});

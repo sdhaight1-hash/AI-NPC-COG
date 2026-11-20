@@ -1,5 +1,5 @@
 // G0.3 — state-predicate benchmarks. No browser, network or LLM required.
-// Usage: node scripts/benchmarks.mjs [--soak-days=30] [--seed=379210] [--profile=no-llm | --compare]
+// Usage: node scripts/benchmarks.mjs [--soak-days=30] [--seed=379210] [--profile=no-llm | --compare] [--start-day=1]
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 for(const name of ['frontier','construction','biology','crafting','cognition','agency',
@@ -175,7 +175,7 @@ export function assertCraftConservation(initialFiber,finalFiber,producedCord){
   'Manufacturing must consume exactly three plant fibers per cord');
 }
 export const SOAK_PROFILES=Object.freeze(['no-llm','no-memory','no-planner','mock-model']);
-export function runSoak(seed=379210,days=30,profile='no-llm'){
+export function runSoak(seed=379210,days=30,profile='no-llm',startDay=1){
  assert.ok(SOAK_PROFILES.includes(profile),'Unknown benchmark profile');
  let modelCalls=0;
  const policy={projects:profile!=='no-planner'&&profile!=='mock-model'};
@@ -190,6 +190,14 @@ export function runSoak(seed=379210,days=30,profile='no-llm'){
   return accepted;
  };
  const state=setup(seed);state.auto=true;
+ const {Frontier}=globalThis;
+ assert.ok(Number.isInteger(startDay)&&startDay>=1&&startDay<=Frontier.DAYS_PER_YEAR,
+  'Start day must be in the first compact year');
+ state.clock+=(startDay-1)*1440;
+ state.day=startDay;state.world.now=state.clock;
+ state.world.weather=Frontier.weather(state.world,state.clock);
+ const startSeason=state.world.weather.season;
+ let minimumTemperature=state.world.weather.temperature;
  const ticks=days*1440,deathDetails=[],criticalWindows=new Map();
  assert.ok(Number.isInteger(ticks)&&ticks>0&&ticks<=1440*120);
  for(let i=0;i<ticks;i++){
@@ -243,6 +251,7 @@ export function runSoak(seed=379210,days=30,profile='no-llm'){
      .slice(-12).map(r=>({clock:r.clock,action:r.action,status:r.status,reason:r.reason})),
     lastCriticalSnapshots:criticalWindows.get(actor.id)||[]});
   }});
+  minimumTemperature=Math.min(minimumTemperature,state.world.weather.temperature);
   if(i%60===0)invariant(state);
  }
  invariant(state);
@@ -253,6 +262,7 @@ export function runSoak(seed=379210,days=30,profile='no-llm'){
  const firstDeathAt=state.dead.length?Math.min(...state.dead.map(d=>d.deathAt)):null;
  const rejected=state.receipts.filter(r=>r.status==='REJECTED'||r.status==='FAILED').length;
  return {scenario:'autonomous_'+days+'_day_soak',seed,profile,pass:true,elapsedTicks:ticks,
+  startDay,startSeason,minimumTemperature,
   initialFounders:5,alive:state.npcs.length,deaths:state.dead.length,
   founderSurvivors:state.npcs.filter(n=>n.spawnKind==='founder').length,
   deathCauses,firstDeathDay:firstDeathAt===null?null:1+Math.floor(firstDeathAt/1440),
@@ -273,7 +283,9 @@ if(process.argv[1]?.replaceAll('\\','/').endsWith('/scripts/benchmarks.mjs')){
  const profile=profileArg?.slice(10)||'no-llm';
  if(days){
   const profiles=process.argv.includes('--compare')?SOAK_PROFILES:[profile];
-  for(const mode of profiles)reports.push(runSoak(seed,days,mode));
+  const startArg=process.argv.find(v=>v.startsWith('--start-day='));
+  const startDay=startArg?Number(startArg.slice(12)):1;
+  for(const mode of profiles)reports.push(runSoak(seed,days,mode,startDay));
  }
  console.log(JSON.stringify(reports,null,2));
  if(reports.some(r=>!r.pass))process.exitCode=1;

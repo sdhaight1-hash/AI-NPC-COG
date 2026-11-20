@@ -49,3 +49,11 @@ test('benchmark profiles exercise the same physical runtime and count mocked dec
  assert.ok(reports[3].modelCalls>0,'The mock-model run must use its private action menu');
  assert.notEqual(reports[0].worldHash,reports[2].worldHash);
 });
+
+test('winter-start survival fixture crosses freezing temperatures with all founders retained',()=>{
+ const result=runSoak(379210,1,'no-llm',82);
+ assert.equal(result.startSeason,'Winter');
+ assert.ok(result.minimumTemperature<0);
+ assert.equal(result.founderSurvivors,5);
+ assert.ok(result.completed>0);
+});
