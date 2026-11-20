@@ -124,7 +124,10 @@ function generate(seed=DEFAULT_SEED){
   const biome=terrainAt({width:WIDTH,height:HEIGHT,terrain},x,y);
   if(biome==='water'||used.has(x+':'+y))return;
   used.add(x+':'+y);
-  resources.push({id:'wild_'+kind+'_'+x+'_'+y,kind,x,y,max,stock:max,regrow:0});
+  resources.push({id:'wild_'+kind+'_'+x+'_'+y,kind,x,y,max,stock:max,regrow:0,
+   // Groundwater is a finite initially stocked physical reservoir. The
+   // spring's surface stock cannot replenish without transferring from it.
+   ...(kind==='water'?{groundwater:max*12,rainAdmitted:0}:{})});
  }
  for(let y=0;y<HEIGHT;y+=2)for(let x=0;x<WIDTH;x+=2){
   const biome=terrain[y*WIDTH+x],r=hash(x,y,seed+59);
