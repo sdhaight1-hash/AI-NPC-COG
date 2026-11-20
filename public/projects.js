@@ -161,6 +161,18 @@
  }
  function create(state,n,kind){
   if(!DEFINITIONS[kind]||n.project)return null;
+  if(kind==='water_vessel'){
+   // Record the actual visual evidence for a future return trip, not the
+   // deposit stock or a complete technology recipe from world data.
+   const seen=root.Perception?.snapshot(state,n).objects.filter(o=>o.kind==='water')||[];
+   if(seen.length){
+    const history=n.knowledge.sightings||[];
+    const ids=new Set(seen.map(o=>o.id));
+    n.knowledge.sightings=[...history.filter(o=>!ids.has(o.id)),
+     ...seen.map(o=>({id:o.id,kind:'water',x:o.x,y:o.y,z:o.z,at:state.clock}))]
+     .slice(-12);
+   }
+  }
   const def=DEFINITIONS[kind];
   if(!validateGraph(def.nodes))throw Error('Invalid project dependency graph');
   n.project={kind,goal:def.goal,startedAt:state.clock,status:'ACTIVE',
@@ -181,7 +193,8 @@
   // A remembered or currently visible spring motivates portable water security.
   // Neither hidden world deposits nor the existence of a recipe is evidence.
   const hasWaterEvidence=root.Perception?.snapshot(state,n).objects.some(o=>
-   o.kind==='water')||(n.knowledge?.observations||[]).some(o=>o.kind==='water');
+   o.kind==='water')||(n.knowledge?.observations||[]).some(o=>o.kind==='water')||
+   (n.knowledge?.sightings||[]).some(o=>o.kind==='water'&&o.at<=state.clock);
   if((n.inventory.flask||0)===0&&n.needs.thirst>=45&&n.needs.thirst<85&&
    (n.bio?.hydrationBudgetMl||0)>=1400&&n.energy>=25&&
    n.needs.hunger<85&&hasWaterEvidence)return 'water_vessel';
