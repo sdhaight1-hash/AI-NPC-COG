@@ -426,5 +426,5 @@
     x:npc.x,y:npc.y,startedAt:p.startedAt}:null;
  }
  root.Crafting={RECIPES,MATERIALS,KINDS,FLASK_CAPACITY,options,getRecipe,begin,advance,wetSealPending,interact,restore,
-  flaskFields,vesselRoom,fillFlask,takeWater,removeFlask,receiveFlask};
+  knowinglyWeakBinding,flaskFields,vesselRoom,fillFlask,takeWater,removeFlask,receiveFlask};
 })(globalThis);

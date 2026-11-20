@@ -722,6 +722,13 @@ test('crafting inspector shows the current operation and resident-specific seal 
  b.selectNpc(maker.id);
  assert.equal(b.elements.get('npcCrafting').textContent,
   'No workpiece · Last trial held water with binding grade 3/5');
+ maker.evidenceMemory.comparisons.push({failedQuality:1,passedQuality:3,
+  sourceReceiptIds:['receipt_14','receipt_31']});
+ b.selectNpc(maker.id);
+ assert.match(b.elements.get('npcCrafting').textContent,
+  /Inferred comparison: grade 1\/5 leaked, grade 3\/5 held\. Cause uncertain\. Receipts receipt_14, receipt_31/);
+ b.selectNpc(peer.id);
+ assert.equal(b.elements.get('npcCrafting').textContent,'No workpiece');
 });
 
 

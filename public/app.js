@@ -666,9 +666,13 @@ function updateInspector(){
  const trial=n.evidenceMemory?.trials?.at(-1);
  const trialNote=trial?' · Last trial '+(trial.heldWater?'held water':'leaked')+
   ' with binding grade '+trial.materialQuality+'/5':'';
+ const comparison=n.evidenceMemory?.comparisons?.at(-1);
+ const comparisonNote=comparison?' · Inferred comparison: grade '+
+  comparison.failedQuality+'/5 leaked, grade '+comparison.passedQuality+
+  '/5 held. Cause uncertain. Receipts '+comparison.sourceReceiptIds.join(', '):'';
  $('npcCrafting').textContent=(stage?
   recipe.name+' · '+(workpiece.stage+1)+'/'+recipe.stages.length+' · '+stage.name:
-  'No workpiece')+trialNote;
+  'No workpiece')+trialNote+comparisonNote;
  $('npcGoods').textContent=(n.craftedItems||[]).slice(-5).map(p=>
   p.kind+' ★'+p.quality).join(', ')||'None';
  $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source==='hivemind'?'Hivemind':n.source||'Simulation';

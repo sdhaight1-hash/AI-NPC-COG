@@ -347,7 +347,9 @@
    if(recoverable)node.failures=Math.min(100,node.failures+1);
    node.status='BLOCKED';
    const prerequisite=seekWater?'seal_test_water':action;
-   node.blockedBy=recoverable&&node.scouts>=4&&scoutable?
+   if(action==='craft_flask'&&root.Crafting.knowinglyWeakBinding(n,'flask'))
+    node.blockedBy='TESTED_SEAL_RISK';
+   else node.blockedBy=recoverable&&node.scouts>=4&&scoutable?
     'SCOUT_LIMIT:'+prerequisite:'LEGAL_ACTION_UNAVAILABLE:'+prerequisite;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
    p.nextAt=state.clock+(recoverable?waitMinutes(node):5);
