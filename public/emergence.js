@@ -25,7 +25,9 @@
     return {version:3,now:0,seed:island.seed,width:island.width,height:island.height,
       generator:island.generator,terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
-      nodes:island.resources,construction:root.Construction?.fresh(),
+      nodes:island.resources.map(node=>node.kind==='water'?
+       {...node,groundwater:node.max*12,rainAdmitted:0}:node),
+      construction:root.Construction?.fresh(),
       structures:[],items:[],remains:[],itemSeq:1};
   }
   // Transitional physical-load view over the existing numeric inventory.
