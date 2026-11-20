@@ -291,13 +291,13 @@
  }
  // Manufacturing and refilling share bounded recovery; neither should
  // keep guessing at a spring the actor has not actually reached.
- const RECOVERABLE_WATER_PROJECTS=new Set(['water_vessel','water_supply']);
+ const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
  const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
  function next(state,n,options=[]){
   const p=sync(state,n);
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')
    return {status:'done'};
-  const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
+  const recoverable=RECOVERABLE_PROJECTS.has(p.kind);
   if(state.clock<(p.nextAt||0))return {status:'deferred'};
   if(n.task||n.plan||n.path?.length)return {status:'busy'};
   const done=new Set(p.nodes.filter(x=>x.status==='DONE').map(x=>x.id));
@@ -309,6 +309,15 @@
   let action=node.action;
   if(p.kind==='water_vessel'&&node.id==='build'&&
    n.knowledge?.recipes?.includes('flask'))action='craft_flask';
+  if(p.kind==='home'&&node.id==='build'){
+   const pending=(state.world.construction?.blueprints||[]).filter(b=>
+    b.actorId===n.id&&p.homeSite&&
+    root.Frontier.distance(state.world,p.homeSite,b)<=1);
+   if(options.some(o=>o.key==='build_tile'&&pending.some(b=>b.id===o.ref)))
+    action='build_tile';
+   else if(pending.some(b=>b.kind!=='roof'))action='collect_wood';
+   else if(pending.some(b=>b.kind==='roof'))action='collect_fiber';
+  }
   if(n.energy<20){
    // A project never forbids bodily recovery.
    if(options.some(o=>o.key==='rest'))action='rest';
@@ -316,7 +325,7 @@
   }
   let option=options.find(o=>o.key===action);
   if(!option&&['collect_wood','collect_stone','collect_fiber',
-   'forage','fill_water'].includes(action)){
+   'forage','fill_water','build_tile'].includes(action)){
    // Unknown resource locations prompt bounded physical exploration, not an
    // omniscient search query or fictitious harvest.
    const scout=options.find(o=>o.key==='explore');
@@ -328,7 +337,7 @@
    if(recoverable)node.failures=Math.min(100,node.failures+1);
    node.status='BLOCKED';
    node.blockedBy=recoverable&&node.scouts>=4&&
-    ['collect_wood','collect_stone','collect_fiber','fill_water'].includes(action)?
+    ['collect_wood','collect_stone','collect_fiber','fill_water','build_tile'].includes(action)?
     'SCOUT_LIMIT:'+action:'LEGAL_ACTION_UNAVAILABLE:'+action;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
    p.nextAt=state.clock+(recoverable?waitMinutes(node):5);
@@ -345,10 +354,18 @@
  function onOutcome(state,n,key,ok,receipt=null){
   const p=n.project;
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')return;
-  const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
+  const recoverable=RECOVERABLE_PROJECTS.has(p.kind);
   if(ok&&key!=='rest')p.completedActions++;
+  if(p.kind==='home'&&ok&&key==='design_home'&&
+   receipt?.actorId===n.id&&receipt.status==='COMPLETED'){
+   const floor=receipt.delta?.collections?.constructionBlueprints?.added
+    ?.find(t=>t.actorId===n.id&&t.kind==='floor');
+   if(floor)p.homeSite={x:floor.x,y:floor.y,z:floor.z};
+  }
   const node=p.nodes.find(x=>x.status==='RUNNING'&&
    (x.action===key||recoverable&&key==='explore'||
+    p.kind==='home'&&x.id==='build'&&
+     ['collect_wood','collect_fiber'].includes(key)||
     p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
   // An experiment can complete physically yet fail to make a watertight
   // object. Its receipt records the consumed workpiece with no learned method.
@@ -390,6 +407,16 @@
    !Number.isFinite(old.startedAt)||old.startedAt>state.clock)return null;
   if(!['ACTIVE','BLOCKED','COMPLETED'].includes(old.status))return null;
   const p=create(state,n,kind,false);
+  if(kind==='home'&&old.homeSite&&
+   [old.homeSite.x,old.homeSite.y,old.homeSite.z].every(Number.isInteger)&&
+   old.homeSite.x>=0&&old.homeSite.x<state.world.width&&
+   old.homeSite.y>=0&&old.homeSite.y<state.world.height&&
+   old.homeSite.z>=root.Frontier.MIN_Z&&old.homeSite.z<=root.Frontier.MAX_Z&&
+   [...(state.world.construction?.tiles||[]),
+    ...(state.world.construction?.blueprints||[])].some(t=>
+     t.actorId===n.id&&t.kind==='floor'&&
+     t.x===old.homeSite.x&&t.y===old.homeSite.y&&t.z===old.homeSite.z))
+   p.homeSite={x:old.homeSite.x,y:old.homeSite.y,z:old.homeSite.z};
   p.startedAt=old.startedAt;p.status=old.status;
   p.blockedReason=typeof old.blockedReason==='string'?
    old.blockedReason.slice(0,140):null;
