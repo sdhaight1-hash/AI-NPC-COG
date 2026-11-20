@@ -11,7 +11,7 @@ function setup(){
  vm.runInContext(files.map(name=>readFileSync(new URL('../public/'+name+'.js',
   import.meta.url),'utf8')).join('\n'),k);
  const s=k.Simulation.initial(379210);s.auto=false;
- const n=s.npcs[0],water=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=4);
+ const n=s.npcs[0],water=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=8);
  assert.ok(water);
  n.x=water.x;n.y=water.y;n.z=0;n.path=[];
  n.needs.thirst=90;n.bio.hydrationBudgetMl=500;
@@ -30,7 +30,11 @@ function fabricate(k,s,n){
  assert.equal(recipe.tool,'blade');
  assert.equal(k.Crafting.begin(n,s.world,'flask').ok,true);
  assert.equal(n.inventory.blade,before.blade,'Blade is a tool, not a consumed ingredient');
- for(let i=0;i<recipe.stages.length;i++)assert.equal(k.Crafting.advance(n,s.world).ok,true);
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&
+  x.x===n.x&&x.y===n.y&&(x.z||0)===(n.z||0));
+ assert.ok(spring);
+ for(let i=0;i<recipe.stages.length;i++)
+  assert.equal(k.Crafting.advance(n,s.world,spring.id).ok,true);
  assert.equal(n.inventory.flask,1);
  assert.ok(n.craftedItems.some(x=>x.kind==='flask'));
  assert.equal(n.inventory.water,0,'Crafting a flask cannot create water');
@@ -51,8 +55,9 @@ test('no vessel: water collection is not a legal affordance, but source drinking
 });
 
 test('physical flask requires wood and cord and a blade; carry water only in its finite capacity',()=>{
- const {k,s,n,water}=setup(),stock=water.stock;
+ const {k,s,n,water}=setup();
  fabricate(k,s,n);
+ const stock=water.stock;
  assert.ok(k.WorldRuntime.available(s,n).some(o=>o.key==='fill_water'));
  assert.equal(k.WorldRuntime.begin(s,n,'fill_water'),true);
  const command=n.task.commandId;
@@ -130,7 +135,7 @@ test('individual flasks fill independently and transfer their contents through t
  n.craftedItems.push({kind:'cord',quality:2,maker:n.id,craftedAt:s.clock,
   method:'cord',materialQuality:2});
  assert.equal(k.Crafting.begin(n,s.world,'flask').ok,true);
- while(n.workpiece)assert.equal(k.Crafting.advance(n,s.world).ok,true);
+ while(n.workpiece)assert.equal(k.Crafting.advance(n,s.world,water.id).ok,true);
  const ids=n.craftedItems.filter(x=>x.kind==='flask').map(x=>x.vesselId);
  assert.equal(new Set(ids).size,2);
  const stock=water.stock;
