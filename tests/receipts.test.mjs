@@ -186,3 +186,32 @@ test('a valid still-running command can finish despite an evicted ACCEPTED recei
  assert.equal(n.inventory.water>inventory,true);
  assert.ok(s.receipts.some(r=>r.commandId===id&&r.status==='COMPLETED'));
 });
+
+test('revalidated harvest cannot turn a stale wrong-kind target into an effect',()=>{
+ const c=load(),s=c.Simulation.initial(379210),n=s.npcs[0];
+ const target=s.world.nodes.find(node=>node.kind==='stone');
+ n.x=target.x;n.y=target.y;n.z=0;n.path=[];
+ const before=target.stock;
+ n.task={key:'forage',ref:target.id,commandId:'cmd_1',readyAt:s.clock};
+ c.WorldRuntime.complete(s,n);
+ const receipt=s.receipts.at(-1);
+ assert.equal(receipt.status,'FAILED');
+ assert.match(receipt.reason,/RESOURCE_KIND_MISMATCH/);
+ assert.equal(target.stock,before);
+ assert.equal(n.inventory.stone,0);
+ assert.equal(n.inventory.food,0);
+ assert.equal(s.effectRevision,0);
+});
+
+test('freshwater and raw goods cannot be reached through another z level',()=>{
+ const c=load(),s=c.Simulation.initial(379210),n=s.npcs[0];
+ const spring=s.world.nodes.find(node=>node.kind==='water');
+ n.x=spring.x;n.y=spring.y;n.z=-1;
+ const before=spring.stock;
+ const hydration=n.bio.hydrationBudgetMl;
+ n.task={key:'drink_source',ref:spring.id,commandId:'cmd_1',readyAt:s.clock};
+ c.WorldRuntime.complete(s,n);
+ assert.equal(s.receipts.at(-1).status,'FAILED');
+ assert.equal(spring.stock,before);
+ assert.equal(n.bio.hydrationBudgetMl,hydration);
+});

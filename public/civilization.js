@@ -137,7 +137,7 @@ function copyWorkpiece(p,world,at){
  const {recipe,stage,workmanship,materialQuality,station,x,y,startedAt}=p;
  return {recipe,stage,workmanship,materialQuality,station,x,y,startedAt};
 }
-function restoreRemains(world,records,archive){
+function restoreRemains(world,records,archive,seenVessels=new Set()){
  world.remains=[];
  if(!Array.isArray(records))return;
  const deaths=new Map(archive.slice(-MAX_REMAINS).filter(a=>personId(a?.id)).map(a=>[a.id,a]));
@@ -157,24 +157,35 @@ function restoreRemains(world,records,archive){
    !Array.isArray(r.craftedItems)||r.craftedItems.length>1000)continue;
   const inventory=Object.fromEntries(kinds.map(k=>[k,r.inventory[k]]));
   const counts=Object.fromEntries(craftedKinds.map(k=>[k,0]));
-  const craftedItems=[];
+  const craftedItems=[],vessels=new Set();
   for(const item of r.craftedItems){
    if(!item||typeof item.kind!=='string'||!Object.hasOwn(counts,item.kind)||!Number.isInteger(item.quality)||
     !between(item.quality,1,5)||!boundedText(item.maker,80)||
     !boundedText(item.method,32)||!between(item.materialQuality,1,5)||
     !between(item.craftedAt,0,r.deathAt))break;
    const {kind,quality,maker,method,materialQuality,craftedAt}=item;
-   craftedItems.push({kind,quality,maker,craftedAt,method,materialQuality});
+   const row={kind,quality,maker,craftedAt,method,materialQuality};
+   if(kind==='flask'&&(Object.hasOwn(r,'looseWater')||item.vesselId!==undefined)){
+    const fields=root.Crafting.flaskFields(item,r.actorId,craftedItems.length);
+    if(!fields||seenVessels.has(fields.vesselId)||vessels.has(fields.vesselId))break;
+    vessels.add(fields.vesselId);
+    Object.assign(row,fields);
+   }
+   craftedItems.push(row);
    counts[kind]++;
   }
   // A legacy hatchet may have arrived in an older save as a counted tool.
   if(craftedItems.length!==r.craftedItems.length||craftedKinds.some(k=>
     k==='hatchet'?counts[k]>inventory[k]:counts[k]!==inventory[k]))continue;
+  const splitWater=Object.hasOwn(r,'looseWater');
+  if(splitWater&&(!Number.isSafeInteger(r.looseWater)||r.looseWater<0||
+   r.looseWater+craftedItems.reduce((sum,item)=>sum+(item.waterUnits??0),0)!==inventory.water))continue;
   const workpiece=copyWorkpiece(r.workpiece,world,r.deathAt);
   if(r.workpiece!==null&&!workpiece)continue;
   const {id,kind,actorId,x,y,z,deathAt}=r;
   world.remains.push({id,kind,actorId,x,y,z,deathAt,inventory,
-   pantry:r.pantry.slice(),craftedItems,workpiece});
+   pantry:r.pantry.slice(),craftedItems,workpiece,...(splitWater?{looseWater:r.looseWater}:{})});
+  for(const vessel of vessels)seenVessels.add(vessel);
   seen.add(actorId);
  }
 }
@@ -184,7 +195,8 @@ function die(state,npc,cause='unknown'){
  const remains={id:'remains_'+npc.id,kind:'remains',actorId:npc.id,
   x:root.Frontier.wrap(npc.x,world.width),y:root.Frontier.wrap(npc.y,world.height),
   z:npc.z||0,deathAt:state.clock,inventory:npc.inventory,
-  pantry:npc.bio.pantry,craftedItems:npc.craftedItems,workpiece:npc.workpiece};
+  pantry:npc.bio.pantry,craftedItems:npc.craftedItems,workpiece:npc.workpiece,
+  ...(npc.looseWater===undefined?{}:{looseWater:npc.looseWater})};
  root.Reservations?.releaseActor(state,npc.id);
  root.Activities?.finish(state,npc,false,'ACTOR_DEAD');
  (world.remains ||= []).push(remains);

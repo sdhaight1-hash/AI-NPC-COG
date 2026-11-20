@@ -44,6 +44,76 @@
   blade:{hardness:5,flexibility:0},plank:{hardness:2,flexibility:3}
  });
  const KINDS=Object.freeze(['cord','blade','hatchet','plank','crate','flask']);
+
+ const FLASK_CAPACITY=2;
+ const units=(value,max)=>Number.isSafeInteger(value)&&value>=0&&value<=max;
+ function usableFlasks(n){
+  const count=n.inventory?.flask;
+  if(!units(count,1000)||count===0)return [];
+  return (n.craftedItems||[]).filter(item=>item.kind==='flask').slice(0,count);
+ }
+ function flaskFields(item,owner,index){
+  if(item.vesselId===undefined&&item.waterUnits===undefined)
+   return {vesselId:'vessel_legacy_'+owner+'_'+index,waterUnits:0};
+  if(typeof item.vesselId!=='string'||!/^vessel_(?:[1-9]\d{0,11}|legacy_person_[1-9]\d{0,15}_\d{1,3})$/.test(item.vesselId)||
+   !units(item.waterUnits,FLASK_CAPACITY))return null;
+  return {vesselId:item.vesselId,waterUnits:item.waterUnits};
+ }
+ function nextFlask(n){
+  return usableFlasks(n).find(item=>(item.waterUnits??0)<FLASK_CAPACITY)||null;
+ }
+ function vesselRoom(n){
+  const item=nextFlask(n);
+  return item?FLASK_CAPACITY-(item.waterUnits??0):0;
+ }
+ function syncWater(n){
+  n.inventory.water=n.looseWater+usableFlasks(n).reduce((sum,item)=>sum+(item.waterUnits??0),0);
+ }
+ function beginWaterCustody(n){
+  if(n.looseWater===undefined)n.looseWater=n.inventory.water||0;
+ }
+ function fillFlask(n,amount){
+  const flask=nextFlask(n);
+  if(!flask||!units(amount,FLASK_CAPACITY-(flask.waterUnits??0))||amount===0)return false;
+  const fields=flaskFields(flask,n.id,n.craftedItems.indexOf(flask));
+  if(!fields)return false;
+  beginWaterCustody(n);
+  Object.assign(flask,fields,{waterUnits:fields.waterUnits+amount});
+  syncWater(n);
+  return true;
+ }
+ function takeWater(n){
+  if(n.inventory.water<1)return false;
+  beginWaterCustody(n);
+  if(n.looseWater>0)n.looseWater--;
+  else{
+   const flask=usableFlasks(n).find(item=>item.waterUnits>0);
+   if(!flask)return false;
+   flask.waterUnits--;
+  }
+  syncWater(n);
+  return true;
+ }
+ function removeFlask(n){
+  const flask=usableFlasks(n)[0];
+  if(!flask)return null;
+  const index=n.craftedItems.indexOf(flask);
+  const fields=flaskFields(flask,n.id,index);
+  if(!fields)return null;
+  beginWaterCustody(n);
+  n.craftedItems.splice(index,1);
+  n.inventory.flask--;
+  syncWater(n);
+  return {...flask,...fields};
+ }
+ function receiveFlask(n,flask){
+  if(!flaskFields(flask,n.id,0)||n.craftedItems.some(item=>item.vesselId===flask.vesselId))return false;
+  beginWaterCustody(n);
+  n.craftedItems.push(flask);
+  n.inventory.flask++;
+  syncWater(n);
+  return true;
+ }
  const hasInputs=(npc,recipe)=>Object.entries(recipe.inputs)
   .every(([kind,amount])=>(npc.inventory[kind]||0)>=amount);
  function stationNear(npc,world,type,range=8){
@@ -178,7 +248,8 @@
    npc.craftedItems ||= [];
    for(let i=0;i<output.count;i++)npc.craftedItems.push({
     kind:output.kind,quality,maker:npc.id,craftedAt:world.now,
-    method:part.recipe,materialQuality:part.materialQuality});
+    method:part.recipe,materialQuality:part.materialQuality,
+    ...(output.kind==='flask'?{vesselId:'vessel_'+world.itemSeq++,waterUnits:0}:{})});
    npc.inventory[output.kind]=(npc.inventory[output.kind]||0)+output.count;
   }
   npc.workpiece=null;
@@ -220,14 +291,27 @@
    'one '+kind+' ('+Object.values(crate.contents).reduce((a,b)=>a+b,0)+
    '/'+crate.capacity+' crate slots used)'};
  }
- function restore(npc,source){
+ function restore(npc,source,seenVessels=new Set()){
+  const splitWater=Object.hasOwn(source||{},'looseWater');
+  let legacyWater=units(npc.inventory.water,1000)?npc.inventory.water:0;
   npc.craftedItems=Array.isArray(source?.craftedItems)?
    source.craftedItems.filter(item=>item&&KINDS.includes(item.kind)&&
     Number.isInteger(item.quality)&&item.quality>=1&&item.quality<=5&&
     typeof item.maker==='string'&&Number.isFinite(item.craftedAt))
-    .slice(0,1000).map(item=>({kind:item.kind,quality:item.quality,
-     maker:item.maker,craftedAt:item.craftedAt,method:String(item.method||'').slice(0,32),
-     materialQuality:Math.max(1,Math.min(5,Number(item.materialQuality)||2))})):[];
+    .slice(0,1000).flatMap((item,index)=>{
+     const result={kind:item.kind,quality:item.quality,maker:item.maker,
+      craftedAt:item.craftedAt,method:String(item.method||'').slice(0,32),
+      materialQuality:Math.max(1,Math.min(5,Number(item.materialQuality)||2))};
+     if(item.kind!=='flask')return [result];
+     const fields=flaskFields(item,npc.id,index);
+     if(!fields||seenVessels.has(fields.vesselId))return [];
+     seenVessels.add(fields.vesselId);
+     if(!splitWater){
+      fields.waterUnits=Math.min(FLASK_CAPACITY,legacyWater);
+      legacyWater-=fields.waterUnits;
+     }
+     return [{...result,...fields}];
+    }):[];
   // An item count can be read from inventory only if the persisted item
   // records back it. This also rejects corrupt saves that mint components.
   for(const kind of KINDS.filter(k=>k!=='hatchet'))npc.inventory[kind]=
@@ -239,6 +323,10 @@
    npc.craftedItems.push({kind:'hatchet',quality:2,maker:npc.id,
     craftedAt:npc.spawnAt||0,method:'legacy',materialQuality:2});
   npc.inventory.hatchet=npc.craftedItems.filter(item=>item.kind==='hatchet').length;
+  if(splitWater||npc.inventory.flask){
+   npc.looseWater=splitWater?(units(source.looseWater,1000)?source.looseWater:0):legacyWater;
+   syncWater(npc);
+  }
   const p=source?.workpiece,spec=RECIPES[p?.recipe];
   npc.workpiece=spec&&Number.isInteger(p.stage)&&p.stage>=0&&
    p.stage<spec.stages.length&&Number.isFinite(p.workmanship)&&p.workmanship>=0&&
@@ -248,5 +336,6 @@
     materialQuality:p.materialQuality,station:typeof p.station==='string'?p.station:null,
     x:npc.x,y:npc.y,startedAt:p.startedAt}:null;
  }
- root.Crafting={RECIPES,MATERIALS,KINDS,options,getRecipe,begin,advance,interact,restore};
+ root.Crafting={RECIPES,MATERIALS,KINDS,FLASK_CAPACITY,options,getRecipe,begin,advance,interact,restore,
+  flaskFields,vesselRoom,fillFlask,takeWater,removeFlask,receiveFlask};
 })(globalThis);

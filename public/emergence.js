@@ -9,7 +9,11 @@
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
-    'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','drop_stone','drop_fiber','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
+    'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','drop_stone','drop_fiber','drop_flask','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
+  const HARVEST_KINDS=Object.freeze({forage:'food',collect_wood:'wood',
+    collect_stone:'stone',collect_fiber:'fiber',fill_water:'water'});
+  const GROUND_KINDS=Object.freeze(['wood','stone','fiber','flask']);
+  const sameLevel=(a,b)=>(a.z||0)===(b.z||0);
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink_source:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
@@ -48,20 +52,22 @@
       volumeL:Number(bulk.toFixed(3)),
       maxMassKg:MAX_CARRY_KG,maxVolumeL:MAX_CARRY_L};
   }
-  const FLASK_WATER_UNITS=2;
-  function vesselRoom(n){
-    const flasks=n.inventory?.flask;
-    if(!Number.isSafeInteger(flasks)||flasks<1)return 0;
-    const held=n.inventory?.water;
-    if(!Number.isSafeInteger(held)||held<0)return 0;
-    return Math.max(0,flasks*FLASK_WATER_UNITS-held);
-  }
+  const vesselRoom=n=>root.Crafting.vesselRoom(n);
   function roomFor(n,kind){
     const def=ITEM_LOAD[kind],load=carrying(n);
     if(!def||!load.valid)return 0;
     return Math.max(0,Math.min(1000-(n.inventory[kind]||0),
       Math.floor((MAX_CARRY_KG-load.massKg+1e-9)/def.kg),
       Math.floor((MAX_CARRY_L-load.volumeL+1e-9)/def.liters)));
+  }
+  function canCarryItem(n,item){
+    if(!GROUND_KINDS.includes(item.kind)||item.count!==1||roomFor(n,item.kind)<1)return false;
+    if(item.kind!=='flask')return true;
+    const liquid=item.vessel?.waterUnits,load=carrying(n);
+    if(!Number.isInteger(liquid)||liquid<0||liquid>root.Crafting.FLASK_CAPACITY)return false;
+    const flask=ITEM_LOAD.flask,water=ITEM_LOAD.water;
+    return load.massKg+flask.kg+liquid*water.kg<=load.maxMassKg+1e-9&&
+     load.volumeL+flask.liters+liquid*water.liters<=load.maxVolumeL+1e-9;
   }
   function newAgent(n, index=0) {
     n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
@@ -128,6 +134,9 @@
       return {id:object.id,name:object.type==='campfire'?'Campfire':'Shelter',
         kind:object.type,x:object.x,y:object.y,condition:'constructed',
         description:'A constructed '+object.type+' at '+object.x+','+object.y};
+    if(object.kind==='flask'&&object.count===1)return {id:object.id,kind:'flask',
+      name:'Carved wooden flask',x:object.x,y:object.y,z:object.z,
+      description:'A carved wooden flask lying on the ground'};
     if(['wood','stone','fiber'].includes(object.kind)&&object.count===1)
       return {id:object.id,name:'Dropped '+object.kind,kind:object.kind,
         x:object.x,y:object.y,condition:'on ground',
@@ -254,13 +263,12 @@
     if(examine&&n.energy>=10)
       add('inspect','Examine '+describeObject(world,examine).name+
         ' at '+examine.x+','+examine.y+' to learn its condition',examine,examine.id);
-    const loose=world.items.find(item=>item.count===1&&
-      ['wood','stone','fiber'].includes(item.kind)&&roomFor(n,item.kind)>0&&
-      distance(n,item)<=8&&canReach(item));
+    const loose=world.items.find(item=>canCarryItem(n,item)&&distance(n,item)<=8&&canReach(item));
     if(loose)
       add('pickup_item','Pick up one '+loose.kind+' from the ground',loose,loose.id);
     if(world.items.length<120&&
       !world.items.some(item=>distance(n,item)<=1)){
+      if(n.inventory.flask>0)add('drop_flask','Place one carried flask on the ground');
       if(n.inventory.wood>=4)
         add('drop_wood','Place one carried wood on the ground');
       const load=carrying(n);
@@ -301,9 +309,12 @@
       }
       if(!outcome.ok)return outcome;
       message=outcome.message;
-    }else if(['forage','collect_wood','collect_stone','collect_fiber','fill_water'].includes(task.key)){
+    }else if(Object.hasOwn(HARVEST_KINDS,task.key)){
+      const kind=HARVEST_KINDS[task.key];
       const node=world.nodes.find(v=>v.id===task.ref);
-      if(!node||node.stock<1||distance(n,node)>1)return {ok:false,message:'Resource no longer available'};
+      if(node&&node.kind!==kind)return {ok:false,message:'RESOURCE_KIND_MISMATCH: expected '+kind};
+      if(!node||node.stock<1||!sameLevel(n,node)||distance(n,node)>1)
+        return {ok:false,message:'Resource no longer available'};
       // Repeated practice gradually improves output; expertise is earned, never assigned.
       const expertise=n.skills[skillNames[task.key]]||0;
       const hatchetQuality=n.craftedItems?.find(item=>item.kind==='hatchet')?.quality||2;
@@ -323,8 +334,11 @@
         if(!Biology.addForaged(n.bio,foodId,collected))
           return {ok:false,message:'Food inventory full'};
       }
+      if(task.key==='fill_water'){
+        if(!root.Crafting.fillFlask(n,collected))
+          return {ok:false,message:'NO_LIQUID_CONTAINER: flask no longer available'};
+      }else n.inventory[node.kind]+=collected;
       node.stock-=collected;
-      n.inventory[node.kind]+=collected;
       n.energy=clamp(n.energy-3*collected);
       message='Collected '+collected+' '+node.kind+' (source '+node.stock+'/'+node.max+' remaining)';
     }else if(task.key==='inspect'){
@@ -340,34 +354,40 @@
       n.knowledge.observations=n.knowledge.observations.slice(-40);
       n.needs.curiosity=clamp(n.needs.curiosity-12);
       message='Inspected '+info.description;
-    }else if(['drop_wood','drop_stone','drop_fiber'].includes(task.key)){
+    }else if(['drop_wood','drop_stone','drop_fiber','drop_flask'].includes(task.key)){
       const kind=task.key.slice(5);
       if(n.inventory[kind]<1||world.items.length>=120||
         world.items.some(item=>distance(n,item)<=1))
         return {ok:false,message:'Unable to leave material here'};
-      const item={id:'item_'+world.itemSeq++,kind,count:1,x:n.x,y:n.y};
-      world.items.push(item);n.inventory[kind]--;
+      const vessel=kind==='flask'?root.Crafting.removeFlask(n):null;
+      if(kind==='flask'&&!vessel)return {ok:false,message:'No physical flask to place'};
+      const item={id:'item_'+world.itemSeq++,kind,count:1,x:n.x,y:n.y,
+        ...(kind==='flask'?{z:n.z||0,vessel}:{})};
+      world.items.push(item);
+      if(kind!=='flask')n.inventory[kind]--;
       message='Placed one '+kind+' on the ground at '+n.x+','+n.y;
     }else if(task.key==='pickup_item'){
       const index=world.items.findIndex(item=>item.id===task.ref);
       const item=world.items[index];
-      if(!item||!['wood','stone','fiber'].includes(item.kind)||item.count!==1||
-        distance(n,item)>1||roomFor(n,item.kind)<1)
+      if(!item||!canCarryItem(n,item)||!sameLevel(n,item)||distance(n,item)>1)
         return {ok:false,message:'Loose item is unavailable'};
-      world.items.splice(index,1);n.inventory[item.kind]++;
+      if(item.kind==='flask'){
+        if(!root.Crafting.receiveFlask(n,item.vessel))
+          return {ok:false,message:'Unable to take custody of flask'};
+      }else n.inventory[item.kind]++;
+      world.items.splice(index,1);
       message='Picked up one '+item.kind+' from the ground';
     }else if(task.key==='drink_source'){
       const source=world.nodes.find(v=>v.id===task.ref&&v.kind==='water');
-      if(!source||source.stock<1||distance(n,source)>1)
+      if(!source||source.stock<1||!sameLevel(n,source)||distance(n,source)>1)
         return {ok:false,message:'No reachable freshwater remains'};
       if(!Biology.drink(n.bio,400))
         return {ok:false,message:'Cannot consume source water'};
       source.stock--;n.needs.thirst=clamp(n.needs.thirst-48);
       message='Drank directly from freshwater (source '+source.stock+'/'+source.max+')';
     }else if(task.key==='drink'){
-      if(n.inventory.water<1)return {ok:false,message:'No drinkable water'};
-      n.inventory.water--;n.needs.thirst=clamp(n.needs.thirst-48);
-      Biology.drink(n.bio,400);
+      if(!n.bio||!root.Crafting.takeWater(n))return {ok:false,message:'No drinkable water'};
+      Biology.drink(n.bio,400);n.needs.thirst=clamp(n.needs.thirst-48);
       message='Drank fresh water; thirst now '+Math.round(n.needs.thirst);
     }else if(['experiment_wood_stone','experiment_wood_fiber',
       'experiment_wood_stone_fiber'].includes(task.key)){
@@ -612,13 +632,38 @@
     if(n.inventory.food<2&&keys.has('forage'))return 'forage';
     return keys.has('explore')?'explore':'none';
   }
-  function restoreWorld(target,saved) {
+  function restoreWorld(target,saved,seenVessels=new Set()) {
     if(!saved||!Array.isArray(saved.nodes)||!Array.isArray(saved.structures))return;
-    target.items=Array.isArray(saved.items)?saved.items.filter(item=>item&&
-      /^item_[1-9]\d*$/.test(item.id)&&['wood','stone','fiber'].includes(item.kind)&&item.count===1&&
-      Number.isInteger(item.x)&&Number.isInteger(item.y)&&
-      item.x>=0&&item.x<target.width&&item.y>=0&&item.y<target.height&&
-      Frontier.traversable(target,item.x,item.y,0)).slice(0,120):[];
+    const itemIds=new Set();
+    target.items=[];
+    for(const item of Array.isArray(saved.items)?saved.items:[]){
+      if(target.items.length>=120)break;
+      if(!item||typeof item.id!=='string'||!/^item_[1-9]\d{0,11}$/.test(item.id)||
+       itemIds.has(item.id)||!GROUND_KINDS.includes(item.kind)||item.count!==1||
+       !Number.isInteger(item.x)||!Number.isInteger(item.y)||
+       item.x<0||item.x>=target.width||item.y<0||item.y>=target.height)continue;
+      const {id,kind,count,x,y}=item;
+      if(kind==='flask'){
+        const {z,vessel}=item;
+        if(!Number.isInteger(z)||!Frontier.traversable(target,x,y,z)||vessel?.kind!=='flask'||
+         !Number.isInteger(vessel.quality)||vessel.quality<1||vessel.quality>5||
+         typeof vessel.maker!=='string'||vessel.maker.length>80||
+         !Number.isFinite(vessel.craftedAt)||vessel.craftedAt<0||vessel.craftedAt>target.now||
+         typeof vessel.method!=='string'||vessel.method.length>32||
+         !Number.isFinite(vessel.materialQuality)||vessel.materialQuality<1||vessel.materialQuality>5||
+         vessel.vesselId===undefined||vessel.waterUnits===undefined)continue;
+        const fields=root.Crafting.flaskFields(vessel,vessel.maker,0);
+        if(!fields||seenVessels.has(fields.vesselId))continue;
+        seenVessels.add(fields.vesselId);
+        const {quality,maker,craftedAt,method,materialQuality}=vessel;
+        target.items.push({id,kind,count,x,y,z,
+         vessel:{kind,quality,maker,craftedAt,method,materialQuality,...fields}});
+      }else{
+        if(!Frontier.traversable(target,x,y,0))continue;
+        target.items.push({id,kind,count,x,y});
+      }
+      itemIds.add(id);
+    }
     target.itemSeq=Math.max(1,...target.items.map(item=>Number(item.id.slice(5))+1));
     if(Number.isInteger(saved.itemSeq)&&saved.itemSeq>target.itemSeq)
       target.itemSeq=Math.min(saved.itemSeq,1000000000);
@@ -663,6 +708,6 @@
         Math.max(0,Math.min(12,v.contents.wood)):0}}:{})
     }));
   }
-  root.AgentWorld={KEYS,INVENTORY_KINDS:Object.freeze(Object.keys(ITEM_LOAD)),newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
+  root.AgentWorld={KEYS,HARVEST_KINDS,GROUND_KINDS,INVENTORY_KINDS:Object.freeze(Object.keys(ITEM_LOAD)),newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
     validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
 })(globalThis);

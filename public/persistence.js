@@ -47,8 +47,9 @@ function restore(state,saved){
   state.world.now=saved.clock;
   state.world.weather=Frontier.weather(state.world,saved.clock);
   Frontier.restore(state.world,saved.world);
-  AgentWorld.restoreWorld(state.world,saved.world);
-  Civilization.restoreRemains(state.world,saved.world?.remains,saved.dead);
+  const seenVessels=new Set();
+  AgentWorld.restoreWorld(state.world,saved.world,seenVessels);
+  Civilization.restoreRemains(state.world,saved.world?.remains,saved.dead,seenVessels);
   root.WorldRuntime.invalidateNavigation(state.world);
   state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;
   state.receiptSeq=Number.isSafeInteger(saved.receiptSeq)&&saved.receiptSeq>=0?saved.receiptSeq:0;
@@ -101,7 +102,7 @@ function restore(state,saved){
     if(typeof old.activityStats.last==='string')
      a.last=old.activityStats.last.slice(0,110);
    }
-   Crafting.restore(n,old);
+   Crafting.restore(n,old,seenVessels);
    n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
     [...new Set(old.knowledge.recipes.filter(v=>
       ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
@@ -159,6 +160,10 @@ function restore(state,saved){
    n.thoughtAt=Number.isFinite(old.thoughtAt)&&old.thoughtAt>=0?
     old.thoughtAt:state.clock+3+state.npcs.length*2;
    state.npcs.push(n);
+  }
+  for(const id of seenVessels){
+   const number=/^vessel_(\d+)$/.exec(id);
+   if(number)state.world.itemSeq=Math.max(state.world.itemSeq,Number(number[1])+1);
   }
   root.Reservations.restore(state,saved);
   // Ephemeral partner reservations are reconstructed from real pending
