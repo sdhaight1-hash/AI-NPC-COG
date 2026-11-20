@@ -20,6 +20,8 @@ Among eligible residents with a pending personal cue, the connected browser sche
 
 The resident inspector counts completed model replies by whether the chosen action started, the model abstained, the decision context went stale, or the reply was refused. Follow-up routine work after an abstention does not count as a model action. These are process outcomes, not a measure of an action’s longer-term utility. Older saves keep their aggregate reply count without inventing categories for past replies.
 
+An accepted timed model action carries the ID of its decision receipt into the accepted command, activity lifecycle and physical result, including across a checkpoint. Rejected replies refer to their original decision ID. Replies naming an unoffered action are stored as `invalid_selection` so arbitrary reply text never enters the trace.
+
 ## Tests
 
 `tests/client.test.mjs` tests depletion during inference, same-lot contention, unrelated private inventory changes, private belief/report revisions, simulated expiry, actor death and a deliberately unresolved model response that arrives after an urgent physical drink starts.

@@ -3,6 +3,7 @@
 (function(root){
  'use strict';
  const MAX=4096;
+ const validDecisionId=id=>typeof id==='string'&&/^evt_[1-9]\d{0,14}$/.test(id);
  const plain=v=>v===undefined?null:JSON.parse(JSON.stringify(v));
  const nums=(oldObj={},newObj={})=>{
   const out=[];
@@ -100,27 +101,30 @@
   if(state.receipts.length>MAX)state.receipts.splice(0,state.receipts.length-MAX);
   return receipt;
  }
- function contextFor(n,commandId){
+ function contextFor(n,commandId,decisionId=null){
   const activity=n.currentActivity?.commandId===commandId?n.currentActivity:null;
   const goal=n.agency?.goal;
+  decisionId=activity?.decisionId??decisionId;
   return {activityId:activity?.id??null,goalKey:goal?.key??null,
    goalStartedAt:goal?.startedAt??null,projectId:n.project?.id??null,
    position:{x:n.x,y:n.y,z:n.z||0},
-   reservationIds:activity?.reservationIds?.slice(0,40)||[]};
+   reservationIds:activity?.reservationIds?.slice(0,40)||[],
+   ...(validDecisionId(decisionId)?{decisionId}:{})};
  }
- function accept(state,n,action,commandId,ref=null,source='simulation'){
+ function accept(state,n,action,commandId,ref=null,source='simulation',decisionId=null){
   return append(state,{actorId:n.id,commandId,action,targetId:ref,
-   status:'ACCEPTED',source:String(source).slice(0,32),context:contextFor(n,commandId)});
+   status:'ACCEPTED',source:String(source).slice(0,32),context:contextFor(n,commandId,decisionId)});
  }
- function decision(state,n,action,source,status='DECIDED',reason=null,inferenceMs=null){
+ function decision(state,n,action,source,status='DECIDED',reason=null,inferenceMs=null,decisionId=null){
   return append(state,{actorId:n.id,commandId:null,action,
-   source:String(source).slice(0,32),status,reason,inferenceMs});
+   source:String(source).slice(0,32),status,reason,inferenceMs,
+   ...(validDecisionId(decisionId)?{context:{decisionId}}:{})});
  }
  function lifecycle(state,n,activity,status,reason=null){
   if(!['INTERRUPTED','RESUMED','ABANDONED'].includes(status))throw Error('Invalid lifecycle status');
   return append(state,{actorId:n.id,commandId:activity.commandId,
    action:activity.key,targetId:activity.ref,status,reason,
-   context:{...contextFor(n,activity.commandId),activityId:activity.id}});
+   context:{...contextFor(n,activity.commandId,activity.decisionId),activityId:activity.id}});
  }
  function committed(state,commandId){
   return state.receipts?.find(r=>r.commandId===commandId&&
@@ -158,5 +162,5 @@
   else root.EvidenceMemory?.fromFailedReceipt(state,n,receipt);
   return {...outcome,receipt};
  }
- root.WorldReceipts={MAX,accept,decision,lifecycle,execute,snapshot,change,committed};
+ root.WorldReceipts={MAX,accept,decision,lifecycle,execute,snapshot,change,committed,validDecisionId};
 })(globalThis);

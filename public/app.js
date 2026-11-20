@@ -202,8 +202,8 @@ function scheduleIdleAgents(){
   }
  }
 }
-function setAction(n,action,source='rein',scores=null){
- return WorldRuntime.begin(state,n,action,source,scores,{onRecord:renderEvents});
+function setAction(n,action,source='rein',scores=null,decisionId=null){
+ return WorldRuntime.begin(state,n,action,source,scores,{onRecord:renderEvents,decisionId});
 }
 function completeActivity(n){
  if(!n.task||n.path.length||n.task.readyAt===null||
@@ -322,22 +322,23 @@ async function deliberate(n,cue=null){
     question:cue?'Review '+cue.kind+' and choose a legal action using your own evidence.':
      'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
    });
-   const stats=activity(n),action=String(data.action||'').slice(0,64);
+   const offered=options.some(o=>o.key===data.action);
+   const stats=activity(n),action=offered?data.action:'invalid_selection';
    const source=data.source==='hivemind'?'hivemind':'rein';
    stats.decisions++;
-   WorldReceipts.decision(state,n,action,source,'DECIDED',null,data.durationMs);
-   if(!options.some(o=>o.key===data.action)){
+   const decision=WorldReceipts.decision(state,n,action,source,'DECIDED',null,data.durationMs);
+   if(!offered){
     rejected=true;stats.rejected++;stats.modelRefused++;
-    WorldReceipts.decision(state,n,action,'model','REJECTED','Action was not offered');
+    WorldReceipts.decision(state,n,action,'model','REJECTED','Action was not offered',null,decision.id);
     activityNote(n,'Discarded action that was not offered to the model');
    }else if(state.paused||state.conversationBusy||!state.npcs.includes(n)||
     key(n)!==location||!backgroundOptions(n).some(o=>o.key===data.action)||
     !modelChoiceStillRelevant(n,basis,data.action)||
     (cue&&Cognition.attentionCue(n,state.clock,false)?.sourceId!==cue.sourceId)){
     rejected=true;stats.rejected++;stats.modelStale++;
-    WorldReceipts.decision(state,n,action,'model','REJECTED','Decision context changed');
+    WorldReceipts.decision(state,n,action,'model','REJECTED','Decision context changed',null,decision.id);
     activityNote(n,'Discarded stale model selection');
-   }else if(setAction(n,data.action,source,data.scores)){
+   }else if(setAction(n,action,source,data.scores,decision.id)){
     if(cue)Cognition.attentionReviewed(n,state.clock,basis.evidenceSequence);
     if(data.action==='none'){
      stats.modelAbstained++;
