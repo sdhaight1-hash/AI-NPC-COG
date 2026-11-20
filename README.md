@@ -33,6 +33,35 @@ This is game-time chronology, not a 365-day real-world calendar.
 
 The speed selector advances simulated time independently of rendering frames. Its 1×, 60× and 3600× options are time multipliers. At 60×, one real second advances one in-game minute; at 3600×, one real second advances one in-game hour. Time acceleration can outpace local AI decisions: monitor model throughput and do not mistake offline defaults for rich autonomy.
 
+### Shared server-world pilot
+
+Start the server from PowerShell in the project directory:
+
+```powershell
+$env:SIM_WORLD_DIR = 'data/server-world'
+node server.mjs
+```
+
+Open [the observatory](http://127.0.0.1:5173). This server redirects to the
+shared world, which runs without a browser or model attached. Tabs observe the
+same clock and share pause, speed, and autonomous-decisions controls. The pilot
+uses the offline scheduler. Keep one server process per checkpoint directory.
+
+The server writes alternating checksummed v3 checkpoints every five seconds
+while the world changes, on shared control changes, and on graceful shutdown.
+An abrupt restart can lose progress since the last checkpoint. The server can
+recover the previous slot if the latest is damaged and preserves both files
+when neither can be read. The status displays checkpoint problems.
+
+Use **Export world** in the browser-owned observatory to copy an existing v3
+world. Set `SIM_WORLD_IMPORT` to the exported JSON path before starting Node
+with a fresh `SIM_WORLD_DIR`. The imported world opens paused. Once a server
+checkpoint exists, it takes precedence on restart. The export and browser save
+are retained.
+
+The normal browser startup is available when `SIM_WORLD_DIR` is unset.
+Reset and new-world controls are disabled in the shared viewer.
+
 ### Saving and migration
 
 Local storage now uses the ai-npc-cog-v3 key. Older v1/v2 player-and-village states cannot safely be mapped to the new wilderness, so they are **not automatically imported or erased**. Clicking Reset clears the current v3 world. New world selects a new seed after confirmation. Browser local storage is temporary prototype storage and does not yet provide the reliability of a server-side historical database.

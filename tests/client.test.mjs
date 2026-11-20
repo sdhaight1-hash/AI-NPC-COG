@@ -38,7 +38,8 @@ function makeBrowser(options={}){
  const window={addEventListener(type,fn){events.set('window:'+type,fn);},
   confirm:()=>true,location:{reload(){}}};
  const context={document,window,console,requestAnimationFrame(fn){frames.push(fn);},setInterval(){},
-  performance:{now:()=>0},
+  performance:{now:()=>0}, URLSearchParams, AbortSignal,
+  location:options.serverMode?{search:'?world=server'}:undefined,
   localStorage:{
    getItem:k=>saved.get(k)||null,
    setItem(k,v){saved.set(k,v);},
@@ -50,7 +51,7 @@ function makeBrowser(options={}){
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,drawConstructionProjection,'+
-  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity,modelDecisionBasis,modelChoiceStillRelevant,Reservations,Projects};',context);
+  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity,modelDecisionBasis,modelChoiceStillRelevant,Reservations,Projects,pollServerWorld,controlServerWorld};',context);
  const launchedSpeed=context.exposed.state.speed;
  // Most tests explicitly exercise a one-minute-per-second physics fixture,
  // independently from the user-facing default playback preference.
@@ -1006,4 +1007,53 @@ test('a blocked water project leaves the resident free to forage in both browser
   assert.equal(p.nextAt,wake);
   assert.equal(modelCalls,0);
  }
+});
+
+test('two server-world tabs share playback state without stepping or saving locally',async()=>{
+ const legacy=makeBrowser();
+ const {clock,npcs,dead,world,events}=legacy.state;
+ const snapshot=JSON.parse(JSON.stringify({clock,npcs,dead,world,events,receipts:[]}));
+ let paused=false,speed=240;
+ const requests=[];
+ const fetch=async (route,options)=>{
+  requests.push(route);
+  if(route==='/api/world/control'){
+   const patch=JSON.parse(options.body);
+   paused=patch.paused??paused;speed=patch.speed??speed;
+  }
+  return {ok:true,json:async()=>JSON.parse(JSON.stringify({
+   snapshot,day:1,paused,speed,auto:true,warning:null
+  }))};
+ };
+ const saved=new Map([['ai-npc-cog-v3','existing browser save']]);
+ const tabs=[makeBrowser({serverMode:true,fetch,saved}),
+  makeBrowser({serverMode:true,fetch,saved})];
+ await new Promise(resolve=>setImmediate(resolve));
+ for(const tab of tabs){
+  assert.equal(tab.state.npcs.length,5);
+  tab.step(60);tab.save();
+  assert.equal(tab.state.clock,clock);
+  assert.equal(tab.state.connected,false);
+ }
+ await tabs[0].controlServerWorld({paused:true,speed:120});
+ await tabs[1].pollServerWorld();
+ for(const tab of tabs){
+  assert.equal(tab.state.paused,true);
+  assert.equal(tab.state.speed,120);
+  assert.equal(tab.state.clock,clock);
+ }
+ assert.equal(saved.get('ai-npc-cog-v3'),'existing browser save');
+ assert.deepEqual(requests,['/api/world','/api/world','/api/world/control','/api/world']);
+});
+
+test('a server-world viewer stays disconnected when its world endpoint fails',async()=>{
+ const b=makeBrowser({serverMode:true,fetch:async()=>({
+  ok:false,json:async()=>({error:'No readable world checkpoint'})
+ })});
+ await new Promise(resolve=>setImmediate(resolve));
+ b.step(60);b.tick(2000);
+ assert.equal(b.state.clock,490);
+ assert.equal(b.state.npcs.length,0);
+ assert.match(b.elements.get('worldStatus').textContent,/No readable world checkpoint/);
+ assert.equal(b.saved.size,0);
 });

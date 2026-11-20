@@ -287,12 +287,38 @@ async function readJson(req) {
   try { return JSON.parse(text); }
   catch { throw new Error('Expected JSON request body'); }
 }
-export function startServer(port = PORT) {
+export function startServer(port = PORT, { worldDirectory, worldImport } = {}) {
+  let worldReady;
+  let worldFailure;
   const lane = createInferenceLane();
   let lastHealthyAt = 0;
   const server = createServer(async (req, res) => {
     try {
-      const route = new URL(req.url, 'http://localhost').pathname;
+      const url = new URL(req.url, 'http://localhost');
+      const route = url.pathname;
+      if (worldDirectory && req.method === 'GET' && route === '/' && url.searchParams.get('world') !== 'server') {
+        res.writeHead(302, { Location: '/?world=server', 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+      if (route === '/api/world' || route === '/api/world/control') {
+        if (!worldDirectory) return json(res, 404, { error: 'Server world is disabled' });
+        const host = req.headers.host;
+        if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host || '') ||
+            (req.headers.origin && req.headers.origin !== 'http://' + host))
+          return json(res, 403, { error: 'Server world requires a local, same-origin request' });
+        const world = await worldReady;
+        if (!world) return json(res, 503, { error: worldFailure || 'Server world is starting' });
+        if (req.method === 'GET' && route === '/api/world')
+          return json(res, 200, world.view());
+        if (req.method === 'POST' && route === '/api/world/control') {
+          if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
+            return json(res, 415, { error: 'Expected application/json' });
+          try { world.control(await readJson(req)); }
+          catch (error) { return json(res, 400, { error: error.message }); }
+          return json(res, 200, world.view());
+        }
+        return json(res, 405, { error: 'Method not allowed' });
+      }
       if (req.method === 'GET' && route === '/api/health') {
         try {
           const response = await fetch(new URL('/health', MODEL_URL), { signal: AbortSignal.timeout(1800) });
@@ -340,9 +366,37 @@ export function startServer(port = PORT) {
     }
   });
   server.listen(port, '127.0.0.1', () => {
-    console.log('AI-NPC-COG: http://127.0.0.1:' + port);
+    if (worldDirectory) {
+      worldReady = import('./world-service.mjs').then(({ openWorld }) => {
+        const world = openWorld(resolve(ROOT, worldDirectory), {
+          importFile: worldImport ? resolve(ROOT, worldImport) : undefined
+        });
+        if (!server.listening) return world;
+        const clock = setInterval(world.tick, 50);
+        const checkpoints = setInterval(world.save, 5000);
+        server.once('close', () => {
+          clearInterval(clock);
+          clearInterval(checkpoints);
+          world.save();
+        });
+        return world;
+      }).catch(error => {
+        worldFailure = error.message;
+        console.error('Server world unavailable:', worldFailure);
+      });
+    }
+    console.log('AI-NPC-COG: http://127.0.0.1:' + server.address().port);
     console.log(MODEL_LABELS[MODEL_BACKEND] + ' endpoint: ' + MODEL_URL.origin);
   });
   return server;
 }
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) startServer();
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  const server = startServer(PORT, {
+    worldDirectory: process.env.SIM_WORLD_DIR,
+    worldImport: process.env.SIM_WORLD_IMPORT
+  });
+  if (process.env.SIM_WORLD_DIR) {
+    process.once('SIGINT', () => server.close());
+    process.once('SIGTERM', () => server.close());
+  }
+}

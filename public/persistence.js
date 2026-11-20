@@ -16,6 +16,7 @@
  }
  function serializePerson(n){
   const {motion,blockedFor,peerPending,peerReservedFor,peerRetryAt,...stored}=n;
+  if(Number.isFinite(blockedFor)&&blockedFor>0)stored.blockedFor=blockedFor;
   // No active activity is the same state whether the field is absent or null.
   // Keep live activity progress unchanged across save/reload.
   if(stored.currentActivity===null)delete stored.currentActivity;
@@ -139,6 +140,8 @@ function restore(state,saved){
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
    if(validSavedPath(state,old.path,n))n.path=old.path;
+   if(n.path?.length&&Number.isFinite(old.blockedFor)&&old.blockedFor>0&&old.blockedFor<=5)
+    n.blockedFor=old.blockedFor;
    if(old.travel===null)n.travel=null;
    if(n.path?.length&&old.travel&&typeof old.travel==='object'&&
      Number.isFinite(old.travel.total)&&old.travel.total>0&&old.travel.total<=1&&

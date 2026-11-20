@@ -5,15 +5,17 @@ const TILE=VillageArt.TILE,W=Frontier.WIDTH,H=Frontier.HEIGHT;
 const STORE='ai-npc-cog-v3';
 const SPEED_STORE='ai-npc-cog-speed';
 const PRESET_SPEEDS=[1,60,120,240,3600];
-const storedSpeed=Number(localStorage.getItem(SPEED_STORE));
+const serverMode=globalThis.location?.search?
+ new URLSearchParams(globalThis.location.search).get('world')==='server':false;
+const storedSpeed=serverMode?240:Number(localStorage.getItem(SPEED_STORE));
 const initialSpeed=PRESET_SPEEDS.includes(storedSpeed)?storedSpeed:240;
-const WORLD_SEED=Number(localStorage.getItem('ai-npc-cog-world-seed'))||Frontier.DEFAULT_SEED;
+const WORLD_SEED=(!serverMode&&Number(localStorage.getItem('ai-npc-cog-world-seed')))||Frontier.DEFAULT_SEED;
 const world=AgentWorld.newWorld(WORLD_SEED);
-const founders=Civilization.founders(world,490);
+const founders=serverMode?[]:Civilization.founders(world,490);
 const state={clock:490,speed:initialSpeed,day:1,paused:false,auto:true,connected:false,
  backgroundBusy:false,conversationBusy:false,debugGrid:false,
  model:'rein',modelLabel:'Rein-NPC-4B',
- npcs:founders,dead:[],nextPersonId:6,world,events:[],selected:founders[0].id,
+ npcs:founders,dead:[],nextPersonId:6,world,events:[],selected:founders[0]?.id||null,
  zoom:1,viewZ:0,follow:true,selectedObject:null,camera:{x:0,y:0},nextUI:0,nextSave:0,lastDecisionMs:0};
 const $=id=>document.getElementById(id);
 const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
@@ -228,6 +230,7 @@ function advancePlan(n){
 }
 async function jsonPost(route,body){
  const response=await fetch(route,{method:'POST',headers:{'content-type':'application/json'},
+  ...(serverMode?{signal:AbortSignal.timeout(5000)}:{}),
   body:JSON.stringify(body)});
  const data=await response.json();
  if(!response.ok){const error=new Error(data.error||'HTTP '+response.status);
@@ -738,8 +741,46 @@ function renderChat(){
   }
  }
 }
+let serverPollPending=false,serverControlPending=false,serverRequestId=0;
+let serverLoaded=false,serverError=null,serverWarning=null;
+function applyServerView(view){
+ const snapshot=view.snapshot;
+ if(!snapshot?.world||!Array.isArray(snapshot.npcs))throw Error('Invalid server world response');
+ const redraw=!serverLoaded||state.world.seed!==snapshot.world.seed;
+ const wasSelected=state.selected;
+ for(const key of ['clock','npcs','dead','nextPersonId','world','events','receipts',
+  'reservations','commandSeq','receiptSeq','reservationSeq','effectRevision'])state[key]=snapshot[key];
+ state.day=view.day;state.paused=view.paused;state.auto=view.auto;state.speed=view.speed;
+ state.selected=state.npcs.some(n=>n.id===wasSelected)?wasSelected:state.npcs[0]?.id||null;
+ serverLoaded=true;serverError=null;serverWarning=view.warning;
+ if(redraw){drawnLayer=null;drawStaticWorld();updateCamera(true);}
+ renderEvents();renderObjectInspector();
+ if(redraw||state.selected!==wasSelected)renderChat();
+}
+async function pollServerWorld(){
+ if(serverPollPending||serverControlPending)return;
+ serverPollPending=true;
+ const request=++serverRequestId;
+ try{
+  const response=await fetch('/api/world',{signal:AbortSignal.timeout(5000)});
+  const view=await response.json();
+  if(request!==serverRequestId)return;
+  if(!response.ok)throw Error(view.error||'Server world unavailable');
+  applyServerView(view);
+ }catch(error){
+  if(request===serverRequestId)serverError=error.message;
+ }finally{serverPollPending=false;}
+}
+async function controlServerWorld(patch){
+ if(!serverLoaded||serverControlPending)return;
+ serverControlPending=true;
+ ++serverRequestId;
+ try{applyServerView(await jsonPost('/api/world/control',patch));}
+ catch(error){serverError=error.message;}
+ finally{serverControlPending=false;}
+}
 function save(){
- if(state.saveLoadFailed)return;
+ if(serverMode||state.saveLoadFailed)return;
  try{localStorage.setItem(STORE,JSON.stringify(Persistence.save(state)));}
  catch{ /* Retain current world when browser storage is unavailable. */ }
 }
@@ -754,7 +795,7 @@ function restore(){
  return false;
 }
 function step(dt){
- if(state.paused||dt<=0)return;
+ if(serverMode||state.paused||dt<=0)return;
  const elapsed=dt*state.speed/60;
  Simulation.advance(state,elapsed,{
   onArrival:n=>record(n.name+' arrived in the wilderness','social'),
@@ -801,6 +842,20 @@ function updateHUD(now){
  $('footerNote').textContent=state.connected?
   'One shared '+state.modelLabel+' lane · deterministic world rules':'Offline survival fallback (not AI cognition)';
  $('pauseBtn').textContent=state.paused?'▶ Resume':'Ⅱ Pause';
+ if(serverMode){
+  $('worldStatus').textContent=serverError?'Server world unavailable · '+serverError:
+   serverWarning||(!serverLoaded?'Connecting to server world':state.paused?'Server world paused':'Server world running');
+  $('footerNote').textContent='Shared server world · offline resident decisions';
+  $('modelStatus').textContent='Offline simulation';
+  const disabled=!serverLoaded||serverControlPending;
+  $('pauseBtn').disabled=disabled;$('autoAI').disabled=disabled;
+  $('exportWorld').disabled=!serverLoaded;
+  $('autoAI').checked=state.auto;
+  for(const button of document.querySelectorAll('[data-speed]')){
+   button.disabled=disabled;
+   button.classList.toggle('active',Number(button.dataset.speed)===state.speed);
+  }
+ }
  renderResidents();updateInspector();drawMinimap();
  if(now>state.nextSave){save();state.nextSave=now+5000;}
 }
@@ -849,7 +904,10 @@ canvas.addEventListener('click',event=>{
  if(!object){state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
   state.camera.y=tile.y*TILE-canvas.height/(2*state.zoom);}
 });
-$('pauseBtn').addEventListener('click',()=>{state.paused=!state.paused;});
+$('pauseBtn').addEventListener('click',()=>{
+ if(serverMode)void controlServerWorld({paused:!state.paused});
+ else state.paused=!state.paused;
+});
 $('zoomIn').addEventListener('click',()=>setZoom(state.zoom+1));
 $('zoomOut').addEventListener('click',()=>setZoom(state.zoom-1));
 $('zUp').addEventListener('click',()=>setZ(state.viewZ+1));
@@ -866,24 +924,38 @@ $('artToggle').addEventListener('click',()=>{
  drawStaticWorld();
  $('artToggle').textContent=showAtlas?'Art: CC0 Tiny Town':'Art: Original';
 });
-$('autoAI').addEventListener('change',e=>{state.auto=e.target.checked;});
+$('autoAI').addEventListener('change',e=>{
+ if(serverMode)void controlServerWorld({auto:e.target.checked});
+ else state.auto=e.target.checked;
+});
 for(const button of document.querySelectorAll('[data-speed]')){
  button.classList.toggle('active',Number(button.dataset.speed)===state.speed);
  button.addEventListener('click',()=>{
   const value=Number(button.dataset.speed);
   if(!PRESET_SPEEDS.includes(value))return;
+  if(serverMode){void controlServerWorld({speed:value});return;}
   state.speed=value;localStorage.setItem(SPEED_STORE,String(value));
   document.querySelectorAll('[data-speed]').forEach(el=>
    el.classList.toggle('active',el===button));
  });
 }
 $('clearLog').addEventListener('click',()=>{state.events=[];renderEvents();});
+$('exportWorld').addEventListener('click',()=>{
+ if(state.saveLoadFailed||(serverMode&&!serverLoaded))return;
+ const blob=new Blob([JSON.stringify(Persistence.save(state))],{type:'application/json'});
+ const url=URL.createObjectURL(blob);
+ const link=document.createElement('a');
+ link.href=url;
+ link.download='ai-npc-cog-world-'+state.world.seed+'.json';
+ link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
 $('resetBtn').addEventListener('click',()=>{
- if(!window.confirm('Reset this simulated world and its history?'))return;
+ if(serverMode||!window.confirm('Reset this simulated world and its history?'))return;
  localStorage.removeItem(STORE);window.location.reload();
 });
 $('newIsland').addEventListener('click',()=>{
- if(!window.confirm('Generate a new world? This discards the current local simulation.'))return;
+ if(serverMode||!window.confirm('Generate a new world? This discards the current local simulation.'))return;
  localStorage.setItem('ai-npc-cog-world-seed',
   String(Math.floor(Math.random()*2147483646)+1));
  localStorage.removeItem(STORE);window.location.reload();
@@ -926,12 +998,14 @@ function tick(now){
 }
 try{
  // Restore before rendering the terrain, so saved worlds paint the right map.
- const restored=restore();
+ const restored=serverMode||restore();
  drawStaticWorld();loadTileset();
  state.world.now=state.clock;state.world.weather=Frontier.weather(state.world,state.clock);
  for(const n of state.npcs)Frontier.reveal(state.world,n.x,n.y,7);
  renderResidents();updateInspector();renderChat();renderObjectInspector();renderEvents();updateCamera(true);
- if(restored)record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
+ if(serverMode){
+  for(const id of ['resetBtn','newIsland','clearLog'])$(id).disabled=true;
+ }else if(restored)record('Natural toroidal world initialized; five independent founders, no prebuilt structures.');
  else record('Saved world could not be loaded. Its checkpoint was preserved and autosave is disabled.','error');
 }catch(error){
  // A transient startup canvas/UI failure must not prevent clock startup.
@@ -939,5 +1013,8 @@ try{
  const status=$('worldStatus');
  if(status)status.textContent='STARTUP ERROR · '+String(error?.message||error).slice(0,100);
 }finally{
- checkModel();setInterval(checkModel,10000);requestAnimationFrame(tick);
+ if(serverMode){
+  void pollServerWorld();setInterval(pollServerWorld,800);
+ }else{checkModel();setInterval(checkModel,10000);}
+ requestAnimationFrame(tick);
 }
