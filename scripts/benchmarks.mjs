@@ -155,6 +155,59 @@ function twoActorTrade(seed){
  return end('two_actor_finite_transfer',s,elapsed,
   ()=>n.inventory.food===1&&other.inventory.food===1);
 }
+
+function autonomousVesselFromEmptyHands(seed){
+ const s=setup(seed),n=s.npcs[0],{Projects,Frontier}=globalThis;
+ // Controlled geography, not granted inventory: move existing finite deposits
+ // onto four visible, traversable tiles to isolate the physical supply chain.
+ s.npcs=[n];
+ n.needs.thirst=50;n.bio.hydrationBudgetMl=2100;n.energy=100;
+ assert.ok(Object.values(n.inventory).every(count=>count===0),
+  'A benchmark founder must own no starting supplies');
+ const kinds=['water','fiber','stone','wood'];
+ const nodes=kinds.map(kind=>{
+  const stockRequired=kind==='fiber'?3:kind==='stone'?2:1;
+  const node=s.world.nodes.find(x=>x.kind===kind&&x.stock>=stockRequired);
+  assert.ok(node,'Finite world deposit required for '+kind);
+  return node;
+ });
+ const tiles=[{x:n.x,y:n.y,z:0},...Frontier.neighbors(s.world,n)
+  .filter(p=>Frontier.traversable(s.world,p.x,p.y,p.z||0))].slice(0,4);
+ assert.equal(tiles.length,4,'Benchmark terrain must have three safe neighboring tiles');
+ for(let i=0;i<nodes.length;i++){
+  nodes[i].x=tiles[i].x;nodes[i].y=tiles[i].y;nodes[i].z=0;
+ }
+ s.world.nodes=nodes;
+ const initialStocks=Object.fromEntries(nodes.map(x=>[x.kind,x.stock]));
+ assert.equal(Projects.maybeStart(s,n)?.kind,'water_vessel',
+  'A personal sighting and portable-water need must choose the project');
+ const elapsed=until(s,()=>n.project?.status==='COMPLETED',700);
+ const receipts=s.receipts.filter(r=>r.status==='COMPLETED');
+ const expectedActions=['collect_fiber','collect_stone','collect_wood',
+  'craft_cord','craft_blade','craft_hollow_wood_trial'];
+ for(const action of expectedActions)
+  assert.ok(receipts.some(r=>r.action===action),'Missing real operation '+action);
+ const debited={};
+ for(const receipt of receipts)for(const stock of receipt.delta?.nodeStock||[])
+  if(stock.delta<0)debited[stock.key]=(debited[stock.key]||0)-stock.delta;
+ for(const node of nodes.filter(x=>x.kind!=='water'))
+  assert.ok((debited[node.id]||0)>0,'Resource '+node.kind+' was not physically debited');
+ assert.ok(n.craftedItems.filter(x=>x.kind==='flask').length===1);
+ assert.equal(n.inventory.flask,1);
+ assert.equal(n.knowledge.recipes.filter(x=>x==='flask').length,1);
+ const learning=receipts.filter(r=>r.delta?.knowledge?.learnedMethods?.includes('flask'));
+ assert.equal(learning.length,1,'Discovery must be receipt-backed exactly once');
+ assert.ok(n.evidenceMemory.methods.some(m=>m.method==='flask'&&
+  m.receiptId===learning[0].id),'Private evidence must trace to the committed trial');
+ const completedStages=receipts.filter(r=>r.action==='craft_stage').length;
+ assert.ok(completedStages>=9,'Cord, blade and trial each require multiple work stages');
+ return {...end('empty_hand_autonomous_water_vessel',s,elapsed,
+  ()=>n.inventory.flask===1&&n.project.status==='COMPLETED'),
+  initialStocks,sourceDebits:Object.fromEntries(nodes.map(x=>[x.kind,debited[x.id]||0])),
+  completedStages,learnedMethodReceipts:learning.length,
+  finalVessels:n.craftedItems.filter(x=>x.kind==='flask').length};
+}
+
 export const scenarios={
  critical_thirst_response:waterEmergency,
  four_operation_cord:cordProduction,
@@ -162,7 +215,8 @@ export const scenarios={
  interrupted_craft_resumes:interruptedCraft,
  interrupted_shelter_resumes:interruptedShelter,
  mistaken_resource_belief_revised:falseBelief,
- two_actor_finite_transfer:twoActorTrade
+ two_actor_finite_transfer:twoActorTrade,
+ empty_hand_autonomous_water_vessel:autonomousVesselFromEmptyHands
 };
 export function runScenarios(seed=379210){
  return Object.entries(scenarios).map(([name,fn])=>{
