@@ -14,7 +14,7 @@ The bounded `evidenceMemory.trials` and `comparisons` arrays persist through the
 
 ## Validation contract
 
-`tests/trial-comparisons.test.mjs` checks a standalone physically completed leak, two contrasting workpiece outcomes, once-only private inference, blocked known-bad inputs without consumption, selection and manufacturing with a stronger binding, two equal-grade failures, a deliberately manufactured leaky flask that fails its goal, spoofed receipt rejection, and save/reload. Full Node/headless/soak/Windows CI is required before merge.
+`tests/trial-comparisons.test.mjs` checks a standalone physically completed leak, two contrasting workpiece outcomes, once-only private inference, blocked known-bad inputs without consumption, selection and manufacturing with a stronger binding, two equal-grade failures, a deliberately manufactured leaky flask that fails its goal, spoofed receipt rejection, save/reload, and a 240-minute fixed-seed comparison of one-minute versus batched simulation intervals. Full Node/headless/soak/Windows CI is required before merge.
 
 ## Known limits
 
