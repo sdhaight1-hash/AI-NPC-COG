@@ -160,5 +160,14 @@
    when:String(o.when||'').replace(/\(\d+ remaining, \d+ tiles away\)/g,
     '(source visually identified)')}));
  }
- root.Perception={line,visionRange,canSee,sound,inspect,snapshot,filterAffordances};
+ function rememberWater(state,n){
+  const history=n.knowledge.sightings||[];
+  const seen=state.world.nodes.filter(o=>o.kind==='water'&&canSee(state,n,o));
+  if(!seen.length)return;
+  const ids=new Set(seen.map(o=>o.id));
+  n.knowledge.sightings=[...history.filter(o=>!ids.has(o.id)),
+   ...seen.map(o=>({id:o.id,kind:'water',x:o.x,y:o.y,z:o.z||0,at:state.clock}))]
+   .slice(-12);
+ }
+ root.Perception={line,visionRange,canSee,sound,inspect,snapshot,filterAffordances,rememberWater};
 })(globalThis);

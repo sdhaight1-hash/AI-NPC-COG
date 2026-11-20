@@ -183,9 +183,9 @@
       .sort((a,b)=>distance(n,a)-distance(n,b)||
         a.id.localeCompare(b.id))[0]||null;
   }
-  function findNode(n,world,kind,canReach) {
+  function findNode(n,world,kind,canReach,canSee=()=>true) {
     const candidates=world.nodes.filter(node=>node.kind===kind&&node.stock>0&&
-      distance(n,node)<=18).sort((a,b)=>distance(n,a)-distance(n,b));
+      distance(n,node)<=18&&canSee(node)).sort((a,b)=>distance(n,a)-distance(n,b));
     return candidates.slice(0,8).find(node=>canReach(node))||null;
   }
   function nearestResident(n,residents,condition=()=>true) {
@@ -231,7 +231,9 @@
         add(key,'Collect '+label+' from a visible source ('+node.stock+' remaining, '+distance(n,node)+' tiles away)',node,node.id);
       }
     }
-    const drinkable=findNode(n,world,'water',canReach);
+    const view={world,clock:world.now};
+    const drinkable=findNode(n,world,'water',canReach,
+      node=>!root.Perception||root.Perception.canSee(view,n,node));
     if(drinkable&&n.energy>=12&&vesselRoom(n)>0&&roomFor(n,'water')>0)
       add('fill_water','Fill carried water flask from a real freshwater source',drinkable,drinkable.id);
     if(drinkable&&(n.needs.thirst>=10||n.bio?.hydrationBudgetMl<2400))
@@ -247,7 +249,7 @@
       add('stock_fiber','Collect plant fiber for making cord and bindings');
     if(n.inventory.food>0&&n.needs.hunger>=10)
       add('eat','Eat carried food (hunger '+Math.round(n.needs.hunger)+'/100)');
-    if(n.inventory.water>0&&n.needs.thirst>=10)
+    if(n.inventory.water>0&&(n.needs.thirst>=10||n.bio?.hydrationBudgetMl<1200))
       add('drink','Drink carried water (thirst '+Math.round(n.needs.thirst)+'/100)');
     if(n.inventory.wood>=1&&n.inventory.stone>=1&&n.inventory.fiber>=1&&n.inventory.hatchet===0){
       if(n.knowledge?.recipes?.includes('hatchet'))
