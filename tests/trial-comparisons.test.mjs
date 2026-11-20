@@ -160,29 +160,29 @@ test('an uninformed taught maker can still leak a poor seal, without counting th
  assert.equal(final.delta.inventory.some(x=>x.key==='flask'&&x.delta>0),false);
 });
 
-test('partitioning the same 240 simulated minutes preserves trials, comparison and world state',()=>{
- const fine=setup(),batched=setup();
- for(const run of [fine,batched]){
-  furnish(run.n,run.s.clock,1);
-  assert.equal(run.c.WorldRuntime.begin(run.s,run.n,'craft_hollow_wood_trial'),true);
- }
- function elapse(run,minutes,step){
-  for(let elapsed=0;elapsed<minutes;elapsed+=step)
-   run.c.Simulation.advance(run.s,Math.min(step,minutes-elapsed));
- }
- elapse(fine,60,1);elapse(batched,60,60);
- for(const run of [fine,batched]){
-  assert.equal(run.n.inventory.flask,0);
-  furnish(run.n,run.s.clock,2);
-  assert.equal(run.c.WorldRuntime.begin(run.s,run.n,'craft_hollow_wood_trial'),true);
- }
- elapse(fine,60,1);elapse(batched,60,60);
- elapse(fine,120,1);elapse(batched,120,120);
- assert.equal(fine.n.evidenceMemory.comparisons.length,1);
- assert.deepEqual(copy(batched.n.evidenceMemory.comparisons),
-  copy(fine.n.evidenceMemory.comparisons));
- assert.equal(fine.c.Simulation.canonical(fine.c.Persistence.save(fine.s)),
-  batched.c.Simulation.canonical(batched.c.Persistence.save(batched.s)));
+test('comparative flask trials preserve custody and provenance at 1x, 60x and 240x',()=>{
+ const results=[1,60,240].map(step=>{
+  const {c,s,n}=setup();
+  const blade=copy(n.craftedItems.find(x=>x.kind==='blade'));
+  for(const grade of [1,2]){
+   furnish(n,s.clock,grade);
+   assert.equal(c.WorldRuntime.begin(s,n,'craft_hollow_wood_trial'),true);
+   for(let elapsed=0;elapsed<240;elapsed+=step)c.Simulation.advance(s,step);
+   assert.equal(n.inventory.wood,0);
+   assert.equal(n.inventory.cord,0);
+   assert.equal(n.inventory.flask,grade===2?1:0);
+  }
+  assert.deepEqual(copy(n.craftedItems.find(x=>x.kind==='blade')),blade);
+  assert.equal(n.evidenceMemory.comparisons.length,1);
+  const wet=s.receipts.filter(x=>x.action==='craft_stage'&&x.status==='COMPLETED'&&
+   x.delta.nodeStock?.some(d=>d.delta===-1));
+  assert.equal(wet.length,2);
+  assert.deepEqual(copy(n.evidenceMemory.comparisons[0].sourceReceiptIds),copy(wet.map(x=>x.id)));
+  assert.deepEqual(copy(wet.flatMap(x=>x.delta.nodeStock.map(d=>d.delta))),[-1,-1]);
+  return c.Simulation.canonical(c.Persistence.save(s));
+ });
+ assert.equal(results[1],results[0]);
+ assert.equal(results[2],results[0]);
 });
 
 test('a replacement vessel project defers weak bindings and resumes with a real stronger one',()=>{
