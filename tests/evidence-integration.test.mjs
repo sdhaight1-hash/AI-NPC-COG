@@ -263,3 +263,29 @@ test('private verified speaker reliability outranks newer competing resource hea
  // only assert stable live scoring here; separate tests validate real persistence.
  assert.ok(m);
 });
+
+test('a remembered depleted stone deposit is tried once, then avoided on firsthand evidence',()=>{
+ const {c,s,n}=setup();s.auto=false;s.npcs=[n];
+ const stone=s.world.nodes.find(node=>node.kind==='stone');
+ s.world.nodes=[stone];
+ n.x=stone.x;n.y=stone.y;n.z=0;n.energy=100;
+ assert.equal(c.WorldRuntime.begin(s,n,'inspect'),true);
+ c.Simulation.advance(s,2);
+ stone.stock=0; // The previous observation is now stale.
+ assert.equal(c.WorldRuntime.begin(s,n,'collect_stone','memory'),true);
+ c.Simulation.advance(s,5);
+ assert.ok(s.receipts.some(r=>r.action==='collect_stone'&&r.status==='FAILED'));
+ assert.equal(n.agency.beliefs.find(b=>b.ref===stone.id).status,'depleted');
+ assert.ok(!c.WorldRuntime.available(s,n).some(o=>o.key==='collect_stone'));
+});
+test('remembered forage still respects the current actor carrying limit',()=>{
+ const {c,s,n}=setup();s.auto=false;s.npcs=[n];
+ const food=s.world.nodes.find(node=>node.kind==='food');
+ s.world.nodes=[food];
+ n.x=food.x;n.y=food.y;n.z=0;n.energy=100;
+ assert.equal(c.WorldRuntime.begin(s,n,'inspect'),true);
+ c.Simulation.advance(s,2);
+ n.inventory.wood=9;
+ assert.equal(c.AgentWorld.roomFor(n,'food'),0);
+ assert.ok(!c.WorldRuntime.available(s,n).some(o=>o.key==='forage'));
+});
