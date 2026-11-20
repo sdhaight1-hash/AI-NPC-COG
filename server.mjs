@@ -248,6 +248,9 @@ export async function peerExchange(input, signal) {
 
 const STATIC = {
   '/': ['public/index.html', 'text/html; charset=utf-8'],
+  '/content-catalog.js': ['public/content-catalog.js', 'text/javascript; charset=utf-8'],
+  '/content-art.js': ['public/content-art.js', 'text/javascript; charset=utf-8'],
+  '/catalog-ui.js': ['public/catalog-ui.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['public/app.js', 'text/javascript; charset=utf-8'],
   '/pixel-art.js': ['public/pixel-art.js', 'text/javascript; charset=utf-8'],
   '/physics.js': ['public/physics.js', 'text/javascript; charset=utf-8'],

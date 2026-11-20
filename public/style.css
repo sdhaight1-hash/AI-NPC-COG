@@ -75,3 +75,36 @@ body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),l
   max-height:calc(100dvh - 305px);margin:0 auto}
  .simulation{flex-shrink:0}
 }
+
+/* Observatory field catalog and vector map controls. */
+.world-frame canvas.vector-map { image-rendering: auto }
+#catalog { width:min(920px, calc(100vw - 28px)); max-height:90vh; padding:0; color:var(--text); background:#182923; border:1px solid #627969; border-radius:14px; box-shadow:0 24px 90px #07100baa }
+#catalog::backdrop { background:#08130cbd }
+.catalog-header, .catalog-filters { display:flex; gap:16px; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border) }
+.catalog-header { justify-content:space-between }
+.catalog-header h2, .catalog-detail-head h3 { margin:0; font:600 27px Georgia,serif }
+.catalog-filters { flex-wrap:wrap }
+.catalog-filters label { display:grid; gap:5px; color:var(--muted); font-size:12px }
+.catalog-filters input, .catalog-filters select { min-width:0; padding:8px 12px; border:1px solid var(--border); border-radius:7px; background:#101e19; color:var(--text); font:inherit }
+.catalog-filters label:first-child { flex:1; min-width:165px }
+#catalogCount, .catalog-meta { color:var(--muted); font-size:12px }
+.catalog-layout { display:grid; grid-template-columns:minmax(165px, 34%) 1fr; height:min(55vh, 520px) }
+#catalogResults, #catalogDetail { overflow:auto; padding:14px }
+#catalogResults { border-right:1px solid var(--border) }
+.catalog-entry { display:flex; width:100%; gap:8px; align-items:center; text-align:left; padding:5px 8px; color:var(--text); background:transparent; border:1px solid transparent; border-radius:6px }
+.catalog-entry:hover, .catalog-entry[aria-pressed="true"] { background:#2e473a; border-color:#597a63 }
+.catalog-entry svg { width:26px; height:26px; flex:none }
+.catalog-detail-head { display:flex; align-items:center; gap:12px; padding-bottom:7px }
+.catalog-detail-head svg { width:52px; height:52px; flex:none }
+#catalogDetail { padding:20px }
+.catalog-process { border-top:1px solid var(--border); padding:13px 0 }
+.catalog-process p { margin:6px 0; line-height:1.45 }
+@media (max-width:560px) {
+ .catalog-layout { grid-template-columns:minmax(108px, 37%) 1fr }
+ .catalog-header, .catalog-filters, #catalogDetail { padding:12px }
+ #catalogResults { padding:5px }
+ .catalog-entry { padding:4px; gap:4px }
+ .catalog-entry svg { width:18px; height:18px }
+ .catalog-detail-head { align-items:flex-start; flex-direction:column }
+ .catalog-detail-head h3 { font-size:21px }
+}

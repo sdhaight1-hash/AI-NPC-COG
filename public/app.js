@@ -378,7 +378,18 @@ const undergroundCanvas=document.createElement('canvas');
 undergroundCanvas.width=W*TILE;undergroundCanvas.height=H*TILE;
 const undergroundCtx=undergroundCanvas.getContext('2d');
 let drawnLayer=null;
-function drawStaticWorld(){VillageArt.drawWorld(staticCtx,{width:W,height:H},[],[],state.world);}
+const vectorArt = document.getElementById('vectorArt');
+const useVectorArt = () => Boolean(globalThis.ContentArt?.available && vectorArt?.checked);
+if (vectorArt && globalThis.ContentArt) {
+ vectorArt.disabled = !ContentArt.available;
+ vectorArt.addEventListener('change', drawStaticWorld);
+}
+function drawStaticWorld(){
+ const vector = useVectorArt();
+ canvas.classList?.toggle('vector-map', vector);
+ if (vector) ContentArt.drawWorld(staticCtx, state.world, TILE);
+ else VillageArt.drawWorld(staticCtx,{width:W,height:H},[],[],state.world);
+}
 function drawUnderground(){
  if(drawnLayer===state.viewZ)return;
  drawnLayer=state.viewZ;
@@ -432,8 +443,10 @@ function drawWorld(){
   if(x>vw||y>vh||x+W*TILE<0||y+H*TILE<0)continue;
   ctx.save();ctx.translate(Math.round(x),Math.round(y));ctx.drawImage(layer,0,0);
   if(state.viewZ===0){
-   VillageArt.drawWorldObjects(ctx,state.world,{
-    left:-1,top:-1,right:W+1,bottom:H+1});
+   const view = {left:-x/TILE-1, top:-y/TILE-1,
+    right:(vw-x)/TILE+1, bottom:(vh-y)/TILE+1};
+   if (useVectorArt()) ContentArt.drawObjects(ctx,state.world,TILE,view);
+   else VillageArt.drawWorldObjects(ctx,state.world,view);
   }
   if(state.viewZ!==0)for(const item of state.world.items){
    if(item.kind==='flask'&&item.z===state.viewZ)VillageArt.drawGroundFlask(ctx,item);
@@ -671,7 +684,7 @@ function updateHUD(now){
 const heldKeys=new Set();
 window.addEventListener('keydown',event=>{
  const active=document.activeElement?.tagName;
- if(active==='INPUT'||active==='TEXTAREA')return;
+ if(document.getElementById('catalog')?.open || active==='INPUT'||active==='TEXTAREA'||active==='SELECT')return;
  const k=event.key.toLowerCase();
  if(['w','a','s','d','arrowleft','arrowright','arrowup','arrowdown'].includes(k)){
   event.preventDefault();state.follow=false;heldKeys.add(k);
@@ -685,7 +698,7 @@ window.addEventListener('keyup',e=>heldKeys.delete(e.key.toLowerCase()));
 window.addEventListener('blur',()=>heldKeys.clear());
 window.addEventListener('pagehide',save);
 function pan(dt){
- if(state.follow)return;
+ if(state.follow || document.getElementById('catalog')?.open)return;
  const dx=(heldKeys.has('d')||heldKeys.has('arrowright')?1:0)-
   (heldKeys.has('a')||heldKeys.has('arrowleft')?1:0);
  const dy=(heldKeys.has('s')||heldKeys.has('arrowdown')?1:0)-
