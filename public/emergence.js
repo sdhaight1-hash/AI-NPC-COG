@@ -5,7 +5,7 @@
   const clamp = (x, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x));
   const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water','drink_source',
-    'eat','drink','rest','share_food','socialize','build_fire','craft_hatchet',
+    'eat','drink','rest','share_food','socialize','teach_flask','build_fire','craft_hatchet',
     'build_shelter','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
@@ -17,7 +17,7 @@
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink_source:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
-    socialize:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
+    socialize:'socializing',teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
     const island=Frontier.generate(seed);
@@ -68,6 +68,18 @@
     const flask=ITEM_LOAD.flask,water=ITEM_LOAD.water;
     return load.massKg+flask.kg+liquid*water.kg<=load.maxMassKg+1e-9&&
      load.volumeL+flask.liters+liquid*water.liters<=load.maxVolumeL+1e-9;
+  }
+  // Instruction requires evidence of a *tested* method and a physical
+  // example made by this resident. A recipe flag, rumor or found flask alone
+  // is not proof that the speaker can explain how to manufacture one.
+  function canTeachFlask(n){
+    if(!n.knowledge?.recipes?.includes('flask')||
+     !n.craftedItems?.some(x=>x.kind==='flask'&&x.maker===n.id&&
+      typeof x.vesselId==='string'))return false;
+    const m=n.evidenceMemory;
+    return !!m?.methods?.some(method=>method.method==='flask'&&
+     m.episodes?.some(e=>e.id===method.sourceEpisodeId&&
+      e.receiptId===method.receiptId&&e.certainty==='observed'));
   }
   function newAgent(n, index=0) {
     n.needs = { hunger:28+(index*9)%35, thirst:24+(index*7)%28,
@@ -220,6 +232,15 @@
       !p.path?.length&&!p.peerPending&&!p.peerReservedFor);
     if(other && world.now-(n.lastPeerAt ?? -100000)>=90)
       add('socialize','Seek out '+other.name+' and initiate a real conversation',other,other.id);
+    if(n.energy>=20&&!n.workpiece&&!n.task&&!n.plan&&canTeachFlask(n)){
+      const student=nearestResident(n,residents,p=>p.alive!==false&&
+       p.energy>=20&&p.needs.curiosity>=45&&!p.task&&!p.plan&&!p.path?.length&&
+       !p.peerPending&&!p.peerReservedFor&&
+       !p.knowledge?.recipes?.includes('flask')&&canReach(p));
+      if(student)
+       add('teach_flask','Explain the tested sealing method using a real flask to '+student.name,
+        student,student.id);
+    }
     if(n.inventory.wood>=2&&n.inventory.stone>=1){
       if(!n.knowledge.recipes.includes('campfire'))
         add('experiment_wood_stone','Experiment with wood and stone; outcome unknown');
@@ -457,6 +478,18 @@
       n.inventory.food--;n.needs.hunger=clamp(n.needs.hunger-44);
       message='Ate '+meal.name+' ('+Math.round(meal.kcal)+' kcal); hunger now '+
         Math.round(n.needs.hunger);
+    }else if(task.key==='teach_flask'){
+      const student=residents.find(p=>p.id===task.ref);
+      if(!student||student===n||student.alive===false||!sameLevel(n,student)||
+       distance(n,student)>2||student.energy<20||student.needs.curiosity<45||
+       student.task||student.plan||student.path?.length||
+       student.peerPending||student.peerReservedFor||
+       student.knowledge?.recipes?.includes('flask')||!canTeachFlask(n))
+       return {ok:false,message:'Method instruction requires a willing nearby learner and firsthand proof'};
+      student.knowledge.recipes.push('flask');
+      n.needs.social=clamp(n.needs.social-14);
+      student.needs.social=clamp(student.needs.social-10);
+      message='Explained tested flask sealing steps to '+student.name;
     }else if(task.key==='share_food'||task.key==='socialize'){
       const other=residents.find(v=>v.id===task.ref);
       if(!other||distance(n,other)>2)return {ok:false,message:'The other resident moved away'};
