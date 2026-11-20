@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import {readFileSync} from 'node:fs';
 
 const clone=x=>JSON.parse(JSON.stringify(x));
-function setup(){
+function setup(relocate=true){
  const c=vm.createContext({});
  const modules=['frontier','construction','biology','crafting','cognition','agency',
   'emergence','civilization','receipts','activities','reservations','projects',
@@ -15,6 +15,20 @@ function setup(){
  const n=s.npcs[0];s.npcs=[n];
  n.energy=100;n.needs.thirst=50;n.bio.hydrationBudgetMl=2100;
  assert.ok(Object.values(n.inventory).every(quantity=>quantity===0));
+ if(!relocate){
+  // The generated map is immutable. For checkpoint replay use a real
+  // spring at its seeded coordinates, with physical components on hand.
+  const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=2&&
+   c.Frontier.traversable(s.world,x.x,x.y,x.z||0));
+  assert.ok(spring,'Reachable native spring required for replay');
+  n.x=spring.x;n.y=spring.y;n.z=spring.z||0;n.path=[];
+  Object.assign(n.inventory,{wood:1,cord:1,blade:1});
+  for(const kind of ['cord','blade'])
+   n.craftedItems.push({kind,quality:2,maker:n.id,craftedAt:s.clock,
+    method:kind,materialQuality:2});
+  assert.equal(c.Projects.maybeStart(s,n)?.kind,'water_vessel');
+  return {c,s,n};
+ }
  // Reposition the already-existing finite nodes; do not mint any stock.
  const kinds=['water','fiber','stone','wood'];
  const nodes=kinds.map(kind=>{
@@ -101,17 +115,19 @@ test('the same 720-minute material-to-water cycle is identical at 1x/60x/240x/36
 });
 
 test('mid-manufacturing checkpoint preserves water, method and source receipts at 240x',()=>{
- const continuous=setup(),interrupted=setup();
- advance(continuous.c,continuous.s,47,1);
- advance(interrupted.c,interrupted.s,47,1);
+ const continuous=setup(false),interrupted=setup(false);
+ advance(continuous.c,continuous.s,10,1);
+ advance(interrupted.c,interrupted.s,10,1);
  const before=interrupted.n.project;
  assert.equal(before.kind,'water_vessel');
  assert.notEqual(before.status,'COMPLETED','Checkpoint occurs before final product');
+ assert.equal(interrupted.n.workpiece?.recipe,'hollow_wood_trial',
+  'Checkpoint must interrupt real unfinished manufacture');
  const saved=clone(interrupted.c.Persistence.save(interrupted.s));
  const fresh=interrupted.c.Simulation.initial(379210);fresh.auto=false;
  assert.equal(interrupted.c.Persistence.restore(fresh,saved),true);
- advance(continuous.c,continuous.s,673,1);
- advance(interrupted.c,fresh,673,240);
+ advance(continuous.c,continuous.s,180,1);
+ advance(interrupted.c,fresh,180,240);
  verify(continuous.c,continuous.s);
  verify(interrupted.c,fresh);
  assert.deepEqual(effects(fresh),effects(continuous.s),
