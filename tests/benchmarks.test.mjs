@@ -38,3 +38,13 @@ test('finite-source survival prevents early deaths on the baseline first-week se
  assert.ok(result.completed>0);
  assert.equal(result.modelCalls,0);
 });
+
+test('benchmark profiles exercise the same physical runtime and count mocked decisions',()=>{
+ const profiles=['no-llm','no-memory','no-planner','mock-model'];
+ const reports=profiles.map(profile=>runSoak(379210,0.125,profile));
+ assert.deepEqual(reports.map(report=>report.profile),profiles);
+ assert.ok(reports.every(report=>report.pass&&report.elapsedTicks===180&&report.completed>0));
+ assert.ok(reports.slice(0,3).every(report=>report.modelCalls===0));
+ assert.ok(reports[3].modelCalls>0,'The mock-model run must use its private action menu');
+ assert.notEqual(reports[0].worldHash,reports[2].worldHash);
+});

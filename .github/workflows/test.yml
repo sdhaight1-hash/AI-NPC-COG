@@ -32,8 +32,14 @@ jobs:
       - run: node --check scripts/benchmarks.mjs
       - run: node scripts/headless.mjs 10000 379210
       - run: node scripts/headless.mjs 200 379210 --auto --trace=receipt-trace.jsonl
-      - run: node scripts/benchmarks.mjs --soak-days=30
+      - run: node scripts/benchmarks.mjs --soak-days=30 > benchmark-report.json
       - run: node --test tests/*.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simulation-baseline
+          path: |
+            benchmark-report.json
+            receipt-trace.jsonl
   windows-installer:
     runs-on: windows-latest
     steps:

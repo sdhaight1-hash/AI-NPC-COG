@@ -132,3 +132,23 @@
 6. Minimal proposal/consent/transfer protocol tied to physical receipts.
 
 Each candidate requires one isolated implementation PR, tests with meaningful world predicates, replay and save compatibility. Avoid building a new general agent framework or a second physical executor.
+
+## Implementation checkpoint — comparable runtime profiles
+
+Run `node scripts/benchmarks.mjs --soak-days=1 --compare` for the same seed
+and elapsed time with four profiles. Add `--seed=<integer>` to choose a world.
+
+| Profile | Variable under test |
+| --- | --- |
+| `no-llm` | Normal headless cognition and hierarchical projects |
+| `no-memory` | Clears personal recollections and resource beliefs before decisions while retaining procedural skills and learned recipes |
+| `no-planner` | Skips new hierarchical project starts while retaining legal single actions and staged physical work |
+| `mock-model` | Uses the same no-project setup and scores the private legal menu with a deterministic test double |
+
+The last two profiles isolate the modeled action lane. Mock decisions carry
+a receipt and pass through the same validation as ordinary actions. They
+measure scheduling and authority. Model quality and hardware latency require
+a live model run. Every report identifies its seed and profile. Soak metrics
+for rejected actions, abstentions and project completions reflect the
+retained windows named in the report. CI exports the baseline report and
+receipt trace as one downloadable artifact.
