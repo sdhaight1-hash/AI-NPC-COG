@@ -126,3 +126,20 @@ test('a knowledgeable instructor does not teach a disinterested or busy resident
  learner.task={key:'rest',ref:null,commandId:'cmd_930',reservationIds:[],readyAt:s.clock+10};
  assert.equal(c.WorldRuntime.available(s,teacher).some(x=>x.key==='teach_flask'),false);
 });
+
+test('an idle, socially motivated maker autonomously chooses an eligible lesson',()=>{
+ const run=setup(),{c,s,teacher,learner}=run;
+ earnFirsthandMethod(run);
+ teacher.needs.social=86;teacher.needs.thirst=12;teacher.needs.hunger=12;
+ teacher.energy=100;teacher.bio.hydrationBudgetMl=2400;
+ learner.needs.social=80;learner.needs.curiosity=82;
+ learner.thoughtAt=s.clock+90;teacher.thoughtAt=s.clock;
+ s.auto=true;
+ c.WorldRuntime.scheduleOffline(s);
+ assert.equal(teacher.task?.key,'teach_flask',
+  'Grounded instruction should be selected before unrelated building projects');
+ assert.equal(learner.knowledge.recipes.includes('flask'),false);
+ c.Simulation.advance(s,8);
+ assert.equal(learner.knowledge.recipes.filter(x=>x==='flask').length,1);
+ assert.ok(teachReceipt(s,teacher));
+});
