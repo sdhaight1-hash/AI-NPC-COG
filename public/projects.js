@@ -329,9 +329,9 @@
   // object. Its receipt records the consumed workpiece with no learned method.
   const leaked=p.kind==='water_vessel'&&key==='craft_stage'&&
    receipt?.actorId===n.id&&receipt.status==='COMPLETED'&&
-   receipt.delta?.workpiece?.before?.recipe==='hollow_wood_trial'&&
+   ['hollow_wood_trial','flask'].includes(receipt.delta?.workpiece?.before?.recipe)&&
    receipt.delta.workpiece.after===null&&
-   !receipt.delta?.knowledge?.learnedMethods?.includes('flask');
+   !receipt.delta?.inventory?.some(item=>item.key==='flask'&&item.delta>0);
   if(leaked){
    const trial=p.nodes.find(x=>x.id==='build');
    if(trial){

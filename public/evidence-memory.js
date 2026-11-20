@@ -5,8 +5,13 @@
  const MAX_EPISODES=240,MAX_FACTS=120,MAX_SUMMARIES=36,MAX_CLAIMS=80;
  const words=s=>String(s||'').toLowerCase().match(/[a-z][a-z0-9_]{2,}/g)||[];
  const unique=s=>[...new Set(words(s))];
- const empty=()=>({sequence:0,episodes:[],facts:[],claims:[],summaries:[],methods:[],social:[],lastDay:0});
- const state=n=>n.evidenceMemory ||=empty();
+ const empty=()=>({sequence:0,episodes:[],facts:[],claims:[],summaries:[],
+  methods:[],trials:[],comparisons:[],social:[],lastDay:0});
+ const state=n=>{
+  const m=n.evidenceMemory ||=empty();
+  m.trials ||= [];m.comparisons ||= [];
+  return m;
+ };
  const clone=x=>JSON.parse(JSON.stringify(x));
  const kinds=new Set(['action','inspection','interaction','sound','personal']);
  function sourceReceipt(sim,n,receiptId){
@@ -107,6 +112,37 @@
     receiptId:receipt.id,at:sim.clock});
   }
   m.methods=m.methods.slice(-80);
+  // A completed terminal craft receipt is authoritative trial evidence;
+  // a failed attempt or a narrative statement never becomes an experiment.
+  const work=receipt.delta?.workpiece;
+  if(action==='craft_stage'&&work?.before?.recipe==='hollow_wood_trial'&&
+   work.after===null&&Number.isFinite(work.before.materialQuality)&&
+   work.before.materialQuality>=1&&work.before.materialQuality<=5&&
+   !m.trials.some(x=>x.receiptId===receipt.id)){
+   const grade=Math.round(work.before.materialQuality*1000)/1000;
+   const heldWater=receipt.delta?.knowledge?.learnedMethods?.includes('flask')===true&&
+    receipt.delta?.inventory?.some(x=>x.key==='flask'&&x.delta>0)===true;
+   const trial={method:'flask',receiptId:receipt.id,sourceEpisodeId:entry.id,
+    at:sim.clock,materialQuality:grade,heldWater};
+   m.trials.push(trial);m.trials=m.trials.slice(-80);
+   // Opposing results at two qualities support a *correlation*, not a
+   // causal claim. A single leak still leaves the mechanism uncertain.
+   if(heldWater){
+    const prior=m.trials.findLast(x=>x!==trial&&x.method==='flask'&&
+     !x.heldWater&&x.materialQuality<grade);
+    if(prior){
+     m.comparisons.push({method:'flask',certainty:'inferred',at:sim.clock,
+      failedQuality:prior.materialQuality,passedQuality:grade,
+      sourceReceiptIds:[prior.receiptId,receipt.id],
+      sourceEpisodeIds:[prior.sourceEpisodeId,entry.id]});
+     m.comparisons=m.comparisons.slice(-40);
+     root.Cognition?.record(n,'Compared tested bindings: grade '+
+      prior.materialQuality+' leaked, grade '+grade+
+      ' held water; the cause remains uncertain',sim.clock,
+      {kind:'observation',action:'flask_trial_compare',salience:4});
+    }
+   }
+  }
   if(['share_food','socialize','teach_flask'].includes(action)&&
    typeof receipt.targetId==='string'){
    m.social.push({actorId:receipt.targetId,
@@ -348,6 +384,33 @@
      sourceEpisodeId:x.sourceEpisodeId,receiptId:x.receiptId,at:x.at,
      ...(x.provenance==='instruction'&&typeof x.taughtBy==='string'&&
       x.taughtBy.length<=100?{provenance:'instruction',taughtBy:x.taughtBy}:{})}));
+   const observedTrial=(x)=>result.episodes.some(e=>e.id===x.sourceEpisodeId&&
+    e.type==='action'&&e.certainty==='observed'&&e.receiptId===x.receiptId);
+   result.trials=(Array.isArray(saved.trials)?saved.trials:[]).filter(x=>
+    x&&x.method==='flask'&&typeof x.receiptId==='string'&&
+    typeof x.sourceEpisodeId==='string'&&Number.isFinite(x.at)&&x.at<=clock&&
+    Number.isFinite(x.materialQuality)&&x.materialQuality>=1&&x.materialQuality<=5&&
+    typeof x.heldWater==='boolean'&&observedTrial(x))
+    .slice(-80).map(x=>({method:'flask',receiptId:x.receiptId,
+     sourceEpisodeId:x.sourceEpisodeId,at:x.at,
+     materialQuality:x.materialQuality,heldWater:x.heldWater}));
+   result.comparisons=(Array.isArray(saved.comparisons)?saved.comparisons:[])
+    .filter(x=>{
+     if(!x||x.method!=='flask'||x.certainty!=='inferred'||
+      !Number.isFinite(x.at)||x.at>clock||
+      !Array.isArray(x.sourceReceiptIds)||x.sourceReceiptIds.length!==2)return false;
+     const [a,b]=x.sourceReceiptIds.map(id=>
+      result.trials.find(t=>t.receiptId===id));
+     return !!a&&!!b&&!a.heldWater&&b.heldWater&&
+      a.materialQuality<b.materialQuality&&x.at>=b.at;
+    }).slice(-40).map(x=>{
+     const [a,b]=x.sourceReceiptIds.map(id=>
+      result.trials.find(t=>t.receiptId===id));
+     return {method:'flask',certainty:'inferred',at:x.at,
+      failedQuality:a.materialQuality,passedQuality:b.materialQuality,
+      sourceReceiptIds:[a.receiptId,b.receiptId],
+      sourceEpisodeIds:[a.sourceEpisodeId,b.sourceEpisodeId]};
+    });
    result.social=(Array.isArray(saved.social)?saved.social:[])
     .filter(x=>x&&typeof x.actorId==='string'&&
      ['share_food','socialize','teach_flask'].includes(x.action)&&

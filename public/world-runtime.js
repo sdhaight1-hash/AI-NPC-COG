@@ -329,9 +329,22 @@
   if(!n.plan)return;
   // The physical experiment can finish while its practical design fails.
   // Preserve that distinction in the actor's own goal memory.
-  if(reason==='Plan completed'&&n.plan.key==='craft_project'&&
-   n.project?.blockedReason==='TRIAL_LEAKED')
-   reason='Experimental seal leaked; practical goal unresolved';
+  if(reason==='Plan completed'&&n.plan.key==='craft_project'){
+   if(n.project?.blockedReason==='TRIAL_LEAKED')
+    reason='Experimental seal leaked; practical goal unresolved';
+   else if(['hollow_wood_trial','flask'].includes(n.plan.recipe)){
+    // A physically completed craft operation may produce no usable object.
+    // Read its final receipt, not the success boolean of the labor action.
+    const final=(state.receipts||[]).findLast(r=>r.actorId===n.id&&
+     r.action==='craft_stage'&&r.status==='COMPLETED'&&
+     r.clock<=state.clock&&state.clock-r.clock<=5&&
+     r.delta?.workpiece?.before?.recipe===n.plan.recipe&&
+     r.delta.workpiece.after===null);
+    if(final&&!final.delta?.inventory?.some(item=>
+     item.key==='flask'&&item.delta>0))
+     reason='Seal leaked; no usable vessel';
+   }
+  }
   const success=reason==='Plan completed';
   root.Agency.finish(n,success,state.clock);
   remember(state,n,'Plan '+n.plan.key+': '+reason,
