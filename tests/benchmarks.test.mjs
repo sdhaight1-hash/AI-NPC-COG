@@ -2,14 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runScenarios,runSoak,assertCraftConservation} from '../scripts/benchmarks.mjs';
 
-test('seven grounded scenarios satisfy authoritative postconditions',()=>{
+test('eight grounded scenarios satisfy authoritative postconditions',()=>{
  const results=runScenarios(379210);
- assert.equal(results.length,7);
+ assert.equal(results.length,8);
  const failures=results.filter(x=>!x.pass);
  assert.deepEqual(failures,[],JSON.stringify(failures,null,2));
  assert.ok(results.every(x=>x.modelCalls===0));
  assert.ok(results.some(x=>x.scenario==='twelve_operation_hatchet'));
  assert.ok(results.some(x=>x.scenario==='interrupted_shelter_resumes'));
+ const vessel=results.find(x=>x.scenario==='empty_hand_autonomous_water_vessel');
+ assert.ok(vessel?.pass);
+ assert.equal(vessel.learnedMethodReceipts,1);
+ assert.equal(vessel.finalVessels,1);
+ assert.ok(vessel.completedStages>=9);
+ for(const kind of ['fiber','stone','wood'])
+  assert.ok(vessel.sourceDebits[kind]>0,kind+' stock must be physically consumed');
 });
 
 test('fixed seed produces identical completion traces and canonical state hashes',()=>{
