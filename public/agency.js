@@ -62,7 +62,7 @@
   if(!/^person_[1-9]\d*$/.test(id)||id===n.id||(!HELP.has(action)&&action!=='competition'))return;
   const existing=n.relationships?.[id];
   const now=relationship(n,id,clock);
-  if(action==='competition'&&existing?.action===action&&clock-existing.at<60)return;
+  if(existing?.action===action&&clock-existing.at<60)return;
   n.relationships ||= {};
   n.relationships[id]={cooperation:clamp(now.cooperation+(HELP.has(action)?1:0),0,8),
    tension:clamp(now.tension+(HELP.has(action)?-1:1),0,6),at:clock,action};

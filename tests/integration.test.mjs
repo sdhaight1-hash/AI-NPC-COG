@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 
 test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => {
   const calls = [];
+  let slowPeer;
   const model = createServer(async (req, res) => {
     if (req.url === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -14,6 +16,19 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
     for await (const chunk of req) body += chunk;
     const payload = JSON.parse(body);
     calls.push({ path: req.url, payload });
+    if (slowPeer && req.url === '/v1/chat/completions') {
+      const held = slowPeer;
+      slowPeer = null;
+      const timer = setTimeout(() => res.end(JSON.stringify({
+        choices: [{ message: { content: 'Slow reply' } }]
+      })), 4000);
+      res.once('close', () => {
+        clearTimeout(timer);
+        held.closed(true);
+      });
+      held.started(true);
+      return;
+    }
     res.writeHead(200, { 'content-type': 'application/json' });
     if (req.url === '/completion') {
       return res.end(JSON.stringify({ completion_probabilities: [{ top_logprobs: [
@@ -119,6 +134,26 @@ test('sandbox speaks Rein decision and dialogue protocol over HTTP', async t => 
     })
   });
   assert.equal(invalidPeer.status,400,'An agent cannot converse with itself');
+  let started, closed;
+  const providerStarted = new Promise(resolve => { started = resolve; });
+  const providerClosed = new Promise(resolve => { closed = resolve; });
+  slowPeer = { started, closed };
+  const abort = new AbortController();
+  const pending = fetch(origin + '/api/peer-exchange', {
+    method: 'POST', signal: abort.signal, headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      speaker: { name: 'Mara', persona: 'Mara' }, listener: { name: 'Jonas', persona: 'Jonas' }
+    })
+  });
+  const aborted = assert.rejects(pending, { name: 'AbortError' });
+  const deadline = () => delay(2500, false, { ref: false });
+  const didStart = await Promise.race([providerStarted, deadline()]);
+  abort.abort();
+  await aborted;
+  assert.equal(didStart, true);
+  assert.equal(await Promise.race([providerClosed, deadline()]), true,
+    'The upstream model request must close promptly after the browser withdraws');
+  assert.equal(calls.length, 7, 'A withdrawn encounter cannot start its second turn');
 
   const physics = await fetch(origin + '/physics.js');
   assert.equal(physics.status,200);

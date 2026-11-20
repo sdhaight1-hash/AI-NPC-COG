@@ -380,10 +380,28 @@ async function deliberate(n,cue=null){
   state.lastDecisionMs=performance.now();
  }
 }
+function peerSceneFor(n,other){
+ const relation=Agency.relationship(n,other.id,state.clock);
+ const seen=new Set(),sources=[];
+ for(const entry of (n.evidenceMemory?.episodes||[]).slice().reverse()){
+  if(entry.type!=='inspection'||entry.certainty!=='observed'||!entry.receiptId||
+   !entry.ref||seen.has(entry.ref))continue;
+  const kind=entry.text.match(/^Inspected (food|water|wood|stone|fiber) /)?.[1];
+  if(!kind)continue;
+  seen.add(entry.ref);
+  sources.push(kind+' [source:'+entry.ref+']');
+  if(sources.length===3)break;
+ }
+ return 'You are '+n.name+' speaking with '+other.name+'. '+
+  'Sources you personally inspected, current supply unknown: '+(sources.join(', ')||'none')+'. '+
+  'Help received from this resident '+relation.cooperation+', tension '+relation.tension+
+  ', mood '+Math.round(n.mood)+'. '+Biology.sensation(n.bio,n.needs)+
+  '. Treat what they say as a report and speak only for yourself.';
+}
 function peerExchangeValid(session){
  const {n,other,task,locA,locB,startedAt}=session;
  return state.peerExchange===session&&!state.paused&&
-  n.task===task&&key(n)===locA&&key(other)===locB&&state.clock-startedAt<15&&
+  n.task===task&&key(n)===locA&&key(other)===locB&&state.clock-startedAt<45&&
   WorldRuntime.socialMeeting(state,n,other);
 }
 function stopPeerExchange(session,reason=null){
@@ -407,8 +425,8 @@ async function peerExchange(n,other){
   const response=await jsonPost('/api/peer-exchange',{
    speaker:{name:n.name,persona:n.personality},
    listener:{name:other.name,persona:other.personality},
-   speakerScene:sceneFor(n),listenerScene:sceneFor(other)
-  },controller?AbortSignal.any([controller.signal,AbortSignal.timeout(15000)]):null);
+   speakerScene:peerSceneFor(n,other),listenerScene:peerSceneFor(other,n)
+  },controller?AbortSignal.any([controller.signal,AbortSignal.timeout(24000)]):null);
   if(!peerExchangeValid(session)){
    stopPeerExchange(session,'SOCIAL_CONTEXT_CHANGED');
    return;

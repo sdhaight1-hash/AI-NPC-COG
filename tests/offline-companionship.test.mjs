@@ -83,6 +83,12 @@ test('an actual food transfer updates only the receiving resident and survives r
  const partner=restored.npcs.find(n=>n.id===b.id);
  assert.equal(partner.relationships[a.id].cooperation,1);
  assert.equal(partner.mood,mood+2);
+ a.inventory.food=1;
+ assert.equal(c.WorldRuntime.begin(s,a,'share_food','offline routine'),true);
+ c.Simulation.advance(s,5);
+ assert.equal(b.inventory.food,2,'Physical aid still transfers during the social cooldown');
+ assert.equal(b.relationships[a.id].cooperation,1);
+ assert.equal(b.mood,mood+2);
 });
 
 test('visible material competition creates private tension once and can cool off',()=>{

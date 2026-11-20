@@ -188,15 +188,25 @@ test('obsolete player-controlled saves are not silently imported into a differen
  assert.equal(b.state.player,undefined);
 });
 test('NPC-to-NPC dialogue is witnessed and committed only after a complete valid response',async()=>{
- const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/peer-exchange'?
-  {first:'Shall we share supplies?',second:'I will think about it.',durationMs:5}:
-  {connected:true}})});
+ let payload;
+ const b=makeBrowser({fetch:async (url,request)=>{
+  if(url==='/api/peer-exchange')payload=JSON.parse(request.body);
+  return {ok:true,json:async()=>url==='/api/peer-exchange'?
+   {first:'Shall we share supplies?',second:'I will think about it.',durationMs:5}:
+   {connected:true}};
+ }});
  const [a,c]=b.state.npcs;
  c.x=a.x;c.y=(a.y+1)%b.state.world.height;
  a.needs.social=85;c.needs.social=85;
+ a.evidenceMemory.sequence=1;
+ a.evidenceMemory.episodes.push({id:'ev_1',type:'inspection',certainty:'observed',
+  ref:'spring_private',receiptId:'evt_190',text:'Inspected water at 4,5'});
  assert.equal(b.setAction(a,'socialize','social initiative'),true);
  b.state.clock=a.task.readyAt;b.state.world.now=b.state.clock;
  await b.peerExchange(a,c);
+ assert.match(payload.speakerScene,/\[source:spring_private\]/);
+ assert.doesNotMatch(payload.listenerScene,/spring_private/);
+ assert.ok(payload.speakerScene.length<1000);
  assert.equal(a.peerLog.length,1);assert.equal(c.peerLog.length,1);
  const speakerMemory=a.evidenceMemory.episodes.find(e=>e.type==='interaction');
  const listenerMemory=c.evidenceMemory.episodes.find(e=>e.type==='interaction');
@@ -250,7 +260,7 @@ test('an expired peer exchange releases the lane before its model reply arrives'
  s.clock=a.task.readyAt;s.world.now=s.clock;
  const pending=b.peerExchange(a,c);
  assert.equal(typeof answer,'function');
- s.clock+=15;s.world.now=s.clock;
+ s.clock+=45;s.world.now=s.clock;
  c.thoughtAt=s.clock+100;
  b.scheduleIdleAgents();
  assert.equal(s.backgroundBusy,false);
