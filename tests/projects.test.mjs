@@ -29,9 +29,6 @@ test('personality changes durable long-term intentions',()=>{
  n.personality='patient and cautious';
  assert.equal(c.Projects.maybeStart(s,n).kind,'shelter');
  const other=s.npcs[1];
- // Isolate temperament: a pressing water-security need takes priority
- // over optional exploratory projects in the integrated simulation.
- other.needs.thirst=20;
  other.personality='curious and adventurous';
  assert.equal(c.Projects.maybeStart(s,other).kind,'campfire');
  assert.notEqual(n.project.kind,other.project.kind);
