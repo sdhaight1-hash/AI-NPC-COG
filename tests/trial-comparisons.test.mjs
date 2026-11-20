@@ -152,3 +152,28 @@ test('an uninformed taught maker can still leak a poor seal, without counting th
  assert.ok(final);
  assert.equal(final.delta.inventory.some(x=>x.key==='flask'&&x.delta>0),false);
 });
+
+test('partitioning the same 240 simulated minutes preserves trials, comparison and world state',()=>{
+ const fine=setup(),batched=setup();
+ for(const run of [fine,batched]){
+  furnish(run.n,run.s.clock,1);
+  assert.equal(run.c.WorldRuntime.begin(run.s,run.n,'craft_hollow_wood_trial'),true);
+ }
+ function elapse(run,minutes,step){
+  for(let elapsed=0;elapsed<minutes;elapsed+=step)
+   run.c.Simulation.advance(run.s,Math.min(step,minutes-elapsed));
+ }
+ elapse(fine,60,1);elapse(batched,60,60);
+ for(const run of [fine,batched]){
+  assert.equal(run.n.inventory.flask,0);
+  furnish(run.n,run.s.clock,2);
+  assert.equal(run.c.WorldRuntime.begin(run.s,run.n,'craft_hollow_wood_trial'),true);
+ }
+ elapse(fine,60,1);elapse(batched,60,60);
+ elapse(fine,120,1);elapse(batched,120,120);
+ assert.equal(fine.n.evidenceMemory.comparisons.length,1);
+ assert.deepEqual(copy(batched.n.evidenceMemory.comparisons),
+  copy(fine.n.evidenceMemory.comparisons));
+ assert.equal(fine.c.Simulation.canonical(fine.c.Persistence.save(fine.s)),
+  batched.c.Simulation.canonical(batched.c.Persistence.save(batched.s)));
+});
