@@ -166,7 +166,7 @@
   n.project={kind,goal:def.goal,startedAt:state.clock,status:'ACTIVE',
    nodes:def.nodes.map(x=>({id:x.id,requires:[...x.requires],
     produces:x.produces,action:x.action,status:'PENDING',
-    attempts:0,blockedBy:null})),
+    attempts:0,scouts:0,failures:0,blockedBy:null})),
    completedActions:0,blockedReason:null,nextAt:state.clock,
    history:[]};
   return n.project;
@@ -231,6 +231,9 @@
   }
   return p;
  }
+ // Only the water-vessel trial uses bounded speculative scouting. Missing
+ // physical actions back off without discarding the unfinished project.
+ const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
  function next(state,n,options=[]){
   const p=sync(state,n);
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')
@@ -257,17 +260,28 @@
    // Unknown resource locations prompt bounded physical exploration, not an
    // omniscient search query or fictitious harvest.
    const scout=options.find(o=>o.key==='explore');
-   if(scout){action='explore';option=scout;}
+   if(scout&&(p.kind!=='water_vessel'||node.scouts<4)){
+    action='explore';option=scout;
+   }
   }
   if(!option){
-   node.status='BLOCKED';node.blockedBy='LEGAL_ACTION_UNAVAILABLE:'+action;
+   if(p.kind==='water_vessel')node.failures=Math.min(100,node.failures+1);
+   node.status='BLOCKED';
+   node.blockedBy=p.kind==='water_vessel'&&node.scouts>=4&&
+    ['collect_wood','collect_stone','collect_fiber'].includes(action)?
+    'SCOUT_LIMIT:'+action:'LEGAL_ACTION_UNAVAILABLE:'+action;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
-   p.nextAt=state.clock+5;
+   p.nextAt=state.clock+(p.kind==='water_vessel'?waitMinutes(node):5);
    history(p,state.clock,'BLOCKED',node);
    return {status:'blocked',reason:p.blockedReason};
   }
   p.status='ACTIVE';p.blockedReason=null;
   node.status='RUNNING';node.blockedBy=null;node.attempts++;
+  if(p.kind==='water_vessel'){
+   if(action==='explore')node.scouts++;
+   else if(action===node.action||node.id==='build'&&action==='craft_flask')
+    node.scouts=0;
+  }
   p.nextAt=state.clock+1;
   return {status:'action',action,option,nodeId:node.id};
  }
@@ -275,14 +289,21 @@
   const p=n.project;
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')return;
   if(ok&&key!=='rest')p.completedActions++;
+  const node=p.nodes.find(x=>x.status==='RUNNING'&&
+   (x.action===key||p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
   if(!ok){
-   const node=p.nodes.find(x=>x.status==='RUNNING'&&x.action===key);
-   if(node){node.status='BLOCKED';node.blockedBy='WORLD_ACTION_FAILED:'+key;
-    history(p,state.clock,'FAILED',node);}
+   if(node){
+    if(p.kind==='water_vessel')node.failures=Math.min(100,node.failures+1);
+    node.status='BLOCKED';node.blockedBy='WORLD_ACTION_FAILED:'+key;
+    history(p,state.clock,'FAILED',node);
+   }
    p.status='BLOCKED';p.blockedReason=node?.blockedBy||'WORLD_ACTION_FAILED';
-   p.nextAt=state.clock+5;
+   p.nextAt=state.clock+(p.kind==='water_vessel'&&node?waitMinutes(node):5);
   }
-  else p.nextAt=state.clock+1;
+  else {
+   if(node&&p.kind==='water_vessel')node.failures=0;
+   p.nextAt=state.clock+1;
+  }
   sync(state,n);
  }
  function restore(state,n,old){
@@ -307,6 +328,10 @@
    if(!previous)continue;
    node.attempts=Number.isInteger(previous.attempts)?
     Math.min(100000,Math.max(0,previous.attempts)):0;
+   node.scouts=Number.isInteger(previous.scouts)?
+    Math.min(4,Math.max(0,previous.scouts)):0;
+   node.failures=Number.isInteger(previous.failures)?
+    Math.min(100,Math.max(0,previous.failures)):0;
    if(states.has(previous.status))node.status=previous.status;
    node.blockedBy=typeof previous.blockedBy==='string'?
     previous.blockedBy.slice(0,120):null;
