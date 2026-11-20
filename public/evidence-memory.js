@@ -33,7 +33,16 @@
     fact=Number.isInteger(observed.stock)?{key:'stock',value:observed.stock}:null;
    }else{
     if(receipt.action==='inspect')return null;
-    text='Completed '+String(receipt.action||'').slice(0,48);
+    const finishedTrial=receipt.action==='craft_stage'&&
+     receipt.delta?.workpiece?.before?.recipe==='hollow_wood_trial'&&
+     receipt.delta.workpiece.after===null;
+    if(finishedTrial){
+     // The source receipt proves the physical result, not the cause of it.
+     // A leak is partial evidence; it must not grant the flask method.
+     const learned=receipt.delta?.knowledge?.learnedMethods?.includes('flask');
+     text=learned?'Tested hollow wooden vessel: held water; method established':
+      'Tested hollow wooden vessel: leak observed; no usable vessel';
+    }else text='Completed '+String(receipt.action||'').slice(0,48);
     fact=null;
     ref=receipt.targetId??null;
    }

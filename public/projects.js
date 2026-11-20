@@ -318,13 +318,29 @@
   p.nextAt=state.clock+1;
   return {status:'action',action,option,nodeId:node.id};
  }
- function onOutcome(state,n,key,ok){
+ function onOutcome(state,n,key,ok,receipt=null){
   const p=n.project;
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')return;
   if(ok&&key!=='rest')p.completedActions++;
   const node=p.nodes.find(x=>x.status==='RUNNING'&&
    (x.action===key||p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
-  if(!ok){
+  // An experiment can complete physically yet fail to make a watertight
+  // object. Its receipt records the consumed workpiece with no learned method.
+  const leaked=p.kind==='water_vessel'&&key==='craft_stage'&&
+   receipt?.actorId===n.id&&receipt.status==='COMPLETED'&&
+   receipt.delta?.workpiece?.before?.recipe==='hollow_wood_trial'&&
+   receipt.delta.workpiece.after===null&&
+   !receipt.delta?.knowledge?.learnedMethods?.includes('flask');
+  if(leaked){
+   const trial=p.nodes.find(x=>x.id==='build');
+   if(trial){
+    trial.failures=Math.min(100,(trial.failures||0)+1);
+    trial.status='BLOCKED';trial.blockedBy='TRIAL_LEAKED';
+    history(p,state.clock,'LEAK_OBSERVED',trial);
+   }
+   p.status='BLOCKED';p.blockedReason='TRIAL_LEAKED';
+   p.nextAt=state.clock+60;
+  }else if(!ok){
    if(node){
     if(p.kind==='water_vessel')node.failures=Math.min(100,node.failures+1);
     node.status='BLOCKED';node.blockedBy='WORLD_ACTION_FAILED:'+key;
