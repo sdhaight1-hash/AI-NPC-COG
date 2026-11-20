@@ -299,7 +299,7 @@
  // keep guessing at a spring the actor has not actually reached.
  const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
  const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
- function next(state,n,options=[]){
+ function next(state,n,affordances=[]){
   const p=sync(state,n);
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')
    return {status:'done'};
@@ -312,6 +312,7 @@
    p.status='BLOCKED';p.blockedReason='DEPENDENCY_CYCLE_OR_MISSING_NODE';
    return {status:'blocked',reason:p.blockedReason};
   }
+  const options=typeof affordances==='function'?affordances():affordances;
   let action=node.action;
   if(p.kind==='water_vessel'&&node.id==='build'){
    if(vesselWorkpiece(n))action='craft_stage';

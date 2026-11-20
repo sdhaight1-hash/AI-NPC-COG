@@ -5,7 +5,7 @@
   const clamp = (x, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, x));
   const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water','drink_source',
-    'eat','drink','rest','share_food','socialize','teach_flask','build_fire','craft_hatchet',
+    'eat','drink','rest','share_food','give_wood','give_fiber','socialize','teach_flask','build_fire','craft_hatchet',
     'build_shelter','build_tile','design_home','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
@@ -19,14 +19,17 @@
     craft_hatchet:'crafting',build_shelter:'building',build_tile:'building',
     design_home:'building',
     build_cache:'building',inspect:'exploring',
-    socialize:'socializing',teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
+    socialize:'socializing',give_wood:'socializing',give_fiber:'socializing',
+    teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
     const island=Frontier.generate(seed);
     return {version:3,now:0,seed:island.seed,width:island.width,height:island.height,
       generator:island.generator,terrain:island.terrain,discovered:{},edits:{},zMin:Frontier.MIN_Z,zMax:Frontier.MAX_Z,
       weather:Frontier.weather(island,480),
-      nodes:island.resources,construction:root.Construction?.fresh(),
+      nodes:island.resources.map(node=>node.kind==='water'?
+       {...node,groundwater:node.max*12,rainAdmitted:0}:node),
+      construction:root.Construction?.fresh(),
       structures:[],items:[],remains:[],itemSeq:1};
   }
   // Transitional physical-load view over the existing numeric inventory.
@@ -244,6 +247,24 @@
     const recipient=nearestResident(n,residents);
     if(recipient&&n.inventory.food>0&&roomFor(recipient,'food')>0)
       add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
+    // A donation is offered only on visual evidence of unfinished physical
+    // work by a nearby builder. Do not read another actor's hidden plans aloud.
+    if(n.energy>=20&&n.needs.thirst<85&&n.needs.hunger<85){
+      const helperTarget=nearestResident(n,residents,p=>
+       p.alive!==false&&p.project?.kind==='home'&&p.energy>=18&&
+       p.needs.thirst<85&&p.needs.hunger<85&&
+       root.Perception?.canSee({world,clock:world.now},n,p)&&
+       world.construction?.blueprints.some(b=>b.actorId===p.id)&&
+       world.construction?.tiles.some(t=>t.actorId===p.id&&
+        root.Perception?.canSee({world,clock:world.now},n,t)));
+      if(helperTarget){
+        for(const kind of ['wood','fiber'])
+         if(n.inventory[kind]>0)
+          add('give_'+kind,'Offer one carried '+kind+
+           ' to support visible unfinished building by '+helperTarget.name,
+           helperTarget,helperTarget.id);
+      }
+    }
     const other=nearestResident(n,residents,p=>!p.task&&!p.plan&&
       !p.path?.length&&!p.peerPending&&!p.peerReservedFor);
     if(other && world.now-(n.lastPeerAt ?? -100000)>=90)
@@ -526,6 +547,23 @@
       n.needs.social=clamp(n.needs.social-14);
       student.needs.social=clamp(student.needs.social-10);
       message='Explained tested flask sealing steps to '+student.name;
+    }else if(task.key==='give_wood'||task.key==='give_fiber'){
+      const kind=task.key.slice(5),partner=residents.find(p=>p.id===task.ref);
+      if(!partner||partner===n||partner.alive===false||
+       partner.project?.kind!=='home'||partner.energy<18||
+       partner.needs.thirst>=85||partner.needs.hunger>=85||
+       n.needs.thirst>=85||n.needs.hunger>=85||
+       !sameLevel(n,partner)||distance(n,partner)>2||
+       !root.Perception?.canSee({world,clock:world.now},n,partner)||
+       !world.construction?.blueprints.some(b=>b.actorId===partner.id)||
+       !world.construction?.tiles.some(t=>t.actorId===partner.id&&
+        root.Perception?.canSee({world,clock:world.now},n,t))||
+       n.inventory[kind]<1||roomFor(partner,kind)<1)
+       return {ok:false,message:'BUILD_HELP_UNAVAILABLE: no witnessed active building or free material capacity'};
+      n.inventory[kind]--;partner.inventory[kind]++;
+      n.needs.social=clamp(n.needs.social-7);
+      partner.needs.social=clamp(partner.needs.social-4);
+      message='Gave one real '+kind+' to '+partner.name+' for unfinished construction';
     }else if(task.key==='share_food'||task.key==='socialize'){
       const other=residents.find(v=>v.id===task.ref);
       if(!other||distance(n,other)>2)return {ok:false,message:'The other resident moved away'};
@@ -666,17 +704,35 @@
     return null;
   }
   function regenerate(world,dt){
-    // Gradual finite regeneration, never more than a node's starting capacity.
+    // Ordinary geological deposits never grow back without a geological event.
+    // Water travels from finite subsurface storage to a surface spring, while
+    // precipitation is an explicit external influx into that storage.
     for(const node of world.nodes){
-      // Geological mineral stock is not regenerated by seasonal weather.
       if(node.kind==='stone'){node.regrow=0;continue;}
-      if(node.stock>=node.max)continue;
       const season=world.weather?.season||'Spring';
       const growth=season==='Winter'?.08:season==='Autumn'?.50:
         season==='Summer'?1.25:1;
       const precipitation=['rain','storm','snow'].includes(world.weather?.kind);
-      const rate=node.kind==='water'?.027*(precipitation?1.5:.8):
-        node.kind==='food'?.018*growth:
+      if(node.kind==='water'){
+        // Each unit represents the same 400 mL used by drinking/filling.
+        // Unsaturated catchment infiltration is deliberately simplified.
+        const capacity=node.max*16;
+        const available=Math.max(0,Math.min(capacity,node.groundwater||0));
+        const rainfall=precipitation?dt*.0405:0;
+        const received=Math.min(rainfall,capacity-available);
+        node.groundwater=available+received;
+        node.rainAdmitted=(node.rainAdmitted||0)+received;
+        if(node.stock>=node.max||node.groundwater<1)continue;
+        node.regrow=(node.regrow||0)+dt*.027*(precipitation?1.5:.8);
+        while(node.regrow>=1&&node.stock<node.max&&node.groundwater>=1){
+          node.groundwater--;node.stock++;node.regrow--;
+        }
+        // A dry aquifer cannot bank unlimited unearned future discharge.
+        if(node.groundwater<1)node.regrow=Math.min(node.regrow,.999999);
+        continue;
+      }
+      if(node.stock>=node.max)continue;
+      const rate=node.kind==='food'?.018*growth:
         node.kind==='fiber'?.012*growth:.008;
       node.regrow=(node.regrow||0)+dt*rate;
       while(node.regrow>=1&&node.stock<node.max){node.stock++;node.regrow--;}
@@ -744,6 +800,14 @@
         // A checkpoint must not discard partially accumulated resource growth.
         node.regrow=node.kind!=='stone'&&Number.isFinite(old.regrow)&&
           old.regrow>=0&&old.regrow<1?old.regrow:0;
+        if(node.kind==='water'){
+          // Pre-budget v3 saves have no groundwater account. Migrate them
+          // once to the seeded finite aquifer; do not regenerate it on restore.
+          if(Number.isFinite(old.groundwater)&&old.groundwater>=0&&
+             old.groundwater<=node.max*16)node.groundwater=old.groundwater;
+          if(Number.isFinite(old.rainAdmitted)&&old.rainAdmitted>=0&&
+             old.rainAdmitted<=1e12)node.rainAdmitted=old.rainAdmitted;
+        }
       }
     }
     root.Construction?.restore(target,saved.construction,receipts);

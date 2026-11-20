@@ -13,7 +13,8 @@
   collect_fiber:'craft',craft_stage:'craft',build_fire:'craft',
   build_shelter:'craft',build_cache:'craft',craft_hatchet:'craft',
   explore:'curiosity',inspect:'curiosity',socialize:'social',
-  share_food:'social',teach_flask:'social',design_home:'security',
+  share_food:'social',give_wood:'social',give_fiber:'social',
+  teach_flask:'social',design_home:'security',
   build_tile:'craft',none:'idle'
  };
  const category=k=>CATEGORIES[k]||(k.startsWith('craft_')||k.startsWith('experiment_')

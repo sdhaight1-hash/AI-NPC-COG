@@ -225,3 +225,20 @@ test('a contested spring reservation backs off refill without creating water',()
  assert.equal(n.inventory.water,2);
  assert.equal(peer.inventory.water,0);
 });
+
+test('a deferred project requests affordances only when its retry comes due',()=>{
+ const {c,s,n,p}=setup();
+ let searches=0;
+ const affordances=()=>{searches++;return [];};
+ assert.equal(c.Projects.next(s,n,affordances).status,'blocked');
+ assert.equal(searches,1);
+ const retry=p.nextAt;
+ for(let minute=s.clock+1;minute<retry;minute++){
+  s.clock=minute;
+  assert.equal(c.Projects.next(s,n,affordances).status,'deferred');
+ }
+ assert.equal(searches,1,'A blocked project does not repeat the visibility and pathfinding query');
+ s.clock=retry;
+ assert.equal(c.Projects.next(s,n,affordances).status,'blocked');
+ assert.equal(searches,2);
+});
