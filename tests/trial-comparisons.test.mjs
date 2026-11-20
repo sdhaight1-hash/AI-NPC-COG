@@ -13,6 +13,10 @@ function setup(){
  const s=c.Simulation.initial(379210);s.auto=false;
  const n=s.npcs[0],peer=s.npcs[1];s.npcs=[n,peer];
  n.energy=100;
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=3&&
+  c.Frontier.traversable(s.world,x.x,x.y,x.z||0));
+ assert.ok(spring);
+ n.x=spring.x;n.y=spring.y;n.z=spring.z||0;n.path=[];
  n.inventory.blade=1;
  n.craftedItems.push({kind:'blade',quality:2,maker:n.id,
   craftedAt:s.clock,method:'blade',materialQuality:2});
