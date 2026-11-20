@@ -25,6 +25,16 @@
   wood: [['#785137','M2 12 15 6 22 10 21 17 8 22 3 18Z'],['#b98e60','M2 12 15 6 22 10 8 16Z'],['#d6ad79','M8 16 14 13 16 18 8 22Z']],
   gear: [['#bb9b6b','M9 2H15V6L18 7 21 6 23 11 20 13V16L21 18 17 22 14 19H10L7 22 3 18 4 15V13L1 11 3 6 6 7 9 6Z'],['#485754','M12 8A4 4 0 1 1 12 16A4 4 0 1 1 12 8Z']],
   tool: [['#926545','M4 20 7 22 18 9 15 7Z'],['#a2aaab','M9 5 15 2 22 6 18 12 13 10Z']],
+  hollowVessel: [
+   ['#754831','M3 9 8 5H17L21 9 19 18 15 21H9L5 18Z'],
+   ['#cc9a67','M3 9 8 5H17L21 9 17 13H7Z'],
+   ['#55382c','M6 9 9 7H16L18 9 16 11H8Z']
+  ],
+  boundVessel: [
+   ['#754831','M4 11 7 6H17L20 11 18 19 15 21H9L6 19Z'],
+   ['#bf8b55','M4 11 7 6H17L20 11 17 13H7Z'],
+   ['#e2c896','M7 7H9L17 18 16 20H15Z M16 7H18L9 20H7Z']
+  ],
   flask: [['#886144','M9 3H15V7L19 11V20L16 22H8L5 20V11L9 7Z'],['#dbad79','M9 3H15V6H9Z'],['#79afb0','M7 13Q12 15 17 12V19H7Z']],
   spring: [['#3f6369','M2 13Q7 6 15 8Q22 8 23 15Q20 21 11 21Q4 21 2 13Z'],['#81bfbf','M5 13Q12 8 20 13Q19 17 13 18Q7 18 5 13Z'],['#c5dad1','M9 13Q14 11 17 13Q12 15 9 13Z']],
   campfire: [['#5e4a3d','M3 19 7 16 21 20 19 23ZM4 21 16 16 21 17 9 23Z'],['#e4a05f','M8 18Q6 13 13 4Q12 10 16 11Q21 16 15 20Z'],['#efd18a','M10 18Q9 15 13 12Q16 16 14 19Z']],
@@ -108,5 +118,13 @@
    stamp(ctx, special[site.type] || 'tower', (site.x - .2) * tile, (site.y - .2) * tile, tile * 1.4);
   }
  }
- root.ContentArt = {available, icon, drawWorld, drawObjects};
+ function drawVesselWorkpiece(ctx, workpiece, x, y, tile) {
+  const recipe = workpiece?.recipe;
+  if (recipe !== 'hollow_wood_trial' && recipe !== 'flask') return;
+  const stage = workpiece.stage;
+  const shape = stage === 2 ? 'boundVessel' :
+   stage === 1 && recipe === 'flask' ? 'hollowVessel' : 'wood';
+  stamp(ctx, shape, x + tile * .67, y + tile * .41, tile * .58);
+ }
+ root.ContentArt = {available, icon, drawWorld, drawObjects, drawVesselWorkpiece};
 })(globalThis);

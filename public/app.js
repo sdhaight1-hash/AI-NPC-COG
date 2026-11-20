@@ -465,8 +465,10 @@ function drawWorld(){
   for(const n of state.npcs.filter(v=>(v.z||0)===state.viewZ)
    .sort((a,b)=>position(a).y-position(b).y)){
    const p=position(n);
-   VillageArt.drawActor(ctx,n,false,{x:wrapX(p.x),y:wrapY(p.y)},
-    state.selected===n.id,performance.now());
+   const actorPosition={x:wrapX(p.x),y:wrapY(p.y)};
+   VillageArt.drawActor(ctx,n,false,actorPosition,state.selected===n.id,performance.now());
+   if(useVectorArt())ContentArt.drawVesselWorkpiece(ctx,n.workpiece,
+    actorPosition.x*TILE,actorPosition.y*TILE,TILE);
   }
   if(state.viewZ===0)VillageArt.drawAmbient(ctx,state.world,state.clock,performance.now());
   if(state.debugGrid){
@@ -559,9 +561,14 @@ function updateInspector(){
    (r.reason?' ('+r.reason+')':'')+
    (impacts.length||stocks.length?' ['+[...impacts,...stocks].join(', ')+']':'');
  }).join('\n')||'No completed physical effects yet';
- $('npcCrafting').textContent=n.workpiece?
-  Crafting.RECIPES[n.workpiece.recipe].name+' · '+(n.workpiece.stage+1)+'/'+
-  Crafting.RECIPES[n.workpiece.recipe].stages.length:'No workpiece';
+ const workpiece=n.workpiece,recipe=Crafting.RECIPES[workpiece?.recipe];
+ const stage=recipe?.stages[workpiece.stage];
+ const trial=n.evidenceMemory?.trials?.at(-1);
+ const trialNote=trial?' · Last trial '+(trial.heldWater?'held water':'leaked')+
+  ' with binding grade '+trial.materialQuality+'/5':'';
+ $('npcCrafting').textContent=(stage?
+  recipe.name+' · '+(workpiece.stage+1)+'/'+recipe.stages.length+' · '+stage.name:
+  'No workpiece')+trialNote;
  $('npcGoods').textContent=(n.craftedItems||[]).slice(-5).map(p=>
   p.kind+' ★'+p.quality).join(', ')||'None';
  $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source==='hivemind'?'Hivemind':n.source||'Simulation';
