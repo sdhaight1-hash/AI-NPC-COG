@@ -96,3 +96,76 @@ test('empty-hand project acquires finite inputs, makes tools, then tests a vesse
  assert.equal(s.receipts.filter(x=>x.action==='craft_flask'&&x.status==='COMPLETED').length,0,
   'The novice could not manufacture from a method it did not yet know');
 });
+
+test('after making a vessel the same resident actually collects and drinks finite water',()=>{
+ const {c,s,n,sources}=setup();
+ c.Projects.create(s,n,'water_vessel');
+ for(let i=0;i<700&&n.project.status!=='COMPLETED';i++)c.Simulation.advance(s,1);
+ assert.equal(n.project.status,'COMPLETED','First complete a physical empty vessel');
+ // A multi-stage craft finishes its internal craft_project subplan on the
+ // following simulation tick; the resident must not start another project
+ // while that live subplan is still being committed.
+ for(let i=0;i<6&&n.plan;i++)c.Simulation.advance(s,1);
+ assert.equal(n.plan,null);
+ const spring=sources.find(x=>x.kind==='water'),stock=spring.stock;
+ const project=c.Projects.maybeStart(s,n);
+ assert.equal(project?.kind,'water_supply',
+  'Water transport is unfinished until there is actual water inside the container');
+ for(let i=0;i<160&&n.project.status!=='COMPLETED';i++)c.Simulation.advance(s,1);
+ assert.equal(n.project.status,'COMPLETED',n.project.blockedReason||'Water supply did not complete');
+ assert.equal(n.inventory.flask,1);
+ assert.equal(n.inventory.water,2);
+ const carried=n.craftedItems.filter(x=>x.kind==='flask');
+ assert.equal(carried.length,1);
+ assert.equal(carried[0].waterUnits,2);
+ const fill=s.receipts.filter(x=>x.action==='fill_water'&&x.status==='COMPLETED');
+ assert.equal(fill.length,1,'A single finite fill earns one physical receipt');
+ const delta=fill[0].delta.nodeStock.find(x=>x.key===spring.id);
+ assert.equal(delta.delta,-2);
+ assert.equal(spring.stock,stock-2);
+ // Drinking away from the spring consumes carried water, not a second source unit.
+ s.world.nodes=sources.filter(x=>x.kind!=='water');
+ n.needs.thirst=80;
+ const before=n.bio.hydrationBudgetMl;
+ assert.equal(c.WorldRuntime.begin(s,n,'drink'),true);
+ c.Simulation.advance(s,1);
+ assert.equal(n.inventory.water,1);
+ assert.equal(carried[0].waterUnits,1);
+ assert.ok(n.bio.hydrationBudgetMl>before);
+ assert.equal(s.receipts.filter(x=>x.action==='drink'&&x.status==='COMPLETED').length,1);
+});
+
+test('an empty flask without a personally known source does not unlock a water-supply plan',()=>{
+ const {c,s,n}=setup();
+ const spring=s.world.nodes.find(x=>x.kind==='water');
+ spring.x=c.Frontier.wrap(n.x+24,s.world.width);
+ n.inventory.flask=1;
+ n.craftedItems.push({kind:'flask',quality:2,maker:n.id,craftedAt:s.clock,
+  method:'hollow_wood_trial',materialQuality:2,vesselId:'vessel_903',waterUnits:0});
+ assert.equal(c.Perception.snapshot(s,n).objects.some(o=>o.kind==='water'),false);
+ assert.notEqual(c.Projects.maybeStart(s,n)?.kind,'water_supply',
+  'Having a tool cannot reveal the location of an invisible source');
+});
+
+test('two residents cannot reserve the same last two spring units for water',()=>{
+ const {c,s,n,sources}=setup();
+ const peer=c.Civilization.person(s.world,2,s.clock,{x:n.x,y:n.y,z:0});
+ // Keep actors co-located for the custody conflict; no movement is needed.
+ const spring=sources.find(x=>x.kind==='water');
+ spring.stock=2;spring.max=2;spring.regrow=0;
+ const flask=actor=>{actor.inventory.flask=1;actor.craftedItems.push({
+  kind:'flask',quality:2,maker:actor.id,craftedAt:s.clock,method:'hollow_wood_trial',
+  materialQuality:2,vesselId:actor===n?'vessel_904':'vessel_905',waterUnits:0});};
+ flask(n);flask(peer);s.npcs=[n,peer];peer.energy=100;
+ assert.equal(c.WorldRuntime.begin(s,n,'fill_water'),true);
+ const active=c.Reservations.active(s).filter(x=>x.commandId===n.task.commandId);
+ assert.equal(active.reduce((sum,x)=>sum+x.quantity,0),2);
+ assert.equal(c.WorldRuntime.begin(s,peer,'fill_water'),false,
+  'Conflicting resident must not hold a duplicated physical claim');
+ assert.equal(spring.stock,2);
+ c.Simulation.advance(s,1);
+ assert.equal(spring.stock,0);
+ assert.equal(n.inventory.water,2);
+ assert.equal(peer.inventory.water,0);
+ assert.equal(peer.craftedItems[0].waterUnits,0);
+});
