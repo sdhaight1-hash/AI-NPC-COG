@@ -521,6 +521,9 @@
     }
     for(const item of world.items||[]){
       const x=item.x*16,y=item.y*16;
+      if(item.kind==='flask'&&(item.z||0)===0){
+        drawGroundFlask(ctx,item);continue;
+      }
       if(item.kind!=='wood')continue;
       rect(ctx,'#2b3028',x+3,y+11,11,4);
       rect(ctx,'#ab8456',x+3,y+8,10,5);
@@ -597,5 +600,11 @@
       }
     }
   }
-  root.VillageArt={ TILE, drawWorld, drawWorldObjects, drawAmbient, drawActor:actor, hash, setAtlas };
+  function drawGroundFlask(ctx,item){
+    const x=item.x*TILE,y=item.y*TILE;
+    rect(ctx,'#3e3029',x+5,y+5,7,9);
+    rect(ctx,'#ba9463',x+6,y+7,5,6);
+    rect(ctx,'#dfbc84',x+7,y+5,3,2);
+  }
+  root.VillageArt={ TILE,drawGroundFlask, drawWorld, drawWorldObjects, drawAmbient, drawActor:actor, hash, setAtlas };
 })(globalThis);

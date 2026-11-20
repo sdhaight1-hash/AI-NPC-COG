@@ -203,3 +203,17 @@ The validator checks identity, bounds, item counts, pantry species, crafted
 provenance fields and unfinished stage. Older saves without remains load
 with an empty layer. The restore has no recovery action that can move
 checkpoint contents to a living actor.
+
+## Implementation checkpoint — per-vessel water custody (#90)
+
+Each crafted flask receives a stable vessel ID and space for two 400 mL
+units. A timed fill targets one available flask. A timed drink consumes
+one held unit. The displayed water count projects flask contents and a
+separate historical loose-water balance. V3 migration gives older flasks
+deterministic IDs and apportions preexisting counts into their capacity
+before retaining any remaining legacy water.
+
+A timed drop or pickup moves the flask, its quality, its maker, and its
+contents together. Pickup checks loaded mass and volume. Restore rejects
+duplicate instance IDs across grounded, deceased, and living custody.
+General item lots and recovery from remains continue under #26.

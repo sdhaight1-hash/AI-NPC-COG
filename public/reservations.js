@@ -34,13 +34,13 @@
   const npc=(kind,quantity)=>({type:'npc',id:n.id,kind,quantity});
   const node=(kind,quantity)=>({type:'node',id:ref,kind,quantity});
   const site=(kind,quantity)=>({type:'structure',id:ref,kind,quantity});
-  const matched=/^collect_(wood|stone|fiber)$/.exec(action);
+  const harvestKind=root.AgentWorld?.HARVEST_KINDS?.[action];
   if(action==='drink_source'){
    const spring=state.world.nodes.find(x=>x.id===ref&&x.kind==='water');
    return spring?.stock>0?[node('water',1)]:[];
   }
-  if(matched||action==='forage'||action==='fill_water'){
-   const kind=matched?.[1]|| (action==='forage'?'food':'water');
+  if(harvestKind){
+   const kind=harvestKind;
    const target=state.world.nodes.find(x=>x.id===ref&&x.kind===kind);
    if(!target)return [];
    const skills=n.skills?.gathering||0;
@@ -66,7 +66,7 @@
   if(action==='drink')return [npc('water',1)];
   if(action==='place_crate')return [npc('crate',1)];
   if(action==='store_wood')return [npc('wood',1)];
-  const drop=/^drop_(wood|stone|fiber)$/.exec(action);
+  const drop=/^drop_(wood|stone|fiber|flask)$/.exec(action);
   if(drop)return [npc(drop[1],1)];
   const stash=/^stash_(wood|stone|fiber)$/.exec(action);
   if(stash)return [npc(stash[1],1)];
@@ -74,8 +74,7 @@
   if(withdraw)return [site(withdraw[1],1)];
   if(action==='retrieve_wood')return [site('wood',1)];
   if(action==='pickup_item'){
-   const item=state.world.items.find(x=>x.id===ref&&
-    ['wood','stone','fiber'].includes(x.kind));
+   const item=state.world.items.find(x=>x.id===ref&&root.AgentWorld.GROUND_KINDS.includes(x.kind));
    return item?[{type:'item',id:ref,kind:item.kind,quantity:1}]:[];
   }
   return [];

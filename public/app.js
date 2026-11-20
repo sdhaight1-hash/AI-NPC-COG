@@ -435,6 +435,9 @@ function drawWorld(){
    VillageArt.drawWorldObjects(ctx,state.world,{
     left:-1,top:-1,right:W+1,bottom:H+1});
   }
+  if(state.viewZ!==0)for(const item of state.world.items){
+   if(item.kind==='flask'&&item.z===state.viewZ)VillageArt.drawGroundFlask(ctx,item);
+  }
   for(const remains of state.world.remains){
    if(remains.z!==state.viewZ)continue;
    const rx=remains.x*TILE,ry=remains.y*TILE;
@@ -566,7 +569,8 @@ function renderObjectInspector(){
  const object=AgentWorld.objectById(state.world,state.selectedObject);
  const info=AgentWorld.describeObject(state.world,object);
  $('objectName').textContent=info?.name||'Select a resource or object on the map';
- $('objectDetail').textContent=info?info.description:
+ $('objectDetail').textContent=info?info.description+
+  (object.kind==='flask'?' · '+(object.vessel.waterUnits*400)+' mL water':''):
   'Click a tree, berry shrub, spring, stone outcrop, item or constructed object.';
  $('objectLocation').textContent=info?
   'Position '+info.x+', '+info.y+' · Physical state persists':'No object selected';
@@ -695,9 +699,10 @@ function setZ(n){state.viewZ=clamp(n,Frontier.MIN_Z,Frontier.MAX_Z);
 canvas.addEventListener('click',event=>{
  const tile=clientToTile(event.clientX,event.clientY,canvas.getBoundingClientRect());
  const remains=state.world.remains.find(o=>o.z===tile.z&&o.x===tile.x&&o.y===tile.y);
- const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=(remains?0:1));
+ const item=state.world.items.find(o=>(o.z||0)===tile.z&&o.x===tile.x&&o.y===tile.y);
+ const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=((remains||item)?0:1));
  if(n){state.selectedObject=null;selectNpc(n.id);renderObjectInspector();return;}
- const object=remains||(tile.z===0?[...state.world.items,...state.world.nodes,
+ const object=remains||item||(tile.z===0?[...state.world.nodes,
   ...state.world.structures].find(o=>o.x===tile.x&&o.y===tile.y):null);
  state.selectedObject=object?.id||null;renderObjectInspector();
  if(!object){state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
