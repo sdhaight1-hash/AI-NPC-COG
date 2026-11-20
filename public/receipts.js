@@ -25,6 +25,7 @@
    learnedRecipes:[...(n.knowledge?.recipes||[])],visitedCount:n.visited?.length||0,
    others:Object.fromEntries(state.npcs.filter(a=>a!==n).map(a=>[a.id,{
     inventory:{...a.inventory},needs:{...a.needs},
+    learnedRecipes:[...(a.knowledge?.recipes||[])],
     foodPantry:a.bio?.pantry?.length||0,lastPeerAt:a.lastPeerAt??null
    }])),
    workpiece:plain(n.workpiece),craftedItems:plain(n.craftedItems||[])
@@ -59,8 +60,11 @@
    const inventory=nums(a.inventory,b.inventory),needs=nums(a.needs,b.needs);
    const personal=nums({foodPantry:a.foodPantry,lastPeerAt:a.lastPeerAt||0},
     {foodPantry:b.foodPantry,lastPeerAt:b.lastPeerAt||0});
-   if(inventory.length||needs.length||personal.length)
-    (delta.otherActors ||= []).push({actorId:id,inventory,needs,personal});
+   const learnedMethods=(b.learnedRecipes||[])
+    .filter(method=>!(a.learnedRecipes||[]).includes(method));
+   if(inventory.length||needs.length||personal.length||learnedMethods.length)
+    (delta.otherActors ||= []).push({actorId:id,inventory,needs,personal,
+     ...(learnedMethods.length?{knowledge:{learnedMethods}}:{})});
   }
   const knowledge={
    observations:after.observedCount-before.observedCount,
