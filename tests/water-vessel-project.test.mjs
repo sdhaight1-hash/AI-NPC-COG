@@ -102,6 +102,11 @@ test('after making a vessel the same resident actually collects and drinks finit
  c.Projects.create(s,n,'water_vessel');
  for(let i=0;i<700&&n.project.status!=='COMPLETED';i++)c.Simulation.advance(s,1);
  assert.equal(n.project.status,'COMPLETED','First complete a physical empty vessel');
+ // A multi-stage craft finishes its internal craft_project subplan on the
+ // following simulation tick; the resident must not start another project
+ // while that live subplan is still being committed.
+ for(let i=0;i<6&&n.plan;i++)c.Simulation.advance(s,1);
+ assert.equal(n.plan,null);
  const spring=sources.find(x=>x.kind==='water'),stock=spring.stock;
  const project=c.Projects.maybeStart(s,n);
  assert.equal(project?.kind,'water_supply',
