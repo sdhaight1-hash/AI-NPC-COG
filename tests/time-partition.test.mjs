@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -123,4 +124,57 @@ test('v3 world identity migration preserves edits, harvest, structures and actor
   assert.equal(k.Persistence.restore(fresh,bad),false);
   assert.equal(k.Simulation.canonical(fresh),before);
  }
+});
+
+test('initial and restored clocks and weather agree before the next step',()=>{
+ const k=kernels(),s=k.Simulation.initial(379210);
+ assert.equal(s.world.now,s.clock);
+ assert.deepEqual(clone(s.world.weather),clone(k.Frontier.weather(s.world,s.clock)));
+ s.clock=81*1440+65;s.day=k.Frontier.calendar(s.clock).totalDay;
+ s.world.now=s.clock;s.world.weather=k.Frontier.weather(s.world,s.clock);
+ const packet=clone(k.Persistence.save(s));
+ // Weather and the derived day come from the validated clock and seed.
+ packet.world.now=100;packet.world.weather={kind:'invalid'};
+ const resumed=k.Simulation.initial(379210);
+ assert.equal(k.Persistence.restore(resumed,packet),true);
+ assert.equal(resumed.clock,s.clock);
+ assert.equal(resumed.day,s.day);
+ assert.equal(resumed.world.now,s.clock);
+ assert.deepEqual(clone(resumed.world.weather),clone(s.world.weather));
+});
+
+test('month crossing keeps arrival, mortality, work, and save/replay ordering',()=>{
+ const k=kernels();
+ function start(){
+  const s=k.Simulation.initial(379210);s.auto=false;
+  s.clock=k.Frontier.DAYS_PER_MONTH*1440-1;s.world.now=s.clock;
+  s.day=k.Frontier.calendar(s.clock).totalDay;
+  s.world.weather=k.Frontier.weather(s.world,s.clock);
+  const [dying,working]=s.npcs;
+  dying.health=.01;dying.needs.thirst=100;dying.bio.hydrationBudgetMl=0;
+  const source=s.world.nodes.find(n=>n.kind==='water'&&n.stock>3);
+  working.x=source.x;working.y=source.y;
+  working.needs.thirst=80;working.bio.hydrationBudgetMl=300;
+  assert.equal(k.WorldRuntime.begin(s,working,'drink_source'),true);
+  return s;
+ }
+ const ones=start(),tens=start(),whole=start(),split=start();
+ for(let i=0;i<360;i++)k.Simulation.advance(ones,1);
+ for(let i=0;i<36;i++)k.Simulation.advance(tens,10);
+ k.Simulation.advance(whole,360);
+ k.Simulation.advance(split,180);
+ const resumed=k.Simulation.initial(379210);resumed.auto=false;
+ assert.equal(k.Persistence.restore(resumed,clone(k.Persistence.save(split))),true);
+ k.Simulation.advance(resumed,180);
+ const canonical=s=>createHash('sha256').update(k.Simulation.canonical(k.Persistence.save(s))).digest('hex');
+ assert.equal(canonical(tens),canonical(ones));
+ assert.equal(canonical(whole),canonical(ones));
+ assert.equal(canonical(resumed),canonical(ones));
+ assert.equal(ones.dead.length,1);
+ assert.equal(ones.dead[0].id,'person_1');
+ assert.equal(ones.dead[0].deathAt,k.Frontier.DAYS_PER_MONTH*1440);
+ assert.equal(ones.npcs.find(n=>n.id==='person_6').spawnAt,ones.dead[0].deathAt);
+ const drinks=ones.receipts.filter(r=>r.actorId==='person_2'&&r.action==='drink_source'&&r.status==='COMPLETED');
+ assert.equal(drinks.length,1);
+ assert.equal(drinks[0].clock,ones.dead[0].deathAt);
 });

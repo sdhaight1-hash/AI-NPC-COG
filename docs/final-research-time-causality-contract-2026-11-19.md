@@ -91,3 +91,21 @@ advance(state, requestedMinutes):
 - **Added test:** `tests/time-partition.test.mjs` compares full simulation state and work events for a 720-minute call versus 720 one-minute calls, due physical work, monthly arrival and fractional 0.02-minute ticks; rejects unbounded catch-up. Existing tests that relied on the old one-action-per-call artifact were updated to check physically committed work rather than the last log line.
 - **Scope intentionally deferred:** exact equivalence between arbitrary fractional partitions and refined mid-minute weather/event boundaries; those are not claimed by this patch. Current weather still changes based on the end-of-slice timestamp, and no new system-wide event queue is introduced.
 - **Validation:** GitHub PR [#76](https://github.com/sdhaight1-hash/AI-NPC-COG/pull/76) is the source of truth for actual test/merge status; this document by itself does not claim CI completion or hardware benchmarking.
+
+## Implementation checkpoint — restore at an event boundary
+
+The initial world clock now agrees with the runtime clock before the first
+action. Restoring v3 derives the calendar day and weather from the validated
+seed and absolute clock before applying a saved transition. A regression
+places an arrival, death, and completed freshwater action at the same month
+boundary. It compares 360 one-minute slices, 36 ten-minute calls, one
+360-minute call and a midpoint save/reload.
+
+Canonical equivalence applies to schedules that use the same one-minute
+slice boundaries. Calls containing different fractional boundaries may
+sample movement, weather and checks at different points within a minute.
+This distinction matters when comparing browser playback speeds.
+
+The boundary fixture exposed a stale observer selection after headless
+mortality. The save codec now normalizes observer selection against living
+residents so a restore and an uninterrupted run encode the same state.
