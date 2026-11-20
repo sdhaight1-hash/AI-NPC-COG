@@ -101,3 +101,18 @@ test('a stale firsthand sighting prompts a physical check but cannot create wate
  assert.ok(c.WorldRuntime.available(s,n).some(o=>o.key==='fill_water'),
   'Later replenishment can justify rechecking an old freshwater source');
 });
+
+test('restoring an active project does not manufacture a fresh visual sighting',()=>{
+ const {c,s,n}=setup();
+ c.Projects.create(s,n,'water_vessel');
+ const first=copy(n.knowledge.sightings);
+ assert.equal(first.length,1);
+ s.clock+=30;s.world.now=s.clock;
+ const checkpoint=copy(c.Persistence.save(s));
+ const restored=c.Simulation.initial(379210);restored.auto=false;
+ assert.equal(c.Persistence.restore(restored,checkpoint),true);
+ const actor=restored.npcs.find(x=>x.id===n.id);
+ assert.equal(actor.project.kind,'water_vessel');
+ assert.deepEqual(copy(actor.knowledge.sightings),first,
+  'A load must preserve when the source was witnessed, not stamp it again');
+});
