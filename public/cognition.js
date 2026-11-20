@@ -75,7 +75,7 @@
    const water=choose(n.inventory.water>0?'drink':'drink_source',
     'drink_source','fill_water','drink');
    if(water)return water;
-   if(n.energy>=18)return choose('explore'); // physically scout for unknown water
+   if(n.energy>=18&&keys.has('explore'))return 'explore';
   }
   if(n.inventory.water<2&&hydration<1600){
    const reserve=choose('fill_water');
@@ -86,7 +86,8 @@
    if(food)return food;
    // If all arms are occupied, put down raw burden rather than starving
    // despite having a nearby physical food source.
-   return choose('drop_fiber','drop_stone','drop_wood');
+   const drop=choose('drop_fiber','drop_stone','drop_wood');
+   if(drop)return drop;
   }
   if(n.energy<=18)return choose('rest');
   return null;

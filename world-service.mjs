@@ -111,7 +111,8 @@ export function openWorld(directory, { seed = Frontier.DEFAULT_SEED, importFile 
   }
 
   function advance(minutes) {
-    if (state.paused || simulationError) return;
+    // Hold the unsaved state steady until the checkpoint timer can retry.
+    if (state.paused || simulationError || saveError) return;
     try {
       Simulation.advance(state, minutes, {
         onArrival: n => WorldRuntime.log(state, n.name + ' arrived in the wilderness.', 'social'),
@@ -146,7 +147,7 @@ export function openWorld(directory, { seed = Frontier.DEFAULT_SEED, importFile 
     tick: () => advance(speed / 1200), // 50 ms, in simulated minutes.
     view: () => ({
       snapshot: Persistence.save(state), day: state.day,
-      paused: state.paused, auto: state.auto, speed,
+      paused: state.paused || Boolean(saveError), auto: state.auto, speed,
       warning: simulationError || saveError || recoveryNotice
     })
   };

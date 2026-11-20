@@ -102,6 +102,42 @@ test('a stale firsthand sighting prompts a physical check but cannot create wate
   'Later replenishment can justify rechecking an old freshwater source');
 });
 
+test('walking past a spring gives an exhausted resident a private route back to drink',()=>{
+ const {c,s,n,spring}=setup();
+ const point=c.Frontier.neighbors(s.world,spring)[0];
+ assert.ok(point);
+ n.path=[point];
+ c.WorldRuntime.move(s,n,1);
+ assert.equal(n.knowledge.sightings?.[0]?.id,spring.id);
+ assert.equal(Object.hasOwn(n.knowledge.sightings[0],'stock'),false);
+ moveOutsideVision(c,s,n,spring);
+ n.energy=1;n.needs.thirst=95;n.bio.hydrationBudgetMl=150;
+ assert.equal(n.inventory.flask,0);
+ const option=c.WorldRuntime.available(s,n).find(o=>o.key==='drink_source');
+ assert.equal(option?.ref,spring.id);
+ assert.match(option.when,/current supply unknown/);
+ assert.equal(c.WorldRuntime.survival(s,n),true);
+ assert.equal(n.task?.key,'drink_source');
+ const before=spring.stock;
+ for(let i=0;i<30&&!s.receipts.some(r=>r.action==='drink_source'&&r.status==='COMPLETED');i++)
+  c.Simulation.advance(s,1);
+ assert.ok(s.receipts.some(r=>r.action==='drink_source'&&r.status==='COMPLETED'&&
+  r.delta.nodeStock.some(x=>x.key===spring.id&&x.delta===-1)));
+ assert.ok(spring.stock<before);
+ assert.equal(n.inventory.water,0);
+});
+
+test('critical rest is accepted once while the resident has no food or water options',()=>{
+ const {c,s,n}=setup();
+ s.world.nodes=[];
+ n.energy=1;n.needs.thirst=100;n.needs.hunger=100;n.bio.hydrationBudgetMl=0;
+ assert.equal(c.WorldRuntime.survival(s,n),true);
+ assert.equal(n.action,'rest');
+ const before=s.commandSeq;
+ for(let i=0;i<5;i++)assert.equal(c.WorldRuntime.survival(s,n),false);
+ assert.equal(s.commandSeq,before);
+});
+
 test('restoring an active project does not manufacture a fresh visual sighting',()=>{
  const {c,s,n}=setup();
  c.Projects.create(s,n,'water_vessel');

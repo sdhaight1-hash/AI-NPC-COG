@@ -131,8 +131,11 @@
   // Sight alone can locate a landmark without teaching its live stock.
   // Offer the same physical return trip even if the last seen spring has
   // since run dry; the authoritative harvest then provides the correction.
-  if(!scoped.some(o=>o.key==='fill_water')&&n.energy>=12&&
-   root.AgentWorld.vesselRoom(n)>0&&root.AgentWorld.roomFor(n,'water')>0){
+  const needDrink=n.needs.thirst>=10||n.bio?.hydrationBudgetMl<2400;
+  const missingDrink=needDrink&&!scoped.some(o=>o.key==='drink_source');
+  const missingFill=n.energy>=12&&root.AgentWorld.vesselRoom(n)>0&&
+   root.AgentWorld.roomFor(n,'water')>0&&!scoped.some(o=>o.key==='fill_water');
+  if(missingDrink||missingFill){
    for(const sight of (n.knowledge?.sightings||[]).slice().reverse()){
     if(sight.kind!=='water'||sight.at>state.clock)continue;
     // An actual failed visit beats an old sighting for a bounded interval.
@@ -142,9 +145,10 @@
     const spring=state.world.nodes.find(x=>x.id===sight.id&&x.kind==='water'&&
      x.x===sight.x&&x.y===sight.y&&(x.z||0)===(sight.z||0));
     if(!spring||distance(state,n,spring)>18||!reachability(state,n)(spring))continue;
-    scoped.push({key:'fill_water',
-     when:'Return to a personally seen freshwater source; current supply unknown',
-     target:spring,ref:spring.id});
+    for(const key of [...(missingDrink?['drink_source']:[]),...(missingFill?['fill_water']:[])])
+     scoped.push({key,
+      when:'Return to a personally seen freshwater source; current supply unknown',
+      target:spring,ref:spring.id});
     break;
    }
   }
@@ -213,6 +217,7 @@
    n.x=next.x;n.y=next.y;n.z=next.z||0;
    n.path.shift();n.travel=null;n.blockedFor=0;
    root.Frontier.reveal(state.world,n.x,n.y,7);
+   root.Perception?.rememberWater(state,n);
   }
   n.motion=n.path.length?1:0;
   if(n.task&&!n.path.length&&n.task.readyAt===null)
@@ -479,7 +484,7 @@
    n.energy>18)return false;
   const urgent=root.Cognition.instinct(n,available(state,n));
   if(!urgent)return false;
-  if(n.task?.key===urgent)return false;
+  if(n.task?.key===urgent||urgent==='rest'&&n.action==='rest')return false;
   if(n.task||n.path.length||n.action==='rest'){
    root.Activities.interrupt(state,n,'CRITICAL_NEED');
    n.task=null;n.path=[];n.travel=null;n.action='none';

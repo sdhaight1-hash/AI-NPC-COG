@@ -65,6 +65,13 @@ test('benchmark profiles exercise the same physical runtime and count mocked dec
  assert.notEqual(reports[0].worldHash,reports[2].worldHash);
 });
 
+test('winter exhaustion seed keeps all founders alive through the second day',()=>{
+ const result=runSoak(431117,2,'no-llm',82);
+ assert.equal(result.startSeason,'Winter');
+ assert.equal(result.deaths,0,'Winter death evidence: '+JSON.stringify(result.deathDetails));
+ assert.equal(result.founderSurvivors,5);
+});
+
 test('winter-start survival fixture crosses freezing temperatures with all founders retained',()=>{
  const result=runSoak(379210,1,'no-llm',82);
  assert.equal(result.startSeason,'Winter');

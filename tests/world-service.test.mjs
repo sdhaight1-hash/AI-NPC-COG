@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Simulation, Persistence, WorldRuntime } from '../simulation-runtime.mjs';
@@ -71,6 +71,34 @@ test('a corrupt newest checkpoint recovers the previous saved world and fails cl
   assert.throws(() => openWorld(directory), /No readable world checkpoint/);
   for (const name of ['world-a.json', 'world-b.json'])
     assert.equal(readFileSync(join(directory, name), 'utf8'), 'damaged');
+});
+
+test('a failed checkpoint freezes ticks and preserves the committed slot until retry', t => {
+  const directory = temporaryWorld(t);
+  const world = openWorld(directory);
+  const committed = join(directory, 'world-a.json');
+  const blockedSlot = join(directory, 'world-b.json');
+  const original = readFileSync(committed, 'utf8');
+  mkdirSync(blockedSlot);
+  try {
+    world.tick();
+    const clock = world.view().snapshot.clock;
+    world.save();
+    assert.equal(world.view().paused, true);
+    assert.match(world.view().warning, /Checkpoint write failed/);
+    for (let i = 0; i < 50; i++) world.tick();
+    assert.equal(world.view().snapshot.clock, clock);
+    assert.equal(readFileSync(committed, 'utf8'), original);
+  } finally {
+    rmdirSync(blockedSlot);
+  }
+  const frozen = world.view().snapshot.clock;
+  world.save();
+  assert.equal(world.view().warning, null);
+  assert.equal(world.view().paused, false);
+  assert.equal(openWorld(directory).view().snapshot.clock, frozen);
+  world.tick();
+  assert.ok(world.view().snapshot.clock > frozen);
 });
 
 test('observer snapshots leave the clock alone and only the process tick advances it', t => {

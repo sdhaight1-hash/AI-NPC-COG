@@ -10,6 +10,12 @@ Project retries request an affordance scan only when their backoff expires. The 
 
 The browser scheduler uses the same bounded choices as headless simulation during a water or housing project's backoff. A resident can forage, rest or attend to other immediate needs without releasing their project or requesting a separate model review.
 
+## Winter survival
+
+Issue #146 reproduced a death on seed 431117, winter day 82, even though the resident rested within walking distance of a spring. The terminal trace showed hunger and thirst at 100, zero hydration, severe exhaustion, and repeated rest decisions.
+
+Residents now retain up to 12 private freshwater landmarks they actually see while moving. An exhausted resident can attempt to drink directly from a remembered spring with a legal route within 18 tiles. The sighting carries no stock information. Arrival, reservation, and the drinking receipt determine whether the attempt actually delivers water. Current sight and recent depletion still govern what the resident can act on. Accepting rest once leaves recovery to physiology until conditions change.
+
 ## Verification
 
 `tests/blocked-water-project.test.mjs` checks missing-source backoff, interrupted or failed scouting not counted as travel, bounded attempts, checkpoint restore, survival fallback, real recovery when freshwater is reachable, and two-person reservation contention. Existing `tests/water-vessel-project.test.mjs` covers the complete empty-hand craft → physical fill → off-source drinking path, and the headless production benchmark covers conserved inputs and actor-private manufacturing knowledge.
