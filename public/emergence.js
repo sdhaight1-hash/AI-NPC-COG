@@ -675,6 +675,8 @@
         while(node.regrow>=1&&node.stock<node.max&&node.groundwater>=1){
           node.groundwater--;node.stock++;node.regrow--;
         }
+        // A dry aquifer cannot bank unlimited unearned future discharge.
+        if(node.groundwater<1)node.regrow=Math.min(node.regrow,.999999);
         continue;
       }
       if(node.stock>=node.max)continue;
