@@ -98,6 +98,33 @@ function interruptedCraft(seed){
  const elapsed=until(s,()=>n.inventory.cord>=1&&n.workpiece===null,100)+3;
  return end('interrupted_craft_resumes',s,elapsed,()=>n.inventory.cord>=1);
 }
+function interruptedShelter(seed){
+ const s=setup(seed),n=s.npcs[0];
+ Object.assign(n.inventory,{wood:4,fiber:3,water:2});
+ n.knowledge.recipes.push('shelter');
+ n.energy=100;
+ assert.equal(WorldRuntime.begin(s,n,'craft_shelter'),true);
+ tick(s,2);
+ assert.equal(n.workpiece?.recipe,'shelter');
+ assert.equal(WorldRuntime.begin(s,n,'craft_stage'),true);
+ const command=n.task.commandId;
+ tick(s,2);
+ const retained=n.currentActivity.workDone;
+ assert.ok(retained>0);
+ n.needs.thirst=96;n.bio.hydrationBudgetMl=120;
+ assert.equal(WorldRuntime.survival(s,n),true);
+ assert.equal(n.suspendedActivities.at(-1).workDone,retained);
+ assert.ok(!s.world.structures.some(site=>site.type==='shelter'));
+ tick(s,1);
+ assert.equal(WorldRuntime.begin(s,n,'craft_stage','resume'),true);
+ assert.equal(n.task.commandId,command);
+ const elapsed=until(s,()=>s.world.structures.some(site=>site.type==='shelter'),180)+5;
+ const events=s.receipts.filter(r=>r.commandId===command);
+ assert.ok(events.some(r=>r.status==='INTERRUPTED')&&events.some(r=>r.status==='RESUMED'));
+ assert.equal(events.filter(r=>r.status==='COMPLETED').length,1);
+ return end('interrupted_shelter_resumes',s,elapsed,()=>n.workpiece===null&&
+  n.inventory.wood===0&&n.inventory.fiber===0&&s.world.structures.length===1);
+}
 function falseBelief(seed){
  const s=setup(seed),n=s.npcs[0];
  const node=s.world.nodes.find(v=>v.kind==='wood'&&v.stock>0);
@@ -133,6 +160,7 @@ export const scenarios={
  four_operation_cord:cordProduction,
  twelve_operation_hatchet:toolChain,
  interrupted_craft_resumes:interruptedCraft,
+ interrupted_shelter_resumes:interruptedShelter,
  mistaken_resource_belief_revised:falseBelief,
  two_actor_finite_transfer:twoActorTrade
 };

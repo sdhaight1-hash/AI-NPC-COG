@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {runScenarios,runSoak,assertCraftConservation} from '../scripts/benchmarks.mjs';
 
-test('six grounded scenarios satisfy authoritative postconditions',()=>{
+test('seven grounded scenarios satisfy authoritative postconditions',()=>{
  const results=runScenarios(379210);
- assert.equal(results.length,6);
+ assert.equal(results.length,7);
  const failures=results.filter(x=>!x.pass);
  assert.deepEqual(failures,[],JSON.stringify(failures,null,2));
  assert.ok(results.every(x=>x.modelCalls===0));
  assert.ok(results.some(x=>x.scenario==='twelve_operation_hatchet'));
+ assert.ok(results.some(x=>x.scenario==='interrupted_shelter_resumes'));
 });
 
 test('fixed seed produces identical completion traces and canonical state hashes',()=>{
