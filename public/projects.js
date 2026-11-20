@@ -55,6 +55,17 @@
     {id:'build',requires:['clear_site','crate'],
      produces:'placed crate nearby',action:'place_crate'}
    ]},
+  water_vessel:{
+   goal:'A portable way to store freshwater away from a spring',
+   nodes:[
+    {id:'fiber',requires:[],produces:'fiber >= 3',action:'collect_fiber'},
+    {id:'cord',requires:['fiber'],produces:'cord >= 1',action:'craft_cord'},
+    {id:'stone',requires:['cord'],produces:'stone >= 2',action:'collect_stone'},
+    {id:'blade',requires:['stone'],produces:'blade >= 1',action:'craft_blade'},
+    {id:'wood',requires:['blade'],produces:'wood >= 1',action:'collect_wood'},
+    {id:'build',requires:['cord','blade','wood'],
+     produces:'a physically crafted portable vessel',action:'craft_hollow_wood_trial'}
+   ]},
   campfire:{
    goal:'A campfire within five tiles',
    nodes:[
@@ -128,6 +139,17 @@
     root.Frontier.distance(state.world,n,s)<2);
    if(id==='build')return isNear(state,n,'crate');
   }
+  if(kind==='water_vessel'){
+   // Consumed intermediate inputs still count as completed dependencies
+   // while the subsequent physical assembly is underway.
+   const done=have('flask',1);
+   if(id==='fiber')return have('fiber',3)||have('cord',1)||done;
+   if(id==='cord')return have('cord',1)||done;
+   if(id==='stone')return have('stone',2)||have('blade',1)||done;
+   if(id==='blade')return have('blade',1)||done;
+   if(id==='wood')return have('wood',1)||done;
+   if(id==='build')return done;
+  }
   if(kind==='campfire'){
    if(id==='wood')return have('wood',2)||knows('campfire');
    if(id==='stone')return have('stone',1);
@@ -156,6 +178,13 @@
  function chooseKind(state,n){
   if(n.project||n.plan||n.task)return null;
   const trait=String(n.personality||'').toLowerCase();
+  // A remembered or currently visible spring motivates portable water security.
+  // Neither hidden world deposits nor the existence of a recipe is evidence.
+  const hasWaterEvidence=root.Perception?.snapshot(state,n).objects.some(o=>
+   o.kind==='water')||(n.knowledge?.observations||[]).some(o=>o.kind==='water');
+  if((n.inventory.flask||0)===0&&n.needs.thirst>=45&&n.needs.thirst<85&&
+   (n.bio?.hydrationBudgetMl||0)>=1400&&n.energy>=25&&
+   n.needs.hunger<85&&hasWaterEvidence)return 'water_vessel';
   // Needs and temperament choose priority, not permission to bypass the world.
   if(!isNear(state,n,'shelter')){
    if(/curious|adventurous|expressive/.test(trait)&&
@@ -215,6 +244,8 @@
    return {status:'blocked',reason:p.blockedReason};
   }
   let action=node.action;
+  if(p.kind==='water_vessel'&&node.id==='build'&&
+   n.knowledge?.recipes?.includes('flask'))action='craft_flask';
   if(n.energy<20){
    // A project never forbids bodily recovery.
    if(options.some(o=>o.key==='rest'))action='rest';
