@@ -114,10 +114,23 @@
   function objectById(world,id){
     return world.nodes.find(o=>o.id===id)||
       world.items.find(o=>o.id===id)||
-      world.structures.find(o=>o.id===id)||world.remains?.find(o=>o.id===id)||null;
+      world.structures.find(o=>o.id===id)||
+      world.construction?.tiles.find(o=>o.id===id)||
+      world.construction?.blueprints.find(o=>o.id===id)||
+      world.remains?.find(o=>o.id===id)||null;
   }
   function describeObject(world,object){
     if(!object)return null;
+    if(object.status==='BUILT'&&root.Construction?.LAYERS[object.kind])
+     return {id:object.id,name:'Constructed '+object.kind+' tile',kind:object.kind,
+      x:object.x,y:object.y,z:object.z,condition:'built',
+      description:'Physical '+object.material+' '+object.kind+' built by '+
+       object.actorId+' at '+object.builtAt+' (committed '+object.commandId+')'};
+    if(object.status==='PLANNED'&&root.Construction?.LAYERS[object.kind])
+     return {id:object.id,name:'Planned '+object.kind+' tile',kind:object.kind,
+      x:object.x,y:object.y,z:object.z,condition:'unbuilt',
+      description:'Unbuilt '+object.kind+' blueprint owned by '+object.actorId+
+       '; declares intent only, with no materials consumed or shelter benefit'};
     if(object.kind==='remains')return {id:object.id,kind:'remains',name:'Remains',
       x:object.x,y:object.y,z:object.z,description:'Remains of a deceased resident'};
     if(Object.hasOwn(OBJECT_LABELS,object.kind)&&object.max!==undefined){
@@ -158,7 +171,8 @@
   }
   function inspectTarget(n,world,canReach){
     const seen=new Set((n.knowledge?.observations||[]).map(o=>o.id));
-    return [...world.nodes,...world.structures,...world.items,...(world.remains||[])]
+    return [...world.nodes,...world.structures,...world.items,
+      ...(world.construction?.tiles||[]),...(world.remains||[])]
       .filter(o=>!seen.has(o.id)&&(n.z||0)===(o.z||0)&&distance(n,o)<=8&&
         (o.kind!=='remains'||root.Perception?.line(world,n,o))&&
         describeObject(world,o)&&canReach(o))
