@@ -77,7 +77,9 @@
    nodes:[
     {id:'survey',requires:[],produces:'time-costed six-tile local design',
      action:'design_home'},
-    {id:'build',requires:['survey'],produces:'completed enclosed floor and roof',
+    {id:'thatch',requires:['survey'],produces:'roof binding before walls hide local plants',
+     action:'collect_fiber'},
+    {id:'build',requires:['thatch'],produces:'completed enclosed floor and roof',
      action:'build_tile'}
    ]},
   campfire:{
@@ -160,6 +162,9 @@
     ...(state.world.construction?.tiles||[])].some(t=>
      t.actorId===n.id&&t.kind==='floor'&&
      t.x===site.x&&t.y===site.y&&t.z===site.z);
+   if(id==='thatch')return (n.inventory.fiber||0)>=1||
+    (state.world.construction?.tiles||[]).some(t=>t.actorId===n.id&&
+     t.kind==='roof'&&t.x===site.x&&t.y===site.y&&t.z===site.z);
    if(id==='build')return root.Construction?.sheltered(state.world,site)===true;
   }
   if(kind==='water_vessel'){
