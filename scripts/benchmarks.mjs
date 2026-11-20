@@ -172,7 +172,7 @@ function autonomousVesselFromEmptyHands(seed){
   'A benchmark founder must own no starting supplies');
  const kinds=['water','fiber','stone','wood'];
  const nodes=kinds.map(kind=>{
-  const stockRequired=kind==='fiber'?3:kind==='stone'?2:1;
+  const stockRequired=kind==='fiber'||kind==='water'?3:kind==='stone'?2:1;
   const node=s.world.nodes.find(x=>x.kind===kind&&x.stock>=stockRequired);
   assert.ok(node,'Finite world deposit required for '+kind);
   return node;
