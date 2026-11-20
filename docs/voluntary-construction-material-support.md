@@ -6,7 +6,7 @@ This is a small actor-initiated cooperation step for [G4.3 housing #62](https://
 
 A healthy resident physically holding spare wood/fiber can choose a new timed `give_wood` or `give_fiber` action only after **witnessing actual completed building work** by a nearby home-project owner, seeing the owner in person, and identifying further unfinished construction. An unbuilt hidden blueprint or private NPC project alone is not exposed to the helper. The donor chooses whether to spend their own time/material using their existing personal utility and social motivation; a new role is not assigned by the world.
 
-The physical builder accepts only if still alive, nearby/on the same level, still carrying out that home project, not in critical thirst or hunger, and able to physically carry the contributed material. This is a bounded provisional willingness rule, not a modeled social contract or a verbal agreement.
+The visible tile and an unfinished blueprint must belong to the same active home site. An older building owned by the same resident does not expose a different project. The physical builder accepts only if still alive, nearby/on the same level, still carrying out that home project, not in critical thirst or hunger, and able to physically carry the contributed material. This is a bounded provisional willingness rule, not a modeled social contract or a verbal agreement.
 
 ## Material custody
 

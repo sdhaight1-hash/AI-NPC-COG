@@ -32,6 +32,7 @@ function setup(){
  assert.ok(wall);
  builder.project=k.Projects.create(s,builder,'home');
  assert.equal(builder.project?.kind,'home');
+ builder.project.homeSite={x:floor.x,y:floor.y,z:floor.z};
  builder.project.status='BLOCKED';builder.project.nextAt=s.clock+90;
  builder.inventory.wood=0;
  return {k,s,builder,helper,wall};
@@ -114,4 +115,38 @@ test('pending donation and its private material reservation replay from a v3 che
  assert.equal(fresh.receipts.filter(r=>r.action==='give_fiber'&&
   r.status==='COMPLETED').length,1);
  assert.equal(b.k.Reservations.active(fresh).length,0);
+});
+
+test('a visible old floor cannot expose a different home project or authorize an in-flight gift',()=>{
+ const {k,s,builder,helper}=setup();
+ helper.inventory.wood=1;
+ assert.equal(k.WorldRuntime.begin(s,helper,'give_wood'),true);
+ const command=helper.task.commandId,site=builder.project.homeSite;
+ builder.project.homeSite={...site,x:(site.x+15)%s.world.width};
+ assert.equal(k.WorldRuntime.available(s,helper).some(x=>x.key==='give_wood'),false);
+ k.Simulation.advance(s,2);
+ assert.equal(helper.inventory.wood,1);
+ assert.equal(builder.inventory.wood,0);
+ assert.ok(s.receipts.some(r=>r.commandId===command&&r.status==='FAILED'));
+ assert.equal(k.Reservations.active(s).some(x=>x.commandId===command),false);
+});
+
+test('an idle resident can choose a physical gift through normal offline deliberation',()=>{
+ const {k,s,builder,helper}=setup();
+ Object.assign(helper.inventory,{wood:4,stone:2,food:3});
+ assert.equal(k.Biology.addForaged(helper.bio,'nuts',3),true);
+ helper.personality='expressive';
+ helper.needs.social=78;
+ builder.needs.social=20;
+ helper.thoughtAt=s.clock;
+ s.auto=true;
+ const run=()=>k.WorldRuntime.scheduleOffline(s,{}, {projects:false});
+ run();
+ assert.equal(helper.task?.key,'give_wood');
+ assert.equal(helper.source,'offline routine');
+ k.Simulation.advance(s,2,{schedule:run});
+ assert.equal(builder.inventory.wood,1);
+ assert.equal(helper.inventory.wood,3);
+ assert.ok(s.receipts.some(r=>r.action==='give_wood'&&r.status==='COMPLETED'&&
+  r.actorId===helper.id&&r.targetId===builder.id));
 });

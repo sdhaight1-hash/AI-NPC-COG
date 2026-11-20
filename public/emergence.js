@@ -192,6 +192,17 @@
     return residents.filter(other=>other.id!==n.id&&distance(n,other)<=8&&condition(other))
       .sort((a,b)=>distance(a,n)-distance(b,n))[0]||null;
   }
+  function witnessedHomeWork(n,builder,world){
+    const project=builder.project,site=project?.homeSite;
+    if(!site||project.kind!=='home'||!['ACTIVE','BLOCKED'].includes(project.status)||
+     builder.alive===false||builder.energy<18||builder.needs.thirst>=85||
+     builder.needs.hunger>=85||!sameLevel(n,builder))return false;
+    const view={world,clock:world.now},construction=world.construction;
+    const atSite=t=>t.actorId===builder.id&&sameLevel(t,site)&&distance(t,site)<=1;
+    return !!(construction&&root.Perception?.canSee(view,n,builder)&&
+      construction.blueprints.some(atSite)&&
+      construction.tiles.some(t=>atSite(t)&&root.Perception.canSee(view,n,t)));
+  }
   function exploreTarget(n,canReach,world) {
     // Evaluate a small ring of vantage points, not hundreds of BFS paths per decision.
     // All inhabitants use the same directions; past visits change where they choose.
@@ -250,19 +261,12 @@
     // A donation is offered only on visual evidence of unfinished physical
     // work by a nearby builder. Do not read another actor's hidden plans aloud.
     if(n.energy>=20&&n.needs.thirst<85&&n.needs.hunger<85){
-      const helperTarget=nearestResident(n,residents,p=>
-       p.alive!==false&&p.project?.kind==='home'&&p.energy>=18&&
-       p.needs.thirst<85&&p.needs.hunger<85&&
-       root.Perception?.canSee({world,clock:world.now},n,p)&&
-       world.construction?.blueprints.some(b=>b.actorId===p.id)&&
-       world.construction?.tiles.some(t=>t.actorId===p.id&&
-        root.Perception?.canSee({world,clock:world.now},n,t)));
-      if(helperTarget){
-        for(const kind of ['wood','fiber'])
-         if(n.inventory[kind]>0)
-          add('give_'+kind,'Offer one carried '+kind+
-           ' to support visible unfinished building by '+helperTarget.name,
-           helperTarget,helperTarget.id);
+      for(const kind of ['wood','fiber']){
+        if(n.inventory[kind]<1)continue;
+        const builder=nearestResident(n,residents,p=>
+          roomFor(p,kind)>0&&witnessedHomeWork(n,p,world));
+        if(builder)add('give_'+kind,'Offer one carried '+kind+
+          ' to support visible unfinished building by '+builder.name,builder,builder.id);
       }
     }
     const other=nearestResident(n,residents,p=>!p.task&&!p.plan&&
@@ -546,16 +550,9 @@
       message='Explained tested flask sealing steps to '+student.name;
     }else if(task.key==='give_wood'||task.key==='give_fiber'){
       const kind=task.key.slice(5),partner=residents.find(p=>p.id===task.ref);
-      if(!partner||partner===n||partner.alive===false||
-       partner.project?.kind!=='home'||partner.energy<18||
-       partner.needs.thirst>=85||partner.needs.hunger>=85||
-       n.needs.thirst>=85||n.needs.hunger>=85||
-       !sameLevel(n,partner)||distance(n,partner)>2||
-       !root.Perception?.canSee({world,clock:world.now},n,partner)||
-       !world.construction?.blueprints.some(b=>b.actorId===partner.id)||
-       !world.construction?.tiles.some(t=>t.actorId===partner.id&&
-        root.Perception?.canSee({world,clock:world.now},n,t))||
-       n.inventory[kind]<1||roomFor(partner,kind)<1)
+      if(!partner||partner===n||distance(n,partner)>2||
+       n.needs.thirst>=85||n.needs.hunger>=85||n.inventory[kind]<1||
+       roomFor(partner,kind)<1||!witnessedHomeWork(n,partner,world))
        return {ok:false,message:'BUILD_HELP_UNAVAILABLE: no witnessed active building or free material capacity'};
       n.inventory[kind]--;partner.inventory[kind]++;
       n.needs.social=clamp(n.needs.social-7);
