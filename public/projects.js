@@ -297,11 +297,8 @@
   }
   p.status='ACTIVE';p.blockedReason=null;
   node.status='RUNNING';node.blockedBy=null;node.attempts++;
-  if(recoverable){
-   if(action==='explore')node.scouts++;
-   else if(action===node.action||node.id==='build'&&action==='craft_flask')
-    node.scouts=0;
-  }
+  // A proposed action is not proof of exploration or access to a source.
+  // Count scouting only after a completed physical action, in onOutcome().
   p.nextAt=state.clock+1;
   return {status:'action',action,option,nodeId:node.id};
  }
@@ -311,7 +308,8 @@
   const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
   if(ok&&key!=='rest')p.completedActions++;
   const node=p.nodes.find(x=>x.status==='RUNNING'&&
-   (x.action===key||p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
+   (x.action===key||recoverable&&key==='explore'||
+    p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
   if(!ok){
    if(node){
     if(recoverable)node.failures=Math.min(100,node.failures+1);
@@ -322,7 +320,10 @@
    p.nextAt=state.clock+(recoverable&&node?waitMinutes(node):5);
   }
   else {
-   if(node&&recoverable)node.failures=0;
+   if(node&&recoverable){
+    if(key==='explore')node.scouts=Math.min(4,node.scouts+1);
+    else {node.scouts=0;node.failures=0;}
+   }
    p.nextAt=state.clock+1;
   }
   sync(state,n);
