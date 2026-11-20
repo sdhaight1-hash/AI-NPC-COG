@@ -87,3 +87,24 @@ test('map geometry draws only visible physical objects and leaves state unchange
  assert.equal(operations.filter(([op]) => op === 'fill').length, 3);
  assert.equal(JSON.stringify(world), before);
 });
+
+test('vessel artwork reflects committed workpiece stages without changing custody', () => {
+ const draw = workpiece => {
+  const fills = [];
+  const ctx = {save(){},translate(){},scale(){},fill(path){fills.push(path.d);},restore(){}};
+  const before = JSON.stringify(workpiece);
+  art.drawVesselWorkpiece(ctx,workpiece,0,0,16);
+  assert.equal(JSON.stringify(workpiece),before);
+  return fills;
+ };
+ assert.deepEqual(draw(null),[]);
+ assert.deepEqual(draw({recipe:'cord',stage:2}),[]);
+ const blank=draw({recipe:'hollow_wood_trial',stage:0});
+ assert.ok(blank.length);
+ assert.deepEqual(draw({recipe:'hollow_wood_trial',stage:1}),blank);
+ const hollow=draw({recipe:'flask',stage:1});
+ assert.notDeepEqual(hollow,blank);
+ const bound=draw({recipe:'hollow_wood_trial',stage:2});
+ assert.notDeepEqual(bound,hollow);
+ assert.deepEqual(draw({recipe:'flask',stage:2}),bound);
+});
