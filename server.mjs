@@ -237,6 +237,7 @@ export async function peerExchange(input, signal) {
       'If you intentionally share a source you personally inspected, include its exact [source:id] citation. ' +
       'Never invent source IDs. Speak only as yourself in one sentence.'
   },signal);
+  signal?.throwIfAborted();
   const second=await speak({
     persona:b.persona,scene:listenerScene,action:'respond in character to a nearby resident',
     short:true,history:[],
@@ -337,7 +338,16 @@ export function startServer(port = PORT, { worldDirectory, worldImport } = {}) {
         if (route === '/api/decide') {
           result = await lane.run('background', signal => decide(input, signal));
         } else if (route === '/api/peer-exchange') {
-          result = await lane.run('background', signal => peerExchange(input, signal));
+          const connection = new AbortController();
+          const disconnected = () => connection.abort();
+          res.once('close', disconnected);
+          try {
+            if (res.destroyed) disconnected();
+            result = await lane.run('background', signal =>
+              peerExchange(input, AbortSignal.any([signal, connection.signal])));
+          } finally {
+            res.off('close', disconnected);
+          }
         } else if (route === '/api/speak') {
           result = await lane.run('foreground', signal => speak(input, signal));
         } else {
@@ -352,6 +362,7 @@ export function startServer(port = PORT, { worldDirectory, worldImport } = {}) {
             return { ...decision, reply: speech.reply };
           });
         }
+        if (res.destroyed) return;
         return json(res, 200, { ...result, durationMs: Math.round(performance.now() - started) });
       }
       if (req.method === 'GET' && STATIC[route]) {
@@ -362,7 +373,7 @@ export function startServer(port = PORT, { worldDirectory, worldImport } = {}) {
       }
       json(res, 404, { error: 'Not found' });
     } catch (error) {
-      json(res, error.status || 502, { error: error.message || 'Model unavailable' });
+      if (!res.destroyed) json(res, error.status || 502, { error: error.message || 'Model unavailable' });
     }
   });
   server.listen(port, '127.0.0.1', () => {

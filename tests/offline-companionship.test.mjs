@@ -56,6 +56,64 @@ test('unwilling partner cannot be committed to offline companionship',()=>{
  assert.equal(a.needs.social,socialBefore);
  assert.equal(b.needs.social,peerBefore);
 });
+test('different levels cannot create companionship, even at matching coordinates',()=>{
+ const {c,s,a,b}=setup();
+ b.z=a.z-1;
+ assert.equal(c.WorldRuntime.begin(s,a,'socialize','offline routine'),false);
+ assert.equal(a.task,null);
+ assert.equal(b.peerReservedFor,undefined);
+});
+
+test('an actual food transfer updates only the receiving resident and survives reload',()=>{
+ const {c,s,a,b}=setup();
+ a.inventory.food=1;
+ const mood=b.mood;
+ assert.equal(c.WorldRuntime.begin(s,a,'share_food','offline routine'),true);
+ c.Simulation.advance(s,5);
+ assert.equal(a.inventory.food,0);
+ assert.equal(b.inventory.food,1);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(b.relationships[a.id].cooperation,1);
+ assert.equal(b.mood,mood+2);
+ const receipt=s.receipts.find(r=>r.action==='share_food'&&r.status==='COMPLETED');
+ assert.equal(receipt.delta.otherActors.find(row=>row.actorId===b.id)
+  .relationship.after.cooperation,1);
+ const restored=c.Simulation.initial(379210);
+ assert.equal(c.Persistence.restore(restored,JSON.parse(JSON.stringify(c.Persistence.save(s)))),true);
+ const partner=restored.npcs.find(n=>n.id===b.id);
+ assert.equal(partner.relationships[a.id].cooperation,1);
+ assert.equal(partner.mood,mood+2);
+ a.inventory.food=1;
+ assert.equal(c.WorldRuntime.begin(s,a,'share_food','offline routine'),true);
+ c.Simulation.advance(s,5);
+ assert.equal(b.inventory.food,2,'Physical aid still transfers during the social cooldown');
+ assert.equal(b.relationships[a.id].cooperation,1);
+ assert.equal(b.mood,mood+2);
+});
+
+test('visible material competition creates private tension once and can cool off',()=>{
+ const {c,s,a,b}=setup();
+ const wood=s.world.nodes.find(node=>node.kind==='wood'&&node.stock>=2);
+ s.world.nodes=[wood];wood.stock=2;
+ for(const n of [a,b])Object.assign(n,{x:wood.x,y:wood.y,z:wood.z||0});
+ assert.equal(c.WorldRuntime.begin(s,a,'collect_wood'),true);
+ const mood=b.mood;
+ for(let i=0;i<3;i++)assert.equal(c.WorldRuntime.begin(s,b,'collect_wood'),false);
+ assert.equal(b.relationships[a.id].tension,1);
+ assert.equal(b.mood,mood-1);
+ assert.equal(a.relationships[b.id],undefined);
+ assert.equal(c.Agency.relationship(b,a.id,s.clock+360).tension,0);
+ for(let i=0;i<2;i++){
+  s.clock+=60;s.world.now=s.clock;
+  assert.equal(c.WorldRuntime.begin(s,b,'collect_wood'),false);
+ }
+ c.Simulation.advance(s,1);
+ assert.equal(b.relationships[a.id].tension,3);
+ assert.equal(c.WorldRuntime.begin(s,a,'socialize','offline routine'),false);
+ s.clock+=360;s.world.now=s.clock;
+ assert.equal(c.WorldRuntime.begin(s,a,'socialize','offline routine'),true);
+});
+
 test('headless autonomous urgency initiates one bounded offline social activity',()=>{
  const {c,s,a,b}=setup();s.auto=true;
  a.thoughtAt=s.clock;b.thoughtAt=s.clock+200;

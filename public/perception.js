@@ -97,19 +97,19 @@
   return source.filter(r=>r.status==='COMPLETED'&&
    Number.isFinite(r.clock)&&state.clock-r.clock>=0&&
    state.clock-r.clock<=2).slice(-32).flatMap(r=>{
-    const actor=state.npcs.find(n=>n.id===r.actorId);
-    if(!actor)return [];
+    const position=r.context?.position||state.npcs.find(n=>n.id===r.actorId);
+    if(!position)return [];
     const action=String(r.action||'');
     let kind=null,loudness='quiet';
-    if(action==='socialize'||action==='share_food')kind='speech';
+    if(action==='socialize'&&r.context?.speech===true)kind='speech';
     else if(action==='drop_wood'){kind='impact';loudness='loud';}
     else if(action.startsWith('build_')||action.startsWith('craft_')||
      action==='place_crate'){kind='construction';loudness='loud';}
     else if(action.startsWith('collect_')||action==='forage'||
      action==='explore')kind='footsteps';
     if(!kind)return [];
-    return [{kind,loudness,x:actor.x,y:actor.y,z:actor.z||0,
-     actorId:actor.id}];
+    return [{kind,loudness,x:position.x,y:position.y,z:position.z||0,
+     actorId:r.actorId}];
    });
  }
  function snapshot(state,n,events=null){

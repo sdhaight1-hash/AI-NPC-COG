@@ -188,13 +188,25 @@ test('obsolete player-controlled saves are not silently imported into a differen
  assert.equal(b.state.player,undefined);
 });
 test('NPC-to-NPC dialogue is witnessed and committed only after a complete valid response',async()=>{
- const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/peer-exchange'?
-  {first:'Shall we share supplies?',second:'I will think about it.',durationMs:5}:
-  {connected:true}})});
+ let payload;
+ const b=makeBrowser({fetch:async (url,request)=>{
+  if(url==='/api/peer-exchange')payload=JSON.parse(request.body);
+  return {ok:true,json:async()=>url==='/api/peer-exchange'?
+   {first:'Shall we share supplies?',second:'I will think about it.',durationMs:5}:
+   {connected:true}};
+ }});
  const [a,c]=b.state.npcs;
  c.x=a.x;c.y=(a.y+1)%b.state.world.height;
- a.task={key:'socialize',ref:c.id,readyAt:b.state.clock};
+ a.needs.social=85;c.needs.social=85;
+ a.evidenceMemory.sequence=1;
+ a.evidenceMemory.episodes.push({id:'ev_1',type:'inspection',certainty:'observed',
+  ref:'spring_private',receiptId:'evt_190',text:'Inspected water at 4,5'});
+ assert.equal(b.setAction(a,'socialize','social initiative'),true);
+ b.state.clock=a.task.readyAt;b.state.world.now=b.state.clock;
  await b.peerExchange(a,c);
+ assert.match(payload.speakerScene,/\[source:spring_private\]/);
+ assert.doesNotMatch(payload.listenerScene,/spring_private/);
+ assert.ok(payload.speakerScene.length<1000);
  assert.equal(a.peerLog.length,1);assert.equal(c.peerLog.length,1);
  const speakerMemory=a.evidenceMemory.episodes.find(e=>e.type==='interaction');
  const listenerMemory=c.evidenceMemory.episodes.find(e=>e.type==='interaction');
@@ -209,6 +221,58 @@ test('NPC-to-NPC dialogue is witnessed and committed only after a complete valid
  assert.equal(a.relationships[c.id],undefined,
   'Speech alone never creates an automatic friendship');
 });
+test('a listener can break a pending conversation for water and late dialogue has no effect',async()=>{
+ let answer;
+ const b=makeBrowser({fetch:async url=>url==='/api/peer-exchange'?
+  new Promise(resolve=>{answer=resolve;}):
+  {ok:true,json:async()=>({connected:true})}});
+ const s=b.state,[a,c]=s.npcs;
+ s.npcs=[a,c];a.needs.social=90;c.needs.social=90;
+ Object.assign(c,{x:a.x,y:a.y,z:a.z});
+ assert.equal(b.setAction(a,'socialize','social initiative'),true);
+ s.clock=a.task.readyAt;s.world.now=s.clock;
+ const pending=b.peerExchange(a,c);
+ assert.equal(typeof answer,'function');
+ c.needs.thirst=99;c.bio.hydrationBudgetMl=50;
+ c.inventory.water=1;
+ assert.equal(b.survivalReflex(c),true);
+ assert.equal(c.task?.key,'drink');
+ assert.equal(a.task,null);
+ assert.equal(c.peerReservedFor,undefined);
+ answer({ok:true,json:async()=>({first:'I found water',second:'Thanks'})});
+ await pending;
+ assert.equal(c.task?.key,'drink');
+ assert.equal(a.peerLog.length,0);
+ assert.equal(c.peerLog.length,0);
+ assert.equal(s.receipts.some(r=>r.action==='socialize'&&r.status==='COMPLETED'),false);
+ assert.equal(s.backgroundBusy,false);
+});
+
+test('an expired peer exchange releases the lane before its model reply arrives',async()=>{
+ let answer;
+ const b=makeBrowser({fetch:async url=>url==='/api/peer-exchange'?
+  new Promise(resolve=>{answer=resolve;}):
+  {ok:true,json:async()=>({connected:true})}});
+ const s=b.state,[a,c]=s.npcs;
+ s.npcs=[a,c];a.needs.social=90;c.needs.social=90;
+ Object.assign(c,{x:a.x,y:a.y,z:a.z});
+ assert.equal(b.setAction(a,'socialize','social initiative'),true);
+ s.clock=a.task.readyAt;s.world.now=s.clock;
+ const pending=b.peerExchange(a,c);
+ assert.equal(typeof answer,'function');
+ s.clock+=45;s.world.now=s.clock;
+ c.thoughtAt=s.clock+100;
+ b.scheduleIdleAgents();
+ assert.equal(s.backgroundBusy,false);
+ assert.equal(a.task,null);
+ assert.equal(c.peerReservedFor,undefined);
+ answer({ok:true,json:async()=>({first:'Late offer',second:'Late reply'})});
+ await pending;
+ assert.equal(a.peerLog.length,0);
+ assert.equal(c.peerLog.length,0);
+ assert.equal(s.receipts.some(r=>r.action==='socialize'&&r.status==='COMPLETED'),false);
+});
+
 test('z-level inspector and coordinate conversions do not move NPCs',()=>{
  const b=makeBrowser(),n=b.state.npcs[0],original={x:n.x,y:n.y,z:n.z};
  b.setZ(-2);
@@ -307,6 +371,7 @@ test('socially motivated residents approach each other and complete model-genera
   n.task=null;n.plan=null;n.path=[];n.action='none';
  }
  a.needs.social=90;a.thoughtAt=b.state.clock;
+ other.needs.social=70;
  other.x=a.x;other.y=a.y;other.z=a.z;
  b.scheduleIdleAgents();
  assert.equal(a.task?.key,'socialize','An urgent social desire should initiate a real meeting');

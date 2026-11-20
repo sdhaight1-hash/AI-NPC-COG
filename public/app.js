@@ -72,6 +72,12 @@ function sceneFor(n,attentionSubject=''){
     ' [source:'+m.ref+']':'')).join('; ')||'No source-backed experiences';
  const beliefs=a.beliefs.slice(-4).map(b=>b.kind+' at '+b.x+','+b.y+
   ' ('+b.status+', last personally witnessed '+Math.floor(b.at)+')').join('; ')||'None';
+ const relationships=Object.keys(n.relationships||{}).slice(-4).map(id=>{
+  const r=Agency.relationship(n,id,state.clock);
+  const action=n.relationships[id].action;
+  return id+' help received '+r.cooperation+', tension '+r.tension+
+   ', last encounter '+action.replaceAll('_',' ');
+ }).join('; ')||'None';
  const heardSpeakers=[...new Set((n.evidenceMemory?.claims||[])
   .map(c=>c.speakerId))].slice(-4);
  const reliability=heardSpeakers.map(id=>{
@@ -86,10 +92,12 @@ function sceneFor(n,attentionSubject=''){
   '. Age '+Math.floor(Civilization.age(n,state.clock))+
   ', health '+Math.round(n.health)+', energy '+Math.round(n.energy)+
   ', hunger '+Math.round(n.needs.hunger)+', thirst '+Math.round(n.needs.thirst)+
-  ', loneliness '+Math.round(n.needs.social)+'. Bodily sensations: '+sensations+
+  ', loneliness '+Math.round(n.needs.social)+', mood '+Math.round(n.mood)+
+  '. Bodily sensations: '+sensations+
   '. Personal drives: '+Object.entries(motives).map(([k,v])=>k+' '+Math.round(v)).join(', ')+
   '. Current intention: '+(a.goal?.key||n.plan?.key||'undecided')+
-  '. My witnessed beliefs: '+beliefs+'. Relevant personal recall: '+memories+
+  '. My witnessed beliefs: '+beliefs+'. My relationships: '+relationships+
+  '. Relevant personal recall: '+memories+
   '. Evidence-linked recall: '+evidenced+
   '. My own verification of others\' resource reports (not friendship): '+reliability+
   '. Weather '+state.world.weather.kind+', '+state.world.weather.temperature+'C.'+
@@ -141,6 +149,8 @@ function scheduleIdleAgents(){
  if(!state.auto||state.paused)return;
  // Physiology remains authoritative even while connected dialogue is pending.
  for(const n of state.npcs)survivalReflex(n);
+ if(state.peerExchange&&!peerExchangeValid(state.peerExchange))
+  stopPeerExchange(state.peerExchange,'SOCIAL_CONTEXT_CHANGED');
  if(state.conversationBusy)return;
  // A social need can initiate a meeting, never fabricate dialogue.
  if(state.connected&&!state.backgroundBusy){
@@ -210,26 +220,26 @@ function completeActivity(n){
  if(!n.task||n.path.length||n.task.readyAt===null||
   state.clock<n.task.readyAt)return;
  if(n.task.key==='socialize'){
-  if(n.peerPending||state.backgroundBusy||state.conversationBusy||
-    state.paused||state.clock<(n.peerRetryAt||0))return;
+  if(n.peerPending||state.paused)return;
+  if(n.source==='offline routine')
+   return WorldRuntime.complete(state,n,{onRecord:renderEvents});
   const other=state.npcs.find(v=>v.id===n.task.ref);
-  if(!other||dist(n,other)>2){n.task=null;n.thoughtAt=state.clock+5;return;}
-  if(!state.connected){
-   if(n.source==='offline routine')
-    return WorldRuntime.complete(state,n,{onRecord:renderEvents});
-   n.task=null;n.action='none';n.thoughtAt=state.clock+15;
+  if(!state.connected||!WorldRuntime.socialMeeting(state,n,other)||
+   state.clock-n.task.readyAt>=15){
+   WorldRuntime.cancelSocial(state,n,'SOCIAL_CONTEXT_CHANGED');
    return;
   }
-  void peerExchange(n,other);return;
+  if(!state.backgroundBusy&&!state.conversationBusy)void peerExchange(n,other);
+  return;
  }
  return WorldRuntime.complete(state,n,{onRecord:renderEvents});
 }
 function advancePlan(n){
  return WorldRuntime.advancePlan(state,n,{onRecord:renderEvents});
 }
-async function jsonPost(route,body){
+async function jsonPost(route,body,signal=null){
  const response=await fetch(route,{method:'POST',headers:{'content-type':'application/json'},
-  ...(serverMode?{signal:AbortSignal.timeout(5000)}:{}),
+  ...(signal?{signal}:serverMode?{signal:AbortSignal.timeout(5000)}:{}),
   body:JSON.stringify(body)});
  const data=await response.json();
  if(!response.ok){const error=new Error(data.error||'HTTP '+response.status);
@@ -291,6 +301,7 @@ function modelDecisionBasis(n){
   beliefs:JSON.stringify(n.agency?.beliefs||[]),
   claims:JSON.stringify(n.evidenceMemory?.claims||[]),
   inventory:JSON.stringify(n.inventory||{}),
+  relationships:JSON.stringify(n.relationships||{}),
   urgency:Number(n.needs.thirst>=62||hydration<1200)+
    2*Number(n.needs.thirst>=90||hydration<200)+
    4*Number(n.needs.hunger>=85)+8*Number(n.needs.hunger>=95)+
@@ -305,7 +316,7 @@ function modelChoiceStillRelevant(n,original,choice){
  const current=modelDecisionBasis(n);
  for(const field of ['alive','action','task','plan','path','project','goalKey',
   'goalStartedAt','evidenceSequence','observations','sightings','beliefs',
-  'claims','inventory','urgency'])
+  'claims','inventory','relationships','urgency'])
   if(original[field]!==current[field])return false;
  return Object.hasOwn(original.references,choice)&&
   original.references[choice]===current.references[choice]&&
@@ -369,23 +380,60 @@ async function deliberate(n,cue=null){
   state.lastDecisionMs=performance.now();
  }
 }
+function peerSceneFor(n,other){
+ const relation=Agency.relationship(n,other.id,state.clock);
+ const seen=new Set(),sources=[];
+ for(const entry of (n.evidenceMemory?.episodes||[]).slice().reverse()){
+  if(entry.type!=='inspection'||entry.certainty!=='observed'||!entry.receiptId||
+   !entry.ref||seen.has(entry.ref))continue;
+  const kind=entry.text.match(/^Inspected (food|water|wood|stone|fiber) /)?.[1];
+  if(!kind)continue;
+  seen.add(entry.ref);
+  sources.push(kind+' [source:'+entry.ref+']');
+  if(sources.length===3)break;
+ }
+ return 'You are '+n.name+' speaking with '+other.name+'. '+
+  'Sources you personally inspected, current supply unknown: '+(sources.join(', ')||'none')+'. '+
+  'Help received from this resident '+relation.cooperation+', tension '+relation.tension+
+  ', mood '+Math.round(n.mood)+'. '+Biology.sensation(n.bio,n.needs)+
+  '. Treat what they say as a report and speak only for yourself.';
+}
+function peerExchangeValid(session){
+ const {n,other,task,locA,locB,startedAt}=session;
+ return state.peerExchange===session&&!state.paused&&
+  n.task===task&&key(n)===locA&&key(other)===locB&&state.clock-startedAt<45&&
+  WorldRuntime.socialMeeting(state,n,other);
+}
+function stopPeerExchange(session,reason=null){
+ if(state.peerExchange!==session)return;
+ const {n,other,task,controller}=session;
+ if(reason)controller?.abort();
+ if(reason&&n.task===task)WorldRuntime.cancelSocial(state,n,reason);
+ if(other.peerReservedFor===n.id)delete other.peerReservedFor;
+ n.peerPending=false;other.peerPending=false;
+ state.peerExchange=null;state.backgroundBusy=false;
+ state.lastDecisionMs=performance.now();
+}
 async function peerExchange(n,other){
- if(n.peerPending||other.peerPending||state.backgroundBusy||
-  state.conversationBusy||!state.npcs.includes(n)||!state.npcs.includes(other))return;
+ if(n.peerPending||other?.peerPending||state.backgroundBusy||state.paused||
+  state.conversationBusy||!WorldRuntime.socialMeeting(state,n,other))return;
+ const controller=typeof AbortController==='undefined'?null:new AbortController();
+ const session={n,other,task:n.task,locA:key(n),locB:key(other),startedAt:state.clock,controller};
+ state.peerExchange=session;
  n.peerPending=true;other.peerPending=true;state.backgroundBusy=true;
- const locA=key(n),locB=key(other);
  try{
   const response=await jsonPost('/api/peer-exchange',{
    speaker:{name:n.name,persona:n.personality},
    listener:{name:other.name,persona:other.personality},
-   speakerScene:sceneFor(n),listenerScene:sceneFor(other)
-  });
-  if(state.paused||!state.npcs.includes(n)||!state.npcs.includes(other)||
-    !n.task||n.task.key!=='socialize'||n.task.ref!==other.id||
-    key(n)!==locA||key(other)!==locB||dist(n,other)>2)return;
+   speakerScene:peerSceneFor(n,other),listenerScene:peerSceneFor(other,n)
+  },controller?AbortSignal.any([controller.signal,AbortSignal.timeout(24000)]):null);
+  if(!peerExchangeValid(session)){
+   stopPeerExchange(session,'SOCIAL_CONTEXT_CHANGED');
+   return;
+  }
   if(typeof response.first!=='string'||typeof response.second!=='string'||
     !response.first.trim()||!response.second.trim())throw Error('Empty exchange');
-  n.task.approved=true;
+  n.task.approved=true;n.task.spoken=true;
   const outcome=WorldReceipts.execute(state,n,
    {key:n.task.key,ref:n.task.ref,commandId:n.task.commandId},
    ()=>AgentWorld.complete(n,state.world,state.npcs));
@@ -408,16 +456,15 @@ async function peerExchange(n,other){
   n.action='none';n.thoughtAt=state.clock+4;other.thoughtAt=state.clock+4;
  }catch(e){
   record(n.name+' ↔ '+other.name+': '+e.message,'warning');
-  if(n.task?.key==='socialize')n.task=null;
-  Activities.finish(state,n,false,e.message);
-  n.action='none';n.thoughtAt=state.clock+8;
+  if(!peerExchangeValid(session)){
+   stopPeerExchange(session,'SOCIAL_CONTEXT_CHANGED');
+   return;
+  }
   activity(n).failed++;activityNote(n,'Conversation failed: '+e.message);
-  Agency.outcome(n,state.world,'socialize',other.id,false,state.clock);
   Agency.finish(n,false,state.clock);
+  stopPeerExchange(session,'SOCIAL_REQUEST_FAILED');
  }finally{
-  if(other.peerReservedFor===n.id)delete other.peerReservedFor;
-  n.peerPending=false;other.peerPending=false;state.backgroundBusy=false;
-  state.lastDecisionMs=performance.now();
+  stopPeerExchange(session);
  }
 }
 const staticCanvas=document.createElement('canvas');
@@ -660,6 +707,12 @@ function updateInspector(){
   k+' '+Math.round(v)).join(' · ');
  $('npcBeliefs').textContent=(n.agency?.beliefs||[]).slice(-3).map(b=>
   b.kind+' '+b.status+' at '+b.x+','+b.y).join(' · ')||'No personal evidence yet';
+ $('npcMood').textContent=Math.round(n.mood)+'/100';
+ $('npcRelationships').textContent=Object.keys(n.relationships||{}).slice(-4).map(id=>{
+  const name=state.npcs.find(peer=>peer.id===id)?.name||id;
+  const r=Agency.relationship(n,id,state.clock);
+  return name+' · help '+r.cooperation+'/8 · tension '+r.tension+'/6';
+ }).join(' | ')||'No shared history yet';
  const a=activity(n);
  const measured=a.modelStarted+a.modelAbstained+a.modelStale+a.modelRefused;
  $('npcActivity').textContent=a.decisions+' model replies · '+a.started+

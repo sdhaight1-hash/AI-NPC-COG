@@ -252,7 +252,8 @@
     option.target.needs.social<45||option.target.energy<20)){
    stats(n).rejected++;note(n,'Offline companion not mutually willing');return false;
   }
-  let resumed=!GOALS.has(action)&&root.Activities.eligible(n,action,option.ref);
+  let resumed=action!=='socialize'&&!GOALS.has(action)&&
+   root.Activities.eligible(n,action,option.ref);
   let resumeCandidate=resumed?(n.suspendedActivities||[]).findLast(a=>
    a.key===action&&a.ref===(option.ref??null)&&
    (action!=='craft_stage'||(a.workpieceRecipe===n.workpiece?.recipe&&
@@ -273,6 +274,14 @@
     .filter(x=>x.commandId===commandId)}:
    root.Reservations.claim(state,n.id,commandId,request);
   if(!hold.ok){
+   if(hold.reason==='RESERVATION_CONFLICT'&&option.ref&&option.target){
+    const target=option.target;
+    const rival=state.npcs.find(peer=>peer!==n&&peer.task?.ref===option.ref&&
+     distance(state,peer,target)<=1&&root.Perception?.canSee(state,n,peer)&&
+     root.Reservations.active(state).some(r=>r.actorId===peer.id&&
+      r.id===option.ref&&r.commandId===peer.task.commandId));
+    if(rival)root.Agency.socialEvent(n,rival.id,'competition',state.clock);
+   }
    if(hold.reason==='RESERVATION_CONFLICT'&&action==='craft_stage'&&
     root.Crafting.wetSealPending(n))
     root.Agency.observe(n,state.world,'seal_test',option.ref,false,state.clock);
@@ -363,20 +372,33 @@
   n.plan=null;n.action='none';n.task=null;
   n.goal='Reconsidering my next action';n.thoughtAt=state.clock+3;
  }
+ function cancelSocial(state,n,reason){
+  if(n.task?.key!=='socialize')return false;
+  const peer=state.npcs.find(p=>p.id===n.task.ref);
+  if(peer?.peerReservedFor===n.id)delete peer.peerReservedFor;
+  root.Activities.finish(state,n,false,reason);
+  root.Reservations.releaseCommand(state,n.task.commandId,'SOCIAL_CANCELLED');
+  n.task=null;n.path=[];n.travel=null;n.action='none';
+  n.thoughtAt=state.clock+8;
+  return true;
+ }
+ function socialMeeting(state,n,other){
+  return state.npcs.includes(n)&&state.npcs.includes(other)&&
+   n.task?.key==='socialize'&&n.task.ref===other.id&&other.peerReservedFor===n.id&&
+   Number.isFinite(n.task.readyAt)&&n.task.readyAt<=state.clock&&!n.path.length&&
+   root.AgentWorld.socialReady(n)&&root.AgentWorld.socialReady(other)&&
+   other.needs.social>=45&&root.Agency.relationship(other,n.id,state.clock).tension<3&&
+   !other.task&&!other.plan&&!other.path?.length&&
+   root.AgentWorld.socialContact(state.world,n,other);
+ }
  function complete(state,n,hooks={}){
   if(!n.task||n.path.length||n.task.readyAt===null||state.clock<n.task.readyAt)return;
   if(n.task.key==='socialize'){
    if(hooks.social)return hooks.social(n);
    const other=state.npcs.find(v=>v.id===n.task.ref);
-   const willing=n.source==='offline routine'&&other&&
-    other.peerReservedFor===n.id&&other.alive!==false&&
-    other.needs.social>=45&&other.energy>=20&&
-    !other.task&&!other.path?.length&&!other.peerPending&&
-    root.Frontier.distance(state.world,n,other)<=2;
-   if(!willing){
-    if(other?.peerReservedFor===n.id)delete other.peerReservedFor;
-    root.Activities.finish(state,n,false,'Offline companionship interrupted');
-    n.task=null;n.action='none';n.thoughtAt=state.clock+15;return;
+   if(n.source!=='offline routine'||!socialMeeting(state,n,other)||other.peerPending){
+    cancelSocial(state,n,'Offline companionship interrupted');
+    return;
    }
    // Physical co-presence and mutual willingness allow time together.
    // No invented speech, transcript, or social affinity is awarded.
@@ -466,9 +488,9 @@
   return ok;
  }
  function survival(state,n,hooks={}){
-  if(n.peerPending||n.peerReservedFor)return false;
   const critical=n.needs.thirst>=90||n.needs.hunger>=95||
    n.bio?.hydrationBudgetMl<200;
+  if((n.peerPending||n.peerReservedFor)&&!critical)return false;
   // Do not perform expensive affordance searches during ongoing physical work
   // unless the body is in immediate danger.
   if((n.task||n.path.length||n.action==='rest')&&!critical)return false;
@@ -485,6 +507,12 @@
   const urgent=root.Cognition.instinct(n,available(state,n));
   if(!urgent)return false;
   if(n.task?.key===urgent||urgent==='rest'&&n.action==='rest')return false;
+  if(critical){
+   const speaker=state.npcs.find(p=>p.id===n.peerReservedFor);
+   if(speaker?.task?.ref===n.id)cancelSocial(state,speaker,'PARTNER_CRITICAL_NEED');
+   delete n.peerReservedFor;
+   if(n.task?.key==='socialize')cancelSocial(state,n,'CRITICAL_NEED');
+  }
   if(n.task||n.path.length||n.action==='rest'){
    root.Activities.interrupt(state,n,'CRITICAL_NEED');
    n.task=null;n.path=[];n.travel=null;n.action='none';
@@ -549,6 +577,6 @@
  }
  root.WorldRuntime={DURATION,stats,note,pathfind,reachability,available,moveTo,
   approach,move,actionDuration,begin,complete,advancePlan,advanceProject,survival,chooseOffline,scheduleOffline,
-  invalidateNavigation,projectWaiting,
+  invalidateNavigation,projectWaiting,cancelSocial,socialMeeting,
   finishPlan,remember,log};
 })(globalThis);

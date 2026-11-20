@@ -192,6 +192,14 @@
     return residents.filter(other=>other.id!==n.id&&distance(n,other)<=8&&condition(other))
       .sort((a,b)=>distance(a,n)-distance(b,n))[0]||null;
   }
+  function socialReady(n){
+    return n?.alive!==false&&n?.health>=25&&n.energy>=20&&n.action!=='rest'&&
+      n.needs.thirst<90&&n.needs.hunger<95&&(n.bio?.hydrationBudgetMl??2400)>=200;
+  }
+  function socialContact(world,a,b){
+    return !!b&&a!==b&&sameLevel(a,b)&&distance(a,b)<=2&&
+      (!root.Perception||root.Perception.line(world,a,b));
+  }
   function witnessedHomeWork(n,builder,world){
     const project=builder.project,site=project?.homeSite;
     if(!site||project.kind!=='home'||!['ACTIVE','BLOCKED'].includes(project.status)||
@@ -257,7 +265,10 @@
       else add('experiment_wood_stone_fiber','Try joining wood, stone and fiber; outcome unknown');
     }
     if(n.energy<60)add('rest','Rest until recovered (energy '+Math.round(n.energy)+'/100)');
-    const recipient=nearestResident(n,residents);
+    const viewForPeers={world,clock:world.now};
+    const visiblePeer=p=>sameLevel(n,p)&&canReach(p)&&
+      (!root.Perception||root.Perception.canSee(viewForPeers,n,p));
+    const recipient=nearestResident(n,residents,p=>visiblePeer(p)&&roomFor(p,'food')>0);
     if(recipient&&n.inventory.food>0&&roomFor(recipient,'food')>0)
       add('share_food','Offer one carried food to nearby '+recipient.name,recipient,recipient.id);
     // A donation is offered only on visual evidence of unfinished physical
@@ -271,15 +282,16 @@
           ' to support visible unfinished building by '+builder.name,builder,builder.id);
       }
     }
-    const other=nearestResident(n,residents,p=>!p.task&&!p.plan&&
+    const other=nearestResident(n,residents,p=>socialReady(p)&&p.needs.social>=45&&
+      (root.Agency?.relationship(p,n.id,world.now).tension??0)<3&&
+      visiblePeer(p)&&!p.task&&!p.plan&&
       !p.path?.length&&!p.peerPending&&!p.peerReservedFor);
-    if(other && world.now-(n.lastPeerAt ?? -100000)>=90)
+    if(other && socialReady(n)&&world.now-(n.lastPeerAt ?? -100000)>=90)
       add('socialize','Seek out '+other.name+' and initiate a real conversation',other,other.id);
     if(n.energy>=20&&!n.workpiece&&!n.task&&!n.plan&&canTeachFlask(n)){
-      const student=nearestResident(n,residents,p=>p.alive!==false&&
-       p.energy>=20&&p.needs.curiosity>=45&&!p.task&&!p.plan&&!p.path?.length&&
-       !p.peerPending&&!p.peerReservedFor&&
-       !p.knowledge?.recipes?.includes('flask')&&canReach(p));
+      const student=nearestResident(n,residents,p=>visiblePeer(p)&&socialReady(p)&&
+       p.needs.curiosity>=45&&!p.task&&!p.plan&&!p.path?.length&&
+       !p.peerPending&&!p.peerReservedFor&&!p.knowledge?.recipes?.includes('flask'));
       if(student)
        add('teach_flask','Explain the tested sealing method using a real flask to '+student.name,
         student,student.id);
@@ -543,8 +555,7 @@
         Math.round(n.needs.hunger);
     }else if(task.key==='teach_flask'){
       const student=residents.find(p=>p.id===task.ref);
-      if(!student||student===n||student.alive===false||!sameLevel(n,student)||
-       distance(n,student)>2||student.energy<20||student.needs.curiosity<45||
+      if(!socialContact(world,n,student)||!socialReady(student)||student.needs.curiosity<45||
        student.task||student.plan||student.path?.length||
        student.peerPending||student.peerReservedFor||
        student.knowledge?.recipes?.includes('flask')||!canTeachFlask(n))
@@ -552,20 +563,22 @@
       student.knowledge.recipes.push('flask');
       n.needs.social=clamp(n.needs.social-14);
       student.needs.social=clamp(student.needs.social-10);
+      root.Agency?.socialEvent(student,n.id,task.key,world.now);
       message='Explained tested flask sealing steps to '+student.name;
     }else if(task.key==='give_wood'||task.key==='give_fiber'){
       const kind=task.key.slice(5),partner=residents.find(p=>p.id===task.ref);
-      if(!partner||partner===n||distance(n,partner)>2||
+      if(!socialContact(world,n,partner)||
        n.needs.thirst>=85||n.needs.hunger>=85||n.inventory[kind]<1||
        roomFor(partner,kind)<1||!witnessedHomeWork(n,partner,world))
        return {ok:false,message:'BUILD_HELP_UNAVAILABLE: no witnessed active building or free material capacity'};
       n.inventory[kind]--;partner.inventory[kind]++;
       n.needs.social=clamp(n.needs.social-7);
       partner.needs.social=clamp(partner.needs.social-4);
+      root.Agency?.socialEvent(partner,n.id,task.key,world.now);
       message='Gave one real '+kind+' to '+partner.name+' for unfinished construction';
     }else if(task.key==='share_food'||task.key==='socialize'){
       const other=residents.find(v=>v.id===task.ref);
-      if(!other||distance(n,other)>2)return {ok:false,message:'The other resident moved away'};
+      if(!socialContact(world,n,other))return {ok:false,message:'The other resident is out of contact'};
       if(task.key==='share_food'){
         if(n.inventory.food<1)return {ok:false,message:'No food left to share'};
         if(!other.bio||!n.bio ||roomFor(other,'food')<1)
@@ -578,17 +591,14 @@
         n.inventory.food--;other.inventory.food++;
         n.needs.social=clamp(n.needs.social-15);
         other.needs.social=clamp(other.needs.social-10);
+        root.Agency?.socialEvent(other,n.id,task.key,world.now);
         message='Shared food with '+other.name;
       }else{
         n.needs.social=clamp(n.needs.social-32);
         other.needs.social=clamp(other.needs.social-16);
         message='Spent time with '+other.name;
       }
-      // Talk alone is not proof of friendship. Cooperative material acts
-      // earn trust; dialogue changes needs and memory, not automatic affection.
-      if(task.key==='share_food'){
-        // Transfer is factual; relationship interpretations belong to each actor.
-      }else{
+      if(task.key==='socialize'){
         n.lastPeerAt=world.now;
         other.lastPeerAt=world.now;
       }
@@ -846,5 +856,6 @@
     }));
   }
   root.AgentWorld={KEYS,HARVEST_KINDS,GROUND_KINDS,INVENTORY_KINDS:Object.freeze(Object.keys(ITEM_LOAD)),newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
-    validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById,harvestAmount};
+    validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById,harvestAmount,
+    socialReady,socialContact};
 })(globalThis);
