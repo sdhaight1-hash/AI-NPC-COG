@@ -249,13 +249,15 @@
   }
   return p;
  }
- // Only the water-vessel trial uses bounded speculative scouting. Missing
- // physical actions back off without discarding the unfinished project.
+ // Manufacturing and refilling use the same bounded recovery rules. Neither
+ // may speculate indefinitely about sources hidden from its actor.
+ const RECOVERABLE_WATER_PROJECTS=new Set(['water_vessel','water_supply']);
  const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
  function next(state,n,options=[]){
   const p=sync(state,n);
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')
    return {status:'done'};
+  const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
   if(state.clock<(p.nextAt||0))return {status:'deferred'};
   if(n.task||n.plan||n.path?.length)return {status:'busy'};
   const done=new Set(p.nodes.filter(x=>x.status==='DONE').map(x=>x.id));
@@ -278,24 +280,24 @@
    // Unknown resource locations prompt bounded physical exploration, not an
    // omniscient search query or fictitious harvest.
    const scout=options.find(o=>o.key==='explore');
-   if(scout&&(p.kind!=='water_vessel'||node.scouts<4)){
+   if(scout&&(!recoverable||node.scouts<4)){
     action='explore';option=scout;
    }
   }
   if(!option){
-   if(p.kind==='water_vessel')node.failures=Math.min(100,node.failures+1);
+   if(recoverable)node.failures=Math.min(100,node.failures+1);
    node.status='BLOCKED';
-   node.blockedBy=p.kind==='water_vessel'&&node.scouts>=4&&
-    ['collect_wood','collect_stone','collect_fiber'].includes(action)?
+   node.blockedBy=recoverable&&node.scouts>=4&&
+    ['collect_wood','collect_stone','collect_fiber','fill_water'].includes(action)?
     'SCOUT_LIMIT:'+action:'LEGAL_ACTION_UNAVAILABLE:'+action;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
-   p.nextAt=state.clock+(p.kind==='water_vessel'?waitMinutes(node):5);
+   p.nextAt=state.clock+(recoverable?waitMinutes(node):5);
    history(p,state.clock,'BLOCKED',node);
    return {status:'blocked',reason:p.blockedReason};
   }
   p.status='ACTIVE';p.blockedReason=null;
   node.status='RUNNING';node.blockedBy=null;node.attempts++;
-  if(p.kind==='water_vessel'){
+  if(recoverable){
    if(action==='explore')node.scouts++;
    else if(action===node.action||node.id==='build'&&action==='craft_flask')
     node.scouts=0;
@@ -306,20 +308,21 @@
  function onOutcome(state,n,key,ok){
   const p=n.project;
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')return;
+  const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
   if(ok&&key!=='rest')p.completedActions++;
   const node=p.nodes.find(x=>x.status==='RUNNING'&&
    (x.action===key||p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
   if(!ok){
    if(node){
-    if(p.kind==='water_vessel')node.failures=Math.min(100,node.failures+1);
+    if(recoverable)node.failures=Math.min(100,node.failures+1);
     node.status='BLOCKED';node.blockedBy='WORLD_ACTION_FAILED:'+key;
     history(p,state.clock,'FAILED',node);
    }
    p.status='BLOCKED';p.blockedReason=node?.blockedBy||'WORLD_ACTION_FAILED';
-   p.nextAt=state.clock+(p.kind==='water_vessel'&&node?waitMinutes(node):5);
+   p.nextAt=state.clock+(recoverable&&node?waitMinutes(node):5);
   }
   else {
-   if(node&&p.kind==='water_vessel')node.failures=0;
+   if(node&&recoverable)node.failures=0;
    p.nextAt=state.clock+1;
   }
   sync(state,n);
