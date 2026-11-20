@@ -129,7 +129,7 @@ function restore(state,saved){
    root.EvidenceMemory?.restore(n,old.evidenceMemory,state.clock,old.memories);
    Cognition.restoreAttention(n,old.attention,state.clock);
    n.completedProjects=Array.isArray(old.completedProjects)?
-    old.completedProjects.filter(x=>x&&['shelter','campfire','workbench','storage','water_vessel','water_supply'].includes(x.kind)&&
+    old.completedProjects.filter(x=>x&&['shelter','campfire','workbench','storage','water_vessel','water_supply','home'].includes(x.kind)&&
      Number.isFinite(x.startedAt)&&Number.isFinite(x.finishedAt)&&x.finishedAt<=state.clock&&
      Number.isInteger(x.actions)&&x.actions>=0).slice(-12)
      .map(x=>({kind:x.kind,startedAt:x.startedAt,finishedAt:x.finishedAt,
