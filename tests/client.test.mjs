@@ -50,7 +50,7 @@ function makeBrowser(options={}){
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,drawConstructionProjection,'+
-  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity,modelDecisionBasis,modelChoiceStillRelevant,Reservations};',context);
+  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity,modelDecisionBasis,modelChoiceStillRelevant,Reservations,Projects};',context);
  const launchedSpeed=context.exposed.state.speed;
  // Most tests explicitly exercise a one-minute-per-second physics fixture,
  // independently from the user-facing default playback preference.
@@ -959,4 +959,36 @@ test('a legal model action is counted only after it starts through the world run
  assert.equal(b.activity(n).decisions,1);
  assert.equal(n.task?.key,'forage');
  assert.equal(source.stock,initial,'An accepted model decision has not executed its physical effects');
+});
+
+test('a blocked water project leaves the resident free to forage in both browser modes',async()=>{
+ for(const connected of [false,true]){
+  let modelCalls=0;
+  const b=makeBrowser({fetch:async url=>{
+   if(url==='/api/decide')modelCalls++;
+   return {ok:true,json:async()=>({connected})};
+  }});
+  await new Promise(resolve=>setImmediate(resolve));
+  const s=b.state,n=s.npcs[0];
+  s.npcs=[n];
+  const source=s.world.nodes.find(x=>x.kind==='food'&&x.stock>=2);
+  assert.ok(source);
+  Object.assign(n,{x:source.x,y:source.y,z:source.z||0,energy:100,thoughtAt:s.clock});
+  Object.assign(n.needs,{hunger:64,thirst:20,social:0,curiosity:0});
+  n.bio.hydrationBudgetMl=2400;
+  const p=b.Projects.create(s,n,'water_vessel',false);
+  p.status='BLOCKED';p.nextAt=s.clock+60;
+  const wake=p.nextAt,stock=source.stock;
+  s.lastDecisionMs=-5000;
+  b.scheduleIdleAgents();
+  assert.equal(n.task?.key,'forage');
+  assert.equal(n.source,'offline routine');
+  assert.equal(source.stock,stock);
+  b.step(2);
+  assert.ok(source.stock<stock);
+  assert.equal(n.project,p);
+  assert.equal(p.status,'BLOCKED');
+  assert.equal(p.nextAt,wake);
+  assert.equal(modelCalls,0);
+ }
 });
