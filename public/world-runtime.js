@@ -6,7 +6,7 @@
  const DURATION={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
   fill_water:1,eat:3,drink:1,drink_source:1,craft_hatchet:12,
   experiment_wood_stone:15,experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
-  build_fire:20,build_shelter:75,build_tile:18,share_food:2,socialize:3,teach_flask:8,inspect:2,
+  build_fire:20,build_shelter:75,build_tile:18,design_home:8,share_food:2,socialize:3,teach_flask:8,inspect:2,
   drop_wood:2,drop_stone:2,drop_fiber:2,drop_flask:2,pickup_item:2,place_crate:6,stash_wood:2,stash_stone:2,
   stash_fiber:2,withdraw_wood:2,withdraw_stone:2,withdraw_fiber:2,
   build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
@@ -430,14 +430,14 @@
   if(!begin(state,n,result.option.key,'plan',null,hooks))
    finishPlan(state,n,'Subaction unavailable',hooks);
  }
- const RECOVERABLE_WATER_PROJECTS=new Set(['water_vessel','water_supply']);
+ const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
  function advanceProject(state,n,hooks={}){
   if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
   const result=root.Projects.next(state,n,available(state,n));
   if(result.status!=='action')return false;
   const ok=begin(state,n,result.action,'project',null,hooks);
   if(!ok){
-   if(RECOVERABLE_WATER_PROJECTS.has(n.project.kind))
+   if(RECOVERABLE_PROJECTS.has(n.project.kind))
     root.Projects.onOutcome(state,n,result.action,false);
    else {
     n.project.status='BLOCKED';
@@ -492,7 +492,7 @@
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
    (!n.project||n.project.status==='COMPLETED'||
-    (RECOVERABLE_WATER_PROJECTS.has(n.project.kind)&&
+    (RECOVERABLE_PROJECTS.has(n.project.kind)&&
      n.project.status==='BLOCKED'&&
      state.clock<(n.project.nextAt||0)))&&
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
@@ -517,7 +517,7 @@
    if(policy.projects!==false&&root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
-   const waiting=RECOVERABLE_WATER_PROJECTS.has(n.project?.kind)&&
+   const waiting=RECOVERABLE_PROJECTS.has(n.project?.kind)&&
     n.project.status==='BLOCKED'&&state.clock<(n.project.nextAt||0);
    const suspended=n.suspendedActivities?.at(-1);
    const canResume=suspended&&(!waiting||WAITING_ACTIONS.has(suspended.key))&&

@@ -72,6 +72,16 @@
     {id:'fill',requires:[],produces:'two units of carried vessel water',
      action:'fill_water'}
    ]},
+  home:{
+   goal:'A physically enclosed roofed room with a passable doorway',
+   nodes:[
+    {id:'survey',requires:[],produces:'time-costed six-tile local design',
+     action:'design_home'},
+    {id:'thatch',requires:['survey'],produces:'roof binding before walls hide local plants',
+     action:'collect_fiber'},
+    {id:'build',requires:['thatch'],produces:'completed enclosed floor and roof',
+     action:'build_tile'}
+   ]},
   campfire:{
    goal:'A campfire within five tiles',
    nodes:[
@@ -145,6 +155,18 @@
     root.Frontier.distance(state.world,n,s)<2);
    if(id==='build')return isNear(state,n,'crate');
   }
+  if(kind==='home'){
+   const site=n.project?.homeSite;
+   if(!site)return false;
+   if(id==='survey')return [...(state.world.construction?.blueprints||[]),
+    ...(state.world.construction?.tiles||[])].some(t=>
+     t.actorId===n.id&&t.kind==='floor'&&
+     t.x===site.x&&t.y===site.y&&t.z===site.z);
+   if(id==='thatch')return (n.inventory.fiber||0)>=1||
+    (state.world.construction?.tiles||[]).some(t=>t.actorId===n.id&&
+     t.kind==='roof'&&t.x===site.x&&t.y===site.y&&t.z===site.z);
+   if(id==='build')return root.Construction?.sheltered(state.world,site)===true;
+  }
   if(kind==='water_vessel'){
    // Consumed intermediate inputs still count as completed dependencies
    // while the subsequent physical assembly is underway.
@@ -196,6 +218,7 @@
     attempts:0,scouts:0,failures:0,blockedBy:null})),
    completedActions:0,blockedReason:null,nextAt:state.clock,
    history:[]};
+  if(kind==='home')n.project.homeSite=null;
   return n.project;
  }
  function history(p,clock,status,n){
@@ -224,6 +247,13 @@
    return 'shelter';
   }
   if(!isNear(state,n,'campfire'))return 'campfire';
+  const roomNearby=(state.world.construction?.tiles||[]).some(t=>
+   t.kind==='floor'&&root.Frontier.distance(state.world,n,t)<=5&&
+   root.Construction?.sheltered(state.world,t));
+  if(n.knowledge?.recipes?.includes('shelter')&&n.energy>=40&&
+   n.needs.hunger<75&&n.needs.thirst<75&&!roomNearby&&
+   !(n.completedProjects||[]).some(x=>x.kind==='home')&&
+   root.Construction?.compactSite(state.world,n,state.npcs))return 'home';
   if(!isNear(state,n,'workbench'))return 'workbench';
   if(!isNear(state,n,'crate'))return 'storage';
   return null;
@@ -266,13 +296,13 @@
  }
  // Manufacturing and refilling share bounded recovery; neither should
  // keep guessing at a spring the actor has not actually reached.
- const RECOVERABLE_WATER_PROJECTS=new Set(['water_vessel','water_supply']);
+ const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
  const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
  function next(state,n,options=[]){
   const p=sync(state,n);
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')
    return {status:'done'};
-  const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
+  const recoverable=RECOVERABLE_PROJECTS.has(p.kind);
   if(state.clock<(p.nextAt||0))return {status:'deferred'};
   if(n.task||n.plan||n.path?.length)return {status:'busy'};
   const done=new Set(p.nodes.filter(x=>x.status==='DONE').map(x=>x.id));
@@ -284,6 +314,15 @@
   let action=node.action;
   if(p.kind==='water_vessel'&&node.id==='build'&&
    n.knowledge?.recipes?.includes('flask'))action='craft_flask';
+  if(p.kind==='home'&&node.id==='build'){
+   const pending=(state.world.construction?.blueprints||[]).filter(b=>
+    b.actorId===n.id&&p.homeSite&&
+    root.Frontier.distance(state.world,p.homeSite,b)<=1);
+   if(options.some(o=>o.key==='build_tile'&&pending.some(b=>b.id===o.ref)))
+    action='build_tile';
+   else if(pending.some(b=>b.kind!=='roof'))action='collect_wood';
+   else if(pending.some(b=>b.kind==='roof'))action='collect_fiber';
+  }
   if(n.energy<20){
    // A project never forbids bodily recovery.
    if(options.some(o=>o.key==='rest'))action='rest';
@@ -291,7 +330,7 @@
   }
   let option=options.find(o=>o.key===action);
   if(!option&&['collect_wood','collect_stone','collect_fiber',
-   'forage','fill_water'].includes(action)){
+   'forage','fill_water','build_tile'].includes(action)){
    // Unknown resource locations prompt bounded physical exploration, not an
    // omniscient search query or fictitious harvest.
    const scout=options.find(o=>o.key==='explore');
@@ -303,7 +342,7 @@
    if(recoverable)node.failures=Math.min(100,node.failures+1);
    node.status='BLOCKED';
    node.blockedBy=recoverable&&node.scouts>=4&&
-    ['collect_wood','collect_stone','collect_fiber','fill_water'].includes(action)?
+    ['collect_wood','collect_stone','collect_fiber','fill_water','build_tile'].includes(action)?
     'SCOUT_LIMIT:'+action:'LEGAL_ACTION_UNAVAILABLE:'+action;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
    p.nextAt=state.clock+(recoverable?waitMinutes(node):5);
@@ -320,10 +359,18 @@
  function onOutcome(state,n,key,ok,receipt=null){
   const p=n.project;
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')return;
-  const recoverable=RECOVERABLE_WATER_PROJECTS.has(p.kind);
+  const recoverable=RECOVERABLE_PROJECTS.has(p.kind);
   if(ok&&key!=='rest')p.completedActions++;
+  if(p.kind==='home'&&ok&&key==='design_home'&&
+   receipt?.actorId===n.id&&receipt.status==='COMPLETED'){
+   const floor=receipt.delta?.collections?.constructionBlueprints?.added
+    ?.find(t=>t.actorId===n.id&&t.kind==='floor');
+   if(floor)p.homeSite={x:floor.x,y:floor.y,z:floor.z};
+  }
   const node=p.nodes.find(x=>x.status==='RUNNING'&&
    (x.action===key||recoverable&&key==='explore'||
+    p.kind==='home'&&x.id==='build'&&
+     ['collect_wood','collect_fiber'].includes(key)||
     p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
   // An experiment can complete physically yet fail to make a watertight
   // object. Its receipt records the consumed workpiece with no learned method.
@@ -365,6 +412,16 @@
    !Number.isFinite(old.startedAt)||old.startedAt>state.clock)return null;
   if(!['ACTIVE','BLOCKED','COMPLETED'].includes(old.status))return null;
   const p=create(state,n,kind,false);
+  if(kind==='home'&&old.homeSite&&
+   [old.homeSite.x,old.homeSite.y,old.homeSite.z].every(Number.isInteger)&&
+   old.homeSite.x>=0&&old.homeSite.x<state.world.width&&
+   old.homeSite.y>=0&&old.homeSite.y<state.world.height&&
+   old.homeSite.z>=root.Frontier.MIN_Z&&old.homeSite.z<=root.Frontier.MAX_Z&&
+   [...(state.world.construction?.tiles||[]),
+    ...(state.world.construction?.blueprints||[])].some(t=>
+     t.actorId===n.id&&t.kind==='floor'&&
+     t.x===old.homeSite.x&&t.y===old.homeSite.y&&t.z===old.homeSite.z))
+   p.homeSite={x:old.homeSite.x,y:old.homeSite.y,z:old.homeSite.z};
   p.startedAt=old.startedAt;p.status=old.status;
   p.blockedReason=typeof old.blockedReason==='string'?
    old.blockedReason.slice(0,140):null;

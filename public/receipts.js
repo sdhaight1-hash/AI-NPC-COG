@@ -22,6 +22,7 @@
    nodes:Object.fromEntries(state.world.nodes.map(x=>[x.id,x.stock])),
    structures:asMap(state.world.structures),items:asMap(state.world.items),
    constructionTiles:asMap(state.world.construction?.tiles||[]),
+   constructionBlueprints:asMap(state.world.construction?.blueprints||[]),
    observedCount:n.knowledge?.observations?.length||0,
    learnedRecipes:[...(n.knowledge?.recipes||[])],visitedCount:n.visited?.length||0,
    others:Object.fromEntries(state.npcs.filter(a=>a!==n).map(a=>[a.id,{
@@ -34,7 +35,7 @@
  }
  function change(before,after){
   const collections={};
-  for(const kind of ['structures','items','constructionTiles']){
+  for(const kind of ['structures','items','constructionTiles','constructionBlueprints']){
    const a=before[kind],b=after[kind],added=[],removed=[],updated=[];
    for(const id of [...new Set([...Object.keys(a),...Object.keys(b)])].sort()){
     if(!(id in a))added.push(b[id]);

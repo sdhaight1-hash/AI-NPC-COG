@@ -6,7 +6,7 @@
   const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water','drink_source',
     'eat','drink','rest','share_food','socialize','teach_flask','build_fire','craft_hatchet',
-    'build_shelter','build_tile','experiment_wood_stone','experiment_wood_fiber',
+    'build_shelter','build_tile','design_home','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
     'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','drop_stone','drop_fiber','drop_flask','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
@@ -17,6 +17,7 @@
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink_source:'survival',drink:'survival',
     craft_hatchet:'crafting',build_shelter:'building',build_tile:'building',
+    design_home:'building',
     build_cache:'building',inspect:'exploring',
     socialize:'socializing',teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
@@ -297,6 +298,11 @@
       add(job.key,job.when,job.target||null,job.ref||null);
     for(const job of root.Construction?.options(world,n,residents,canReach)||[])
       add(job.key,job.when,job.target,job.ref);
+    if(!n.plan&&(!n.project||n.project.kind==='home')&&
+       n.knowledge?.recipes?.includes('shelter')&&n.energy>=30&&
+       !world.construction?.tiles.some(t=>t.kind==='roof'&&t.actorId===n.id)&&
+       root.Construction?.compactSite(world,n,residents))
+      add('design_home','Survey nearby ground and mark a compact six-tile dwelling');
     const examine=inspectTarget(n,world,canReach);
     if(examine&&n.energy>=10)
       add('inspect','Examine '+describeObject(world,examine).name+
@@ -331,7 +337,12 @@
       return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
-    if(task.key==='build_tile'){
+    if(task.key==='design_home'){
+      const outcome=root.Construction?.designHome(world,n,residents)||
+       {ok:false,message:'Construction kernel unavailable'};
+      if(!outcome.ok)return outcome;
+      message=outcome.message;
+    }else if(task.key==='build_tile'){
       const outcome=root.Construction?.build(world,n,task.ref,residents,task.commandId)||
        {ok:false,message:'Construction kernel unavailable'};
       if(!outcome.ok)return outcome;

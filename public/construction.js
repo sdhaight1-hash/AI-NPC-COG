@@ -48,6 +48,53 @@
   state.blueprints=remaining;
   return true;
  }
+ // A nearby, actually traversable 1-cell dwelling footprint. Design scans
+ // only the actor's immediate two-step surroundings, not hidden world sites.
+ function compactSite(world,n,residents=[]){
+  const constructions=world.construction;
+  if(!constructions||constructions.blueprints.some(b=>b.actorId===n.id))return null;
+  for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
+   const center={x:root.Frontier.wrap(n.x+dx,world.width),
+    y:root.Frontier.wrap(n.y+dy,world.height),z:n.z||0};
+   const ring=[[1,0],[-1,0],[0,1],[0,-1]].map(([sx,sy])=>({
+    x:root.Frontier.wrap(center.x+sx,world.width),
+    y:root.Frontier.wrap(center.y+sy,world.height),z:center.z}));
+   const footprint=[center,...ring];
+   if(footprint.some(p=>!validPoint(world,p)||
+    world.nodes.some(o=>o.x===p.x&&o.y===p.y&&(o.z||0)===p.z)||
+    world.items.some(o=>o.x===p.x&&o.y===p.y&&(o.z||0)===p.z)||
+    world.structures.some(o=>o.x===p.x&&o.y===p.y&&(o.z||0)===p.z)||
+    residents.some(o=>o!==n&&o.alive!==false&&o.x===p.x&&
+     o.y===p.y&&(o.z||0)===p.z)||
+    [...constructions.blueprints,...constructions.tiles].some(t=>
+     t.x===p.x&&t.y===p.y&&t.z===p.z)))continue;
+   return {center,ring};
+  }
+  return null;
+ }
+ function designHome(world,n,residents=[]){
+  if(!n.knowledge?.recipes?.includes('shelter')||n.energy<30)
+   return {ok:false,message:'CONSTRUCTION_METHOD_OR_ENERGY_MISSING'};
+  const site=compactSite(world,n,residents);
+  if(!site||world.construction.blueprints.length+6>MAX_PLANS)
+   return {ok:false,message:'NO_CLEAR_LOCAL_HOUSE_SITE'};
+  const nextId=world.construction.nextId,created=[];
+  const sequence=[['floor',site.center],
+   ...site.ring.map((p,i)=>[i===3?'door':'wall',p]),['roof',site.center]];
+  for(const [kind,position] of sequence){
+   const result=plan(world,kind,position,n.id,world.now);
+   if(!result){
+    world.construction.blueprints=world.construction.blueprints
+     .filter(b=>!created.includes(b));
+    world.construction.nextId=nextId;
+    return {ok:false,message:'HOUSE_DESIGN_REJECTED'};
+   }
+   created.push(result);
+  }
+  n.energy=Math.max(0,n.energy-4);
+  return {ok:true,site:site.center,
+   message:'Surveyed and planned six separate floor/barrier/roof tile jobs'};
+ }
  function canBuild(world,n,b,residents=[]){
   if(!b||b.status!=='PLANNED'||b.actorId!==n.id||
    !world.construction?.blueprints.includes(b))
@@ -197,5 +244,5 @@
   world.construction=next;
  }
  root.Construction={LAYERS,MAX_PLANS,MAX_TILES,fresh,plan,cancel,cost,
-  canBuild,options,build,sheltered,restore};
+  canBuild,options,build,compactSite,designHome,sheltered,restore};
 })(globalThis);
