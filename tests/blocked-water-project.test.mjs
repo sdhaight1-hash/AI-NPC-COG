@@ -84,3 +84,22 @@ test('repeated unrewarded exploration is bounded and a new reachable source can 
  assert.equal(p.status,'ACTIVE');
  assert.equal(p.nodes.find(x=>x.id==='fiber').scouts,0);
 });
+
+test('depleted source at physical completion produces a failed receipt and deferred project',()=>{
+ const {c,s,n,p}=setup();
+ const fiber=s.world.nodes.find(x=>x.kind==='fiber'&&x.stock>=3);
+ assert.ok(fiber);
+ fiber.x=n.x;fiber.y=n.y;fiber.z=n.z||0;
+ assert.equal(c.WorldRuntime.advanceProject(s,n),true);
+ assert.equal(n.task.key,'collect_fiber');
+ const command=n.task.commandId;
+ fiber.stock=0; // External depletion between reservation and physical commitment.
+ const stock=copy(n.inventory);
+ for(let i=0;i<5&&n.task;i++)c.Simulation.advance(s,1);
+ const failure=s.receipts.find(x=>x.commandId===command&&x.status==='FAILED');
+ assert.ok(failure,'The contested physical action must fail authoritatively');
+ assert.equal(p.status,'BLOCKED');
+ assert.equal(p.nodes.find(x=>x.id==='fiber').failures,1);
+ assert.ok(p.nextAt>s.clock,'A failed attempt must not immediately repeat');
+ assert.deepEqual(copy(n.inventory),stock,'Failed physical work never mints materials');
+});
