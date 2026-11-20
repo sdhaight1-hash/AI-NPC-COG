@@ -66,6 +66,12 @@
     {id:'build',requires:['cord','blade','wood'],
      produces:'a physically crafted portable vessel',action:'craft_hollow_wood_trial'}
    ]},
+  water_supply:{
+   goal:'Carry a usable freshwater reserve in a real vessel',
+   nodes:[
+    {id:'fill',requires:[],produces:'two units of carried vessel water',
+     action:'fill_water'}
+   ]},
   campfire:{
    goal:'A campfire within five tiles',
    nodes:[
@@ -150,6 +156,13 @@
    if(id==='wood')return have('wood',1)||done;
    if(id==='build')return done;
   }
+  if(kind==='water_supply'){
+   // The goal is portable liquid, not legacy loose-water counts or a
+   // world-source stock that the actor might never have visited.
+   const filled=(n.craftedItems||[]).filter(item=>item.kind==='flask')
+    .reduce((sum,item)=>sum+(Number.isInteger(item.waterUnits)?item.waterUnits:0),0);
+   if(id==='fill')return have('flask',1)&&filled>=2;
+  }
   if(kind==='campfire'){
    if(id==='wood')return have('wood',2)||knows('campfire');
    if(id==='stone')return have('stone',1);
@@ -198,6 +211,10 @@
   if((n.inventory.flask||0)===0&&n.needs.thirst>=45&&n.needs.thirst<85&&
    (n.bio?.hydrationBudgetMl||0)>=1400&&n.energy>=25&&
    n.needs.hunger<85&&hasWaterEvidence)return 'water_vessel';
+  // An empty vessel is useful only after water is physically collected.
+  // Personal sight or inspection, not hidden stock, gives a destination.
+  if((n.inventory.flask||0)>0&&root.Crafting.vesselRoom(n)>0&&
+   (n.inventory.water||0)<2&&hasWaterEvidence)return 'water_supply';
   // Needs and temperament choose priority, not permission to bypass the world.
   if(!isNear(state,n,'shelter')){
    if(/curious|adventurous|expressive/.test(trait)&&
@@ -223,7 +240,8 @@
  function sync(state,n){
   const p=n.project;
   if(!p||p.status==='ABANDONED')return p;
-  if(p.status==='COMPLETED'&&!predicate(state,n,p.kind,'build'))
+  const terminal=p.kind==='water_supply'?'fill':'build';
+  if(p.status==='COMPLETED'&&!predicate(state,n,p.kind,terminal))
    p.status='ACTIVE';
   const byId=new Map(p.nodes.map(x=>[x.id,x]));
   for(const node of p.nodes){
@@ -236,7 +254,7 @@
     node.status='PENDING';
    }
   }
-  const finish=byId.get('build');
+  const finish=byId.get(terminal);
   if(finish?.status==='DONE'){
    p.status='COMPLETED';p.blockedReason=null;
    history(p,state.clock,'COMPLETED',finish);
