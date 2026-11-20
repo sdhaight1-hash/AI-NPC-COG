@@ -15,6 +15,8 @@ The field catalog organizes survival and civilization content by stable ID. Open
 | [Cataclysm: Dark Days Ahead JSON reference](https://docs.cataclysmdda.org/JSON/JSON_INFO.html), [pockets](https://docs.cataclysmdda.org/JSON/ITEM.html) | Use stable data IDs, explicit tool capabilities and defined container acceptance. Keep manufacturing recipes distinct from practice or research. |
 | [UnReal World hunting](https://www.unrealworld.fi/wiki/index.php?title=Hunting) | Model tracking, capture, butchery, preservation and seasonality as separate actions with measurable outcomes. |
 
+For resident decision-making, physical work, social learning, and the first acceptance scenario, see [Crafting decisions for autonomous residents](npc-crafting-and-learning.md).
+
 ## Runtime boundaries
 
 - `ContentCatalog` is a versioned, immutable definition store shared by browser tooling and test fixtures. Entity identity, quantity, condition, owners and reservations belong to runtime state. Design rates and process quantities are game balancing defaults.
