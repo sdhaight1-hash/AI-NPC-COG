@@ -10,6 +10,7 @@
 <header class="topbar">
  <div class="brand"><div class="mark">◈</div><div><strong>AI·NPC·COG</strong><small>Emergent Civilization Observatory</small></div></div>
  <div class="top-right"><span class="chip" id="modelStatus"><i class="status-dot"></i> Checking local model…</span>
+ <button id="catalogOpen" class="control" type="button" aria-haspopup="dialog">Field catalog</button>
  <span class="chip muted" id="modelName">Rein-NPC-4B · Shared inference</span>
  <a href="https://github.com/sdhaight1-hash/AI-NPC-COG" target="_blank" rel="noopener">GitHub ↗</a></div>
 </header>
@@ -44,6 +45,7 @@
     <button id="followBtn" class="control">Follow selected</button>
     <label class="switch"><input id="autoAI" type="checkbox" checked><span>Autonomous decisions</span></label>
     <button id="physicsDebug" class="control">Grid: Off</button>
+    <label class="switch"><input id="vectorArt" type="checkbox" checked><span>Vector terrain and objects</span></label>
     <button id="artToggle" class="control">Art: Original</button>
     <button id="newIsland" class="control">New world</button>
     <button id="resetBtn" class="control reset">Reset</button>
@@ -130,6 +132,23 @@
   </div>
  </aside>
 </main>
+<dialog id="catalog" aria-labelledby="catalogTitle">
+ <header class="catalog-header">
+  <h2 id="catalogTitle">Field catalog</h2>
+  <form method="dialog"><button class="control" type="submit">Close</button></form>
+ </header>
+ <div class="catalog-filters">
+  <label>Search <input id="catalogQuery" type="search" placeholder="Wood, ore, mill…"></label>
+  <label>Category <select id="catalogCategory"><option value="">All categories</option></select></label>
+  <span id="catalogCount" role="status"></span>
+ </div>
+ <div class="catalog-layout">
+  <nav id="catalogResults" aria-label="Catalog entries"></nav>
+  <section id="catalogDetail" aria-label="Entry details"></section>
+ </div>
+</dialog>
+<script src="/content-catalog.js" defer></script>
+<script src="/content-art.js" defer></script>
 <script src="/pixel-art.js" defer></script>
 <script src="/frontier.js" defer></script>
 <script src="/construction.js" defer></script>
@@ -149,5 +168,6 @@
 <script src="/simulation.js" defer></script>
 <script src="/persistence.js" defer></script>
 <script src="/app.js" defer></script>
+<script src="/catalog-ui.js" defer></script>
 </body>
 </html>

@@ -92,3 +92,7 @@ Rein retains its 64-token action scoring; Hivemind selects an exact legal key
 by chat and never fabricates comparable probabilities. Both use identical
 authoritative world rules and save data. Invalid outputs are rejected.
 The UI identifies the active model. Comparative performance is not yet benchmarked.
+
+### Field catalog
+
+Open **Field catalog** to search materials, flora, fauna, tiles, tools, and workstations. Entries list related processes and distinguish simulated recipes from designs. **Vector terrain and objects** switches the live surface map between the new path art and the legacy presentation. See the [content and production design](docs/field-catalog-and-production.md).
