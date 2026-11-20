@@ -85,6 +85,8 @@
     ['wood','collect_wood'],['stone','collect_stone'],['fiber','collect_fiber']];
    const avoided=new Set((n.agency?.beliefs||[]).filter(b=>
     (b.kind==='stone'&&b.status==='depleted')||
+    (b.kind==='water'&&b.status==='depleted'&&
+     state.clock-b.at>=0&&state.clock-b.at<60)||
     (b.status==='failed'&&state.clock-b.at>=0&&state.clock-b.at<60)).map(b=>b.ref));
    const canTake=(kind,action)=>action==='drink_source'||root.AgentWorld.roomFor(n,kind)>0;
    for(const [kind,key] of pairs){
@@ -123,6 +125,26 @@
      !reachability(state,n)(target))continue;
     scoped.push({key,when:'Investigate unverified '+claim.kind+' source reported by another resident',
      target,ref:target.id});
+   }
+  }
+  // Sight alone can locate a landmark without teaching its live stock.
+  // Offer the same physical return trip even if the last seen spring has
+  // since run dry; the authoritative harvest then provides the correction.
+  if(!scoped.some(o=>o.key==='fill_water')&&n.energy>=12&&
+   root.AgentWorld.vesselRoom(n)>0&&root.AgentWorld.roomFor(n,'water')>0){
+   for(const sight of (n.knowledge?.sightings||[]).slice().reverse()){
+    if(sight.kind!=='water'||sight.at>state.clock)continue;
+    // An actual failed visit beats an old sighting for a bounded interval.
+    // Later rain/groundwater replenishment may justify checking again.
+    if((n.agency?.beliefs||[]).some(b=>b.ref===sight.id&&b.kind==='water'&&
+     b.status==='depleted'&&state.clock-b.at>=0&&state.clock-b.at<60))continue;
+    const spring=state.world.nodes.find(x=>x.id===sight.id&&x.kind==='water'&&
+     x.x===sight.x&&x.y===sight.y&&(x.z||0)===(sight.z||0));
+    if(!spring||distance(state,n,spring)>18||!reachability(state,n)(spring))continue;
+    scoped.push({key:'fill_water',
+     when:'Return to a personally seen freshwater source; current supply unknown',
+     target:spring,ref:spring.id});
+    break;
    }
   }
   return scoped;
@@ -305,6 +327,11 @@
  }
  function finishPlan(state,n,reason,hooks={}){
   if(!n.plan)return;
+  // The physical experiment can finish while its practical design fails.
+  // Preserve that distinction in the actor's own goal memory.
+  if(reason==='Plan completed'&&n.plan.key==='craft_project'&&
+   n.project?.blockedReason==='TRIAL_LEAKED')
+   reason='Experimental seal leaked; practical goal unresolved';
   const success=reason==='Plan completed';
   root.Agency.finish(n,success,state.clock);
   remember(state,n,'Plan '+n.plan.key+': '+reason,
@@ -350,7 +377,7 @@
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
   if(finished.source==='project'||(n.project&&finished.source==='plan'&&
     finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
-   root.Projects?.onOutcome(state,n,finished.key,outcome.ok);
+   root.Projects?.onOutcome(state,n,finished.key,outcome.ok,outcome.receipt);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
@@ -385,15 +412,20 @@
   if(!begin(state,n,result.option.key,'plan',null,hooks))
    finishPlan(state,n,'Subaction unavailable',hooks);
  }
+ const RECOVERABLE_WATER_PROJECTS=new Set(['water_vessel','water_supply']);
  function advanceProject(state,n,hooks={}){
   if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
   const result=root.Projects.next(state,n,available(state,n));
   if(result.status!=='action')return false;
   const ok=begin(state,n,result.action,'project',null,hooks);
   if(!ok){
-   n.project.status='BLOCKED';
-   n.project.blockedReason='ACTION_START_REJECTED:'+result.action;
-   n.project.nextAt=state.clock+5;
+   if(RECOVERABLE_WATER_PROJECTS.has(n.project.kind))
+    root.Projects.onOutcome(state,n,result.action,false);
+   else {
+    n.project.status='BLOCKED';
+    n.project.blockedReason='ACTION_START_REJECTED:'+result.action;
+    n.project.nextAt=state.clock+5;
+   }
   }
   return ok;
  }
@@ -442,7 +474,8 @@
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
    (!n.project||n.project.status==='COMPLETED'||
-    (n.project.kind==='water_vessel'&&n.project.status==='BLOCKED'&&
+    (RECOVERABLE_WATER_PROJECTS.has(n.project.kind)&&
+     n.project.status==='BLOCKED'&&
      state.clock<(n.project.nextAt||0)))&&
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
@@ -457,7 +490,7 @@
    if(policy.projects!==false&&root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
-   const waiting=n.project?.kind==='water_vessel'&&
+   const waiting=RECOVERABLE_WATER_PROJECTS.has(n.project?.kind)&&
     n.project.status==='BLOCKED'&&state.clock<(n.project.nextAt||0);
    const suspended=n.suspendedActivities?.at(-1);
    const canResume=suspended&&(!waiting||WAITING_ACTIONS.has(suspended.key))&&
