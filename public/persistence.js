@@ -59,7 +59,7 @@ function restore(state,saved){
    typeof x.actorId==='string'&&
    (typeof x.commandId==='string'||
     (x.commandId===null&&['DECIDED','REJECTED'].includes(x.status)))&&
-   ['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED','INTERRUPTED','RESUMED'].includes(x.status)).slice(-4096):[];
+   ['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED','INTERRUPTED','RESUMED','ABANDONED'].includes(x.status)).slice(-4096):[];
   state.receiptSeq=Math.max(state.receiptSeq,0,...state.receipts.map(x=>x.sequence));
   const seen=new Set();
   const archived=new Set(saved.dead.filter(v=>v&&typeof v.id==='string').map(v=>v.id));
@@ -96,7 +96,7 @@ function restore(state,saved){
    n.bio=Biology.restore(old.bio,n.inventory.food);
    if(old.activityStats&&typeof old.activityStats==='object'){
     const a=root.WorldRuntime.stats(n);
-    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','errors'])
+    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','abandoned','errors'])
      if(Number.isInteger(old.activityStats[k])&&old.activityStats[k]>=0)
       a[k]=Math.min(old.activityStats[k],10000000);
     if(typeof old.activityStats.last==='string')

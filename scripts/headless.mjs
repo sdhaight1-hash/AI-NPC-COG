@@ -24,7 +24,7 @@ for(let i=0;i<ticks;i++){
 const traceArg=process.argv.find(a=>a.startsWith('--trace='));
 if(traceArg)writeFileSync(traceArg.slice('--trace='.length),
  state.receipts.map(r=>JSON.stringify(r)).join('\n')+'\n');
-const outcomes=Object.fromEntries(['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED']
+const outcomes=Object.fromEntries(['ACCEPTED','DECIDED','REJECTED','COMPLETED','FAILED','INTERRUPTED','RESUMED','ABANDONED']
  .map(status=>[status,state.receipts.filter(r=>r.status===status).length]));
 const sha256=createHash('sha256')
  .update(globalThis.Simulation.canonical(state)).digest('hex');
