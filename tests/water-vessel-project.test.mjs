@@ -42,8 +42,12 @@ test('portable-water need activates only from actor-private evidence and safe en
  n.project=null;
  spring.x=c.Frontier.wrap(n.x+20,s.world.width);
  assert.equal(c.Perception.snapshot(s,n).objects.some(o=>o.kind==='water'),false);
+ assert.equal(c.Projects.maybeStart(s,n)?.kind,'water_vessel',
+  'A genuine firsthand sighting remains personally actionable beyond current vision');
+ n.project=null;
+ n.knowledge.sightings=[];
  assert.notEqual(c.Projects.maybeStart(s,n)?.kind,'water_vessel',
-  'An unseen source absent from personal memory cannot seed the water project');
+  'A source absent from both present perception and personal memory cannot seed the project');
  spring.x=originalX;
  const newNpc=s.npcs[0];
  newNpc.project=null;newNpc.needs.thirst=95;
