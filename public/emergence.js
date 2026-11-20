@@ -6,7 +6,7 @@
   const distance = (a,b) => Frontier.distance({width:Frontier.WIDTH,height:Frontier.HEIGHT},a,b);
   const KEYS = ['forage','collect_wood','collect_stone','collect_fiber','fill_water','drink_source',
     'eat','drink','rest','share_food','socialize','teach_flask','build_fire','craft_hatchet',
-    'build_shelter','experiment_wood_stone','experiment_wood_fiber',
+    'build_shelter','build_tile','experiment_wood_stone','experiment_wood_fiber',
     'experiment_wood_stone_fiber',...Object.keys(root.Crafting.RECIPES).map(id=>'craft_'+id),
     'craft_stage','place_crate','stash_wood','stash_stone','stash_fiber',
     'withdraw_wood','withdraw_stone','withdraw_fiber','inspect','drop_wood','drop_stone','drop_fiber','drop_flask','pickup_item','build_cache','store_wood','retrieve_wood','explore','none'];
@@ -16,7 +16,8 @@
   const sameLevel=(a,b)=>(a.z||0)===(b.z||0);
   const skillNames = {forage:'foraging',collect_wood:'gathering',collect_stone:'gathering',
     collect_fiber:'gathering',fill_water:'survival',drink_source:'survival',drink:'survival',
-    craft_hatchet:'crafting',build_shelter:'building',build_cache:'building',inspect:'exploring',
+    craft_hatchet:'crafting',build_shelter:'building',build_tile:'building',
+    build_cache:'building',inspect:'exploring',
     socialize:'socializing',teach_flask:'socializing',build_fire:'building',explore:'exploring',experiment_wood_stone:'crafting',
     experiment_wood_fiber:'crafting',experiment_wood_stone_fiber:'crafting'};
   function newWorld(seed=Frontier.DEFAULT_SEED) {
@@ -280,6 +281,8 @@
     }
     for(const job of root.Crafting.options(n,world))
       add(job.key,job.when,job.target||null,job.ref||null);
+    for(const job of root.Construction?.options(world,n,residents,canReach)||[])
+      add(job.key,job.when,job.target,job.ref);
     const examine=inspectTarget(n,world,canReach);
     if(examine&&n.energy>=10)
       add('inspect','Examine '+describeObject(world,examine).name+
@@ -314,7 +317,12 @@
       return {ok:false,message:'A real exchange is required before social effects'};
     n.task=null;
     let message='';
-    if(task.key==='place_crate'||/^(stash|withdraw)_(wood|stone|fiber)$/.test(task.key)){
+    if(task.key==='build_tile'){
+      const outcome=root.Construction?.build(world,n,task.ref,residents,task.commandId)||
+       {ok:false,message:'Construction kernel unavailable'};
+      if(!outcome.ok)return outcome;
+      message=outcome.message;
+    }else if(task.key==='place_crate'||/^(stash|withdraw)_(wood|stone|fiber)$/.test(task.key)){
       const result=root.Crafting.interact(n,world,task.key,task.ref);
       if(!result.ok)return result;
       message=result.message;
@@ -665,7 +673,7 @@
     if(n.inventory.food<2&&keys.has('forage'))return 'forage';
     return keys.has('explore')?'explore':'none';
   }
-  function restoreWorld(target,saved,seenVessels=new Set()) {
+  function restoreWorld(target,saved,seenVessels=new Set(),receipts=[]) {
     if(!saved||!Array.isArray(saved.nodes)||!Array.isArray(saved.structures))return;
     const itemIds=new Set();
     target.items=[];
@@ -709,7 +717,7 @@
           old.regrow>=0&&old.regrow<1?old.regrow:0;
       }
     }
-    root.Construction?.restore(target,saved.construction);
+    root.Construction?.restore(target,saved.construction,receipts);
     target.structures=saved.structures.filter(s=>s&&['campfire','shelter','cache','workbench','crate'].includes(s.type)&&
       Number.isInteger(s.x)&&Number.isInteger(s.y)&&s.x>=0&&s.x<target.width&&
       s.y>=0&&s.y<target.height&&Frontier.terrainAt(target,s.x,s.y)!=='water'
