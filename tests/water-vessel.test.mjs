@@ -24,6 +24,7 @@ function fabricate(k,s,n){
   method:'cord',materialQuality:2},{kind:'blade',quality:2,maker:n.id,
   craftedAt:s.clock,method:'blade',materialQuality:2}];
  const before=clone(n.inventory);
+ n.knowledge.recipes.push('flask'); // Physical-custody fixture: method learned beforehand.
  const recipe=k.Crafting.getRecipe('flask');
  assert.ok(recipe);
  assert.equal(recipe.tool,'blade');

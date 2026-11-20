@@ -105,7 +105,7 @@ function restore(state,saved){
    Crafting.restore(n,old,seenVessels);
    n.knowledge={recipes:Array.isArray(old.knowledge?.recipes)?
     [...new Set(old.knowledge.recipes.filter(v=>
-      ['hatchet','campfire','shelter'].includes(v)))]:[],observations:[]};
+      ['hatchet','campfire','shelter','flask'].includes(v)))]:[],observations:[]};
    if(Array.isArray(old.knowledge?.observations))
     n.knowledge.observations=old.knowledge.observations.filter(o=>o&&
      typeof o.id==='string'&&AgentWorld.objectById(state.world,o.id)&&
