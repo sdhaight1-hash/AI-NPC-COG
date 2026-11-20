@@ -305,6 +305,11 @@
  }
  function finishPlan(state,n,reason,hooks={}){
   if(!n.plan)return;
+  // The physical experiment can finish while its practical design fails.
+  // Preserve that distinction in the actor's own goal memory.
+  if(reason==='Plan completed'&&n.plan.key==='craft_project'&&
+   n.project?.blockedReason==='TRIAL_LEAKED')
+   reason='Experimental seal leaked; practical goal unresolved';
   const success=reason==='Plan completed';
   root.Agency.finish(n,success,state.clock);
   remember(state,n,'Plan '+n.plan.key+': '+reason,
@@ -350,7 +355,7 @@
   root.Activities.finish(state,n,outcome.ok,outcome.ok?null:outcome.message);
   if(finished.source==='project'||(n.project&&finished.source==='plan'&&
     finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
-   root.Projects?.onOutcome(state,n,finished.key,outcome.ok);
+   root.Projects?.onOutcome(state,n,finished.key,outcome.ok,outcome.receipt);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
