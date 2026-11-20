@@ -94,4 +94,10 @@ test('a stale firsthand sighting prompts a physical check but cannot create wate
  assert.equal(s.receipts.filter(x=>x.action==='fill_water'&&x.status==='FAILED').length,1);
  assert.equal(n.inventory.water,0);
  assert.equal(n.craftedItems.find(x=>x.kind==='flask').waterUnits,0);
+ assert.equal(n.agency.beliefs.find(x=>x.ref===spring.id)?.status,'depleted');
+ assert.equal(c.WorldRuntime.available(s,n).some(o=>o.key==='fill_water'),false,
+  'Recent direct evidence of depletion must supersede a stale sighting');
+ s.clock+=60;s.world.now=s.clock;
+ assert.ok(c.WorldRuntime.available(s,n).some(o=>o.key==='fill_water'),
+  'Later replenishment can justify rechecking an old freshwater source');
 });
