@@ -34,6 +34,9 @@
   const npc=(kind,quantity)=>({type:'npc',id:n.id,kind,quantity});
   const node=(kind,quantity)=>({type:'node',id:ref,kind,quantity});
   const site=(kind,quantity)=>({type:'structure',id:ref,kind,quantity});
+  // Final wet seal trial claims exactly one existing physical freshwater unit.
+  if(action==='craft_stage'&&root.Crafting?.wetSealPending(n))
+   return typeof ref==='string'?[node('water',1)]:[];
   const harvestKind=root.AgentWorld?.HARVEST_KINDS?.[action];
   if(action==='drink_source'){
    const spring=state.world.nodes.find(x=>x.id===ref&&x.kind==='water');
