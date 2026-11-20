@@ -85,10 +85,13 @@ test('contrasting firsthand trials infer a tentative quality comparison and guid
   craftedAt:s.clock,method:'cord',materialQuality:2});
  assert.ok(c.WorldRuntime.available(s,n).some(x=>x.key==='craft_flask'));
  assert.equal(c.WorldRuntime.begin(s,n,'craft_flask'),true);
- assert.equal(n.workpiece.materialQuality,2);
+ // The initial physical action starts a workpiece after its own timed
+ // commitment, not synchronously when the intention is selected.
+ c.Simulation.advance(s,3);
+ assert.equal(n.workpiece?.materialQuality,2);
  assert.equal(n.inventory.cord,1);
  assert.equal(n.craftedItems.find(x=>x.kind==='cord').quality,1);
- c.Simulation.advance(s,56);
+ c.Simulation.advance(s,53);
  assert.equal(n.inventory.flask,2);
  assert.equal(n.knowledge.recipes.filter(x=>x==='flask').length,1);
  const manufactured=s.receipts.filter(x=>x.action==='craft_stage'&&
