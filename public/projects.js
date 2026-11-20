@@ -72,6 +72,14 @@
     {id:'fill',requires:[],produces:'two units of carried vessel water',
      action:'fill_water'}
    ]},
+  home:{
+   goal:'A physically enclosed roofed room with a passable doorway',
+   nodes:[
+    {id:'survey',requires:[],produces:'time-costed six-tile local design',
+     action:'design_home'},
+    {id:'build',requires:['survey'],produces:'completed enclosed floor and roof',
+     action:'build_tile'}
+   ]},
   campfire:{
    goal:'A campfire within five tiles',
    nodes:[
@@ -145,6 +153,15 @@
     root.Frontier.distance(state.world,n,s)<2);
    if(id==='build')return isNear(state,n,'crate');
   }
+  if(kind==='home'){
+   const site=n.project?.homeSite;
+   if(!site)return false;
+   if(id==='survey')return [...(state.world.construction?.blueprints||[]),
+    ...(state.world.construction?.tiles||[])].some(t=>
+     t.actorId===n.id&&t.kind==='floor'&&
+     t.x===site.x&&t.y===site.y&&t.z===site.z);
+   if(id==='build')return root.Construction?.sheltered(state.world,site)===true;
+  }
   if(kind==='water_vessel'){
    // Consumed intermediate inputs still count as completed dependencies
    // while the subsequent physical assembly is underway.
@@ -196,6 +213,7 @@
     attempts:0,scouts:0,failures:0,blockedBy:null})),
    completedActions:0,blockedReason:null,nextAt:state.clock,
    history:[]};
+  if(kind==='home')n.project.homeSite=null;
   return n.project;
  }
  function history(p,clock,status,n){
@@ -224,6 +242,13 @@
    return 'shelter';
   }
   if(!isNear(state,n,'campfire'))return 'campfire';
+  const roomNearby=(state.world.construction?.tiles||[]).some(t=>
+   t.kind==='floor'&&root.Frontier.distance(state.world,n,t)<=5&&
+   root.Construction?.sheltered(state.world,t));
+  if(n.knowledge?.recipes?.includes('shelter')&&n.energy>=40&&
+   n.needs.hunger<75&&n.needs.thirst<75&&!roomNearby&&
+   !(n.completedProjects||[]).some(x=>x.kind==='home')&&
+   root.Construction?.compactSite(state.world,n,state.npcs))return 'home';
   if(!isNear(state,n,'workbench'))return 'workbench';
   if(!isNear(state,n,'crate'))return 'storage';
   return null;
