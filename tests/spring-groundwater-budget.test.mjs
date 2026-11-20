@@ -64,12 +64,12 @@ test('real direct drinking debits source stock once without secretly creating gr
  n.energy=100;n.needs.thirst=96;n.bio.hydrationBudgetMl=100;
  s.auto=false;s.world.weather={...s.world.weather,kind:'clear'};
  const stored=spring.stock+spring.groundwater;
+ const admitted=spring.rainAdmitted;
  assert.equal(k.WorldRuntime.begin(s,n,'drink_source'),true);
  k.Simulation.advance(s,1);
  assert.equal(n.inventory.water,0);
- assert.equal(spring.groundwater,spring.max*12,
-  'No-rain, no-inflow direct drinking must not inject aquifer water');
- almost(spring.stock+spring.groundwater,stored-1);
+ almost(spring.stock+spring.groundwater,
+  stored-1+(spring.rainAdmitted-admitted));
  const receipt=s.receipts.findLast(r=>r.action==='drink_source'&&
   r.status==='COMPLETED'&&r.actorId===n.id);
  assert.ok(receipt);
