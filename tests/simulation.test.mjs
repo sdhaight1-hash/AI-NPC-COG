@@ -17,10 +17,11 @@ function kernels(){
 const digest=(runtime,state)=>createHash('sha256')
  .update(runtime.Simulation.canonical(state)).digest('hex');
 function equipFlask(n,clock){
- n.inventory.flask=1;
+ n.inventory.flask=1;n.looseWater=0;
  n.craftedItems ||= [];
  n.craftedItems.push({kind:'flask',quality:2,maker:n.id,
-  craftedAt:clock,method:'flask',materialQuality:2});
+  craftedAt:clock,method:'flask',materialQuality:2,
+  vesselId:'vessel_legacy_'+n.id+'_0',waterUnits:0});
 }
 function fixture(k){
  const state=k.Simulation.initial(379210);
