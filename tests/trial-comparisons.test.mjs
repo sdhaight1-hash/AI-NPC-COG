@@ -78,10 +78,16 @@ test('contrasting firsthand trials infer a tentative quality comparison and guid
  assert.match(denied.message,/tested.*leak/i);
  assert.deepEqual(copy(n.inventory),before,'Rejecting a known-bad binding spends nothing');
  assert.equal(n.workpiece,null);
- // Physical replacement with a better grade permits deliberate manufacture.
- n.craftedItems.find(x=>x.kind==='cord').quality=2;
+ // When both grades are physically carried, evidence chooses the stronger
+ // one; the weak cord remains in inventory instead of being silently upgraded.
+ n.inventory.cord++;
+ n.craftedItems.push({kind:'cord',quality:2,maker:n.id,
+  craftedAt:s.clock,method:'cord',materialQuality:2});
  assert.ok(c.WorldRuntime.available(s,n).some(x=>x.key==='craft_flask'));
  assert.equal(c.WorldRuntime.begin(s,n,'craft_flask'),true);
+ assert.equal(n.workpiece.materialQuality,2);
+ assert.equal(n.inventory.cord,1);
+ assert.equal(n.craftedItems.find(x=>x.kind==='cord').quality,1);
  c.Simulation.advance(s,56);
  assert.equal(n.inventory.flask,2);
  assert.equal(n.knowledge.recipes.filter(x=>x==='flask').length,1);
