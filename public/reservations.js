@@ -153,15 +153,28 @@
  function restore(state,saved){
   state.reservations=[];state.reservationSeq=Number.isSafeInteger(saved?.reservationSeq)&&
    saved.reservationSeq>=0?saved.reservationSeq:0;
+  const actors=new Map(state.npcs.filter(n=>n.alive!==false).map(n=>[n.id,n]));
+  const ids=new Set();
   for(const row of (Array.isArray(saved?.reservations)?saved.reservations:[]).slice(-MAX_ACTIVE)){
    if(!clean(row)||row.status!=='ACTIVE'||typeof row.actorId!=='string'||
-    !state.npcs.some(n=>n.id===row.actorId)||typeof row.commandId!=='string'||
+    !actors.has(row.actorId)||typeof row.commandId!=='string'||
     !/^cmd_[1-9]\d*$/.test(row.commandId)||
-    !Number.isFinite(row.expiresAt)||row.expiresAt<=state.clock)continue;
-   if(row.type==='npc'&&row.id!==row.actorId)continue;
-   if(available(state,row)<row.quantity)continue;
-   const id=Number(String(row.idTag||'').slice(4));
-   state.reservationSeq=Math.max(state.reservationSeq,Number.isSafeInteger(id)?id:0);
+    !/^res_[1-9]\d*$/.test(row.idTag||'')||ids.has(row.idTag)||
+    !Number.isFinite(row.acquiredAt)||row.acquiredAt>state.clock||
+    !Number.isFinite(row.expiresAt)||row.expiresAt<=state.clock||
+    row.expiresAt-row.acquiredAt>1440||row.expiresAt<=row.acquiredAt)continue;
+   const actor=actors.get(row.actorId);
+   const matching=[actor.task,...(actor.suspendedActivities||[])].find(a=>
+    a?.commandId===row.commandId&&a.reservationIds?.includes(row.idTag));
+   // A saved lot is authoritative only for a genuinely live or interrupted
+   // command that owns its exact claim token. No ghost reservation survives.
+   if(!matching||(row.type==='npc'&&row.id!==row.actorId)||
+    (row.type!=='npc'&&matching.ref!==row.id)||
+    available(state,row)<row.quantity)continue;
+   const id=Number(row.idTag.slice(4));
+   if(!Number.isSafeInteger(id)||id<=0)continue;
+   ids.add(row.idTag);
+   state.reservationSeq=Math.max(state.reservationSeq,id);
    state.reservations.push({...row,status:'ACTIVE'});
   }
  }
