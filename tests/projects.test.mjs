@@ -226,3 +226,58 @@ test('completed projects are archived before an NPC chooses a different ambition
  assert.equal(saved.project.kind,'shelter');
  assert.equal(saved.completedProjects[0].kind,'campfire');
 });
+
+test('project scouting receipts identify the missing step after a checkpoint restart',()=>{
+ const {c,s,n}=setup();
+ for(const source of s.world.nodes)if(source.kind==='wood'){source.stock=0;source.regrow=0;}
+ c.Projects.create(s,n,'shelter');
+ assert.equal(c.WorldRuntime.advanceProject(s,n),true);
+ assert.equal(n.task.key,'explore');
+ const command=n.task.commandId;
+ const started=s.receipts.find(r=>r.commandId===command&&r.status==='ACCEPTED');
+ assert.equal(started.context.projectId,n.id+':shelter:'+n.project.startedAt);
+ assert.equal(started.context.projectKind,'shelter');
+ assert.equal(started.context.projectNodeId,'wood');
+ const saved=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ const restored=c.Simulation.initial(379210);restored.auto=false;
+ assert.equal(c.Persistence.restore(restored,saved),true);
+ tick(c,restored,20);
+ const completed=restored.receipts.find(r=>r.commandId===command&&r.status==='COMPLETED');
+ assert.ok(completed);
+ assert.equal(completed.context.projectId,started.context.projectId);
+ assert.equal(completed.context.projectNodeId,'wood');
+});
+
+test('a campfire stone search backs off after four completed scouts and reopens on firsthand stone',()=>{
+ const {c,s,n}=setup();
+ s.npcs=[n];
+ n.inventory.wood=2;
+ const deposits=s.world.nodes.filter(o=>o.kind==='stone');
+ const source=deposits.find(o=>o.stock>=2);
+ const originalStock=source.stock;
+ for(const stone of deposits)stone.stock=0;
+ c.Projects.create(s,n,'campfire');
+ const stone=n.project.nodes.find(node=>node.id==='stone');
+ for(let i=0;i<150&&n.project.status!=='BLOCKED';i++)tick(c,s);
+ assert.equal(n.project.status,'BLOCKED');
+ assert.equal(n.project.blockedReason,'stone:SCOUT_LIMIT:collect_stone');
+ assert.equal(stone.scouts,4);
+ assert.equal(s.receipts.filter(r=>r.actorId===n.id&&r.action==='explore'&&
+  r.status==='COMPLETED'&&r.context?.projectNodeId==='stone').length,4);
+ assert.equal(c.WorldRuntime.projectWaiting(s,n),true);
+ const saved=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ const restored=c.Simulation.initial(379210);restored.auto=false;
+ assert.equal(c.Persistence.restore(restored,saved),true);
+ const resident=restored.npcs[0];
+ assert.equal(resident.project.blockedReason,'stone:SCOUT_LIMIT:collect_stone');
+ assert.equal(resident.project.nodes.find(node=>node.id==='stone').scouts,4);
+ // Supply an actual stocked, visible deposit for the second half of the fixture.
+ const visible=restored.world.nodes.find(o=>o.id===source.id);
+ visible.stock=originalStock;
+ Object.assign(resident,{x:visible.x,y:visible.y,z:visible.z||0,energy:100,path:[]});
+ for(let i=0;i<150&&!restored.world.structures.some(x=>x.type==='campfire');i++)tick(c,restored);
+ assert.ok(restored.world.structures.some(x=>x.type==='campfire'));
+ const fire=restored.receipts.find(r=>r.action==='build_fire'&&r.status==='COMPLETED');
+ assert.ok(fire.delta.inventory.some(d=>d.key==='stone'&&d.delta===-1));
+ assert.ok(fire.delta.inventory.some(d=>d.key==='wood'&&d.delta===-2));
+});

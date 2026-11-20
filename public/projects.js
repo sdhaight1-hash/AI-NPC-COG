@@ -295,9 +295,8 @@
   }
   return p;
  }
- // Manufacturing and refilling share bounded recovery; neither should
- // keep guessing at a spring the actor has not actually reached.
- const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
+ // Give supply searches time to discover a new source between project retries.
+ const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home','campfire']);
  const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
  function next(state,n,affordances=[]){
   const p=sync(state,n);
