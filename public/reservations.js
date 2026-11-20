@@ -75,6 +75,8 @@
   if(action==='experiment_wood_stone_fiber')
    return [npc('wood',1),npc('stone',1),npc('fiber',1)];
   if(action==='eat'||action==='share_food')return [npc('food',1)];
+  if(action==='give_wood')return [npc('wood',1)];
+  if(action==='give_fiber')return [npc('fiber',1)];
   if(action==='drink')return [npc('water',1)];
   if(action==='place_crate')return [npc('crate',1)];
   if(action==='store_wood')return [npc('wood',1)];
