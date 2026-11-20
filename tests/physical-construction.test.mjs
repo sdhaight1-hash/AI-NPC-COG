@@ -147,7 +147,7 @@ test('mid-tile checkpoint restores exact work and later validates the built tile
  assert.equal(a.k.Simulation.canonical(a.s.world.construction),
   b.k.Simulation.canonical(restored.world.construction));
  assert.equal(actor.inventory.wood,0);
- assert.equal(restored.world.construction.tiles[0].commandId,b.n.lastActivity.id.slice(4));
+ assert.equal(restored.world.construction.tiles[0].commandId,actor.lastActivity.id.slice(4));
  const savedAgain=copy(b.k.Persistence.save(restored));
  const second=b.k.Simulation.initial(379210);second.auto=false;
  assert.equal(b.k.Persistence.restore(second,savedAgain),true);
