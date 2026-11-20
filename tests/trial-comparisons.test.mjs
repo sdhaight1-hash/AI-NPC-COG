@@ -184,3 +184,38 @@ test('partitioning the same 240 simulated minutes preserves trials, comparison a
  assert.equal(fine.c.Simulation.canonical(fine.c.Persistence.save(fine.s)),
   batched.c.Simulation.canonical(batched.c.Persistence.save(batched.s)));
 });
+
+test('a replacement vessel project defers weak bindings and resumes with a real stronger one',()=>{
+ const {c,s,n}=setup();
+ assert.ok(trial(c,s,n,1));
+ assert.ok(trial(c,s,n,2));
+ assert.equal(c.WorldRuntime.begin(s,n,'drop_flask'),true);
+ c.Simulation.advance(s,2);
+ assert.equal(n.inventory.flask,0);
+ assert.equal(s.world.items.filter(x=>x.kind==='flask').length,1);
+ furnish(n,s.clock,1);
+ const p=c.Projects.create(s,n,'water_vessel');
+ const supplied=copy(n.inventory);
+ c.Simulation.advance(s,1);
+ assert.equal(p.status,'BLOCKED');
+ assert.equal(p.blockedReason,'build:TESTED_SEAL_RISK');
+ assert.ok(p.nextAt>s.clock);
+ assert.deepEqual(copy(n.inventory),supplied);
+ assert.equal(n.workpiece,null);
+ const blockedUntil=p.nextAt;
+ c.Simulation.advance(s,5);
+ assert.equal(p.nextAt,blockedUntil);
+ assert.equal(n.task,null);
+ assert.deepEqual(copy(n.inventory),supplied);
+ n.inventory.cord++;
+ n.craftedItems.push({kind:'cord',quality:2,maker:n.id,craftedAt:s.clock,
+  method:'cord',materialQuality:2});
+ c.Simulation.advance(s,blockedUntil-s.clock+3);
+ assert.equal(n.workpiece?.materialQuality,2);
+ assert.equal(n.inventory.cord,1,'The rejected grade remains an unchanged physical item');
+ assert.equal(n.craftedItems.find(x=>x.kind==='cord').quality,1);
+ c.Simulation.advance(s,53);
+ assert.equal(p.status,'COMPLETED');
+ assert.equal(n.inventory.flask,1);
+ assert.equal(s.world.items.filter(x=>x.kind==='flask').length,1);
+});

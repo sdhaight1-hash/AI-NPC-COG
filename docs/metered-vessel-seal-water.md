@@ -8,6 +8,8 @@ The existing `Reservations` ledger exclusively claims **one real water unit** at
 
 No spring, no private source evidence, lost source stock, a rival reservation, tool loss or incomplete activity means **no wet completion**, no material or workpiece advancement from the rejected wet step, and no extra flask. Source stock regenerates only through the existing finite world regeneration rules; this patch adds no extra spawn.
 
+When a source allocation fails, the resident temporarily sets that spring aside. Only contact with an empty spring records depletion. A remote rejection records failed access without revealing the stock or the reason for the rejection. The vessel project resumes its existing workpiece at another reachable, personally known spring. With no legal destination, it can scout under its existing four-trip limit and then backs off with a `seal_test_water` prerequisite. Searching for water consumes no replacement wood or cord.
+
 ## Validation
 
 `tests/seal-water-conservation.test.mjs` covers a completed leak and successful seal, exact one-unit receipts, a dry source, absence of source memory, rival contention for the last unit, an unfinished seal-stage checkpoint with live reservation replay, and the same outcome across one-minute and batched simulation. Existing flask-trial, instruction, comparison, full vessel from empty hands, and scenario benchmark fixtures use existing generated finite freshwater sources. The generator is unchanged; tests never create an unmetered stock.

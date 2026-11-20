@@ -14,8 +14,14 @@ When a response arrives, it is discarded (with a `WorldReceipts.decision` `REJEC
 
 `none` remains a legal abstention and may still be replaced by an ordinary autonomous purpose. No global world revision invalidates an unrelated actor's private decision. Survival reflexes continue independently during model inference, including at accelerated simulation speeds.
 
+## Shared model scheduling and diagnostics
+
+Among eligible residents with a pending personal cue, the connected browser schedules the resident whose last model request was oldest. Residents who have never had a request are first. The original due-time order breaks ties. Ordinary work and survival retain their existing opportunities while inference is in flight.
+
+The resident inspector counts completed model replies by whether the chosen action started, the model abstained, the decision context went stale, or the reply was refused. Follow-up routine work after an abstention does not count as a model action. These are process outcomes, not a measure of an action’s longer-term utility. Older saves keep their aggregate reply count without inventing categories for past replies.
+
 ## Tests
 
 `tests/client.test.mjs` tests depletion during inference, same-lot contention, unrelated private inventory changes, private belief/report revisions, simulated expiry, actor death and a deliberately unresolved model response that arrives after an urgent physical drink starts.
 
-**Remaining issue #73 scope:** fairness and decision-quality metrics across the shared 4B inference lane; goal/observation evidence hashing rather than raw bounded JSON; model latency versus simulated clock policy calibration; privacy assertions under all future model prompt constructors. A slow mocked model is covered, but no GPU/live external model was run.
+**Remaining issue #73 scope:** task-level decision quality and live 4B throughput measurements; goal/observation evidence hashing rather than raw bounded JSON; model latency versus simulated clock policy calibration; privacy assertions under all future model prompt constructors. A slow mocked model is covered, but no GPU/live external model was run.

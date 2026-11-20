@@ -176,7 +176,8 @@ function scheduleIdleAgents(){
   const cues=new Map(due.map(n=>[n,Cognition.attentionCue(n,state.clock)]));
   // Keep the model lane for one NPC, but don't let a serialized inference
   // backlog freeze every other body for hours at accelerated world speeds.
-  const n=due.find(actor=>cues.get(actor));
+  const n=due.filter(actor=>cues.get(actor)).sort((a,b)=>
+   (a.attention?.requestedAt??-1)-(b.attention?.requestedAt??-1))[0];
   if(!state.backgroundBusy&&n&&performance.now()-state.lastDecisionMs>=1500){
    if(Projects.maybeStart(state,n)){
     WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
@@ -319,24 +320,29 @@ async function deliberate(n,cue=null){
     question:cue?'Review '+cue.kind+' and choose a legal action using your own evidence.':
      'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
    });
-   activity(n).decisions++;
-   WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
-    data.source==='hivemind'?'hivemind':'rein',
-    'DECIDED',null,data.durationMs);
-   if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
-      options.some(o=>o.key===data.action)&&
-      backgroundOptions(n).some(o=>o.key===data.action)&&
-      modelChoiceStillRelevant(n,basis,data.action)&&
-      (!cue||Cognition.attentionCue(n,state.clock,false)?.sourceId===cue.sourceId)){
+   const stats=activity(n),action=String(data.action||'').slice(0,64);
+   const source=data.source==='hivemind'?'hivemind':'rein';
+   stats.decisions++;
+   WorldReceipts.decision(state,n,action,source,'DECIDED',null,data.durationMs);
+   if(!options.some(o=>o.key===data.action)){
+    rejected=true;stats.rejected++;stats.modelRefused++;
+    WorldReceipts.decision(state,n,action,'model','REJECTED','Action was not offered');
+    activityNote(n,'Discarded action that was not offered to the model');
+   }else if(state.paused||state.conversationBusy||!state.npcs.includes(n)||
+    key(n)!==location||!backgroundOptions(n).some(o=>o.key===data.action)||
+    !modelChoiceStillRelevant(n,basis,data.action)||
+    (cue&&Cognition.attentionCue(n,state.clock,false)?.sourceId!==cue.sourceId)){
+    rejected=true;stats.rejected++;stats.modelStale++;
+    WorldReceipts.decision(state,n,action,'model','REJECTED','Decision context changed');
+    activityNote(n,'Discarded stale model selection');
+   }else if(setAction(n,data.action,source,data.scores)){
     if(cue)Cognition.attentionReviewed(n,state.clock,basis.evidenceSequence);
-    const selected=setAction(n,data.action,
-     data.source==='hivemind'?'hivemind':'rein',data.scores);
-    if(selected&&data.action==='none')autonomousPurpose(n);
-   }else{
-    rejected=true;activity(n).rejected++;
-    WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
-     'model','REJECTED','Stale, paused or invalid model option');
-    activityNote(n,'Discarded stale, paused or invalid model selection');
+    if(data.action==='none'){
+     stats.modelAbstained++;
+     autonomousPurpose(n);
+    }else stats.modelStarted++;
+   }else {
+    rejected=true;stats.modelRefused++;
    }
   }else if(!state.paused)setAction(n,fallbackBackground(n),'offline routine');
  }catch(e){
@@ -646,8 +652,11 @@ function updateInspector(){
  $('npcBeliefs').textContent=(n.agency?.beliefs||[]).slice(-3).map(b=>
   b.kind+' '+b.status+' at '+b.x+','+b.y).join(' · ')||'No personal evidence yet';
  const a=activity(n);
- $('npcActivity').textContent=a.decisions+' model decisions · '+a.started+
-  ' actions started · '+a.completed+' completed · '+a.none+' no-ops';
+ const measured=a.modelStarted+a.modelAbstained+a.modelStale+a.modelRefused;
+ $('npcActivity').textContent=a.decisions+' model replies · '+a.started+
+  ' actions started · '+a.completed+' completed'+(measured?
+   ' · '+a.modelStarted+'/'+measured+' model actions started · '+
+   a.modelAbstained+' abstained · '+a.modelStale+' stale · '+a.modelRefused+' refused':'');
  $('npcActivityFailures').textContent=(a.rejected+a.failed+a.blocked)+
   ' rejected/failed/blocked · '+(a.abandoned||0)+' abandoned · '+a.errors+' model errors';
  $('npcActivityLast').textContent=a.last+' · '+(n.agency?.completedGoals||0)+
@@ -666,9 +675,13 @@ function updateInspector(){
  const trial=n.evidenceMemory?.trials?.at(-1);
  const trialNote=trial?' · Last trial '+(trial.heldWater?'held water':'leaked')+
   ' with binding grade '+trial.materialQuality+'/5':'';
+ const comparison=n.evidenceMemory?.comparisons?.at(-1);
+ const comparisonNote=comparison?' · Inferred comparison: grade '+
+  comparison.failedQuality+'/5 leaked, grade '+comparison.passedQuality+
+  '/5 held. Cause uncertain. Receipts '+comparison.sourceReceiptIds.join(', '):'';
  $('npcCrafting').textContent=(stage?
   recipe.name+' · '+(workpiece.stage+1)+'/'+recipe.stages.length+' · '+stage.name:
-  'No workpiece')+trialNote;
+  'No workpiece')+trialNote+comparisonNote;
  $('npcGoods').textContent=(n.craftedItems||[]).slice(-5).map(p=>
   p.kind+' ★'+p.quality).join(', ')||'None';
  $('decisionSource').textContent=n.source==='rein'?'Rein-NPC':n.source==='hivemind'?'Hivemind':n.source||'Simulation';

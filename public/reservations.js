@@ -33,6 +33,18 @@
   const held=active(state).filter(x=>key(x)===key(s)).reduce((n,x)=>n+x.quantity,0);
   return Math.max(0,physical(state,s)-held);
  }
+ function harvestBudget(state,actorId,commandId,id,kind){
+  const lot={type:'node',id,kind},lotKey=key(lot);
+  let owned=0,rival=0;
+  for(const hold of active(state)){
+   if(key(hold)!==lotKey)continue;
+   if(hold.actorId===actorId&&hold.commandId===commandId)owned+=hold.quantity;
+   else rival+=hold.quantity;
+  }
+  const free=Math.max(0,physical(state,lot)-rival);
+  // Older tasks can lack a token. They may only take unclaimed stock.
+  return owned?Math.min(owned,free):free;
+ }
  function specsFor(state,n,action,ref){
   const npc=(kind,quantity)=>({type:'npc',id:n.id,kind,quantity});
   const node=(kind,quantity)=>({type:'node',id:ref,kind,quantity});
@@ -55,12 +67,7 @@
    const kind=harvestKind;
    const target=state.world.nodes.find(x=>x.id===ref&&x.kind===kind);
    if(!target)return [];
-   const skills=n.skills?.gathering||0;
-   const quality=n.craftedItems?.find(x=>x.kind==='hatchet')?.quality||2;
-   const axe=n.inventory.hatchet&&kind==='wood'?(quality>=4?2:1):0;
-   const intended=Math.min(target.stock,2+Math.min(2,Math.floor(skills/3))+axe,
-    root.AgentWorld?.roomFor(n,kind)??1000,
-    action==='fill_water'?(root.AgentWorld?.vesselRoom(n)??0):1000);
+   const intended=root.AgentWorld.harvestAmount(n,target,action);
    return intended>0?[node(kind,intended)]:[];
   }
   const recipe=action.startsWith('craft_')?
@@ -180,6 +187,6 @@
    state.reservations.push({...row,status:'ACTIVE'});
   }
  }
- root.Reservations={available,physical,specsFor,claim,validCommand,
+ root.Reservations={available,physical,harvestBudget,specsFor,claim,validCommand,
   releaseCommand,releaseActor,expire,restore,active};
 })(globalThis);

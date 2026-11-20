@@ -122,3 +122,32 @@ test('physical crate hauling is a real timed inventory/structure transfer',()=>{
  assert.equal(state.world.structures.at(-1).contents.wood,0);
  assert.equal(c.Reservations.active(state).length,0);
 });
+
+test('regrowth during a harvest does not let the earlier job consume a peer’s claim',()=>{
+ const {c,state,n,other}=setup();
+ const node=state.world.nodes.find(x=>x.kind==='wood'&&x.stock>=3);
+ assert.ok(node);
+ node.stock=1;node.regrow=.999;
+ for(const actor of [n,other]){
+  Object.assign(actor,{x:node.x,y:node.y,z:node.z||0,energy:100,path:[]});
+ }
+ other.inventory.wood=8; // One armful of carry space remains.
+ assert.equal(c.WorldRuntime.begin(state,n,'collect_wood'),true);
+ c.Simulation.advance(state,1);
+ assert.equal(node.stock,2);
+ assert.equal(c.WorldRuntime.begin(state,other,'collect_wood'),true);
+ assert.deepEqual(copy(c.Reservations.active(state).map(x=>x.quantity)),[1,1]);
+ const save=copy(c.Persistence.save(state));
+ const loaded=c.Simulation.initial(379210);loaded.auto=false;
+ assert.equal(c.Persistence.restore(loaded,save),true);
+ c.Simulation.advance(state,4);
+ c.Simulation.advance(loaded,4);
+ assert.equal(n.inventory.wood,1);
+ assert.equal(other.inventory.wood,9);
+ assert.equal(node.stock,0);
+ const harvests=state.receipts.filter(x=>x.action==='collect_wood'&&x.status==='COMPLETED');
+ assert.deepEqual(copy(harvests.map(x=>x.delta.nodeStock[0].delta)),[-1,-1]);
+ assert.equal(c.Reservations.active(state).length,0);
+ assert.equal(c.Simulation.canonical(c.Persistence.save(loaded)),
+  c.Simulation.canonical(c.Persistence.save(state)));
+});

@@ -6,6 +6,8 @@ This change extends the existing bounded water-project recovery contract to **bo
 
 A subsequently accessible, personally known spring may satisfy `fill_water` through the existing reservation and world-receipt executor. The source loses the amount physically contained; another resident cannot consume water already reserved by a rival. A refused start updates project failure state without claiming a completed physical operation. Existing v3 persistence retains the project, failed prerequisite, retry timestamp, and bounded counts.
 
+Project retries request an affordance scan only when their backoff expires. The project still reconciles already-completed prerequisites during the wait, so outside actions can satisfy physical requirements without repeated visibility and path queries.
+
 ## Verification
 
 `tests/blocked-water-project.test.mjs` checks missing-source backoff, interrupted or failed scouting not counted as travel, bounded attempts, checkpoint restore, survival fallback, real recovery when freshwater is reachable, and two-person reservation contention. Existing `tests/water-vessel-project.test.mjs` covers the complete empty-hand craft → physical fill → off-source drinking path, and the headless production benchmark covers conserved inputs and actor-private manufacturing knowledge.

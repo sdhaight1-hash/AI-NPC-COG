@@ -108,7 +108,8 @@
   if(!ref)return;
   // Learning requires physical contact or deliberate inspection; never ingest
   // unseen world nodes or other NPCs' private memories.
-  const permitted=action==='inspect'||action==='forage'||action==='fill_water'||action==='drink_source'||
+  const wetStage=action==='seal_test';
+  const permitted=wetStage||action==='inspect'||action==='forage'||action==='fill_water'||action==='drink_source'||
    ['collect_wood','collect_stone','collect_fiber','pickup_item',
     'store_wood','retrieve_wood','stash_wood','stash_stone','stash_fiber',
     'withdraw_wood','withdraw_stone','withdraw_fiber'].includes(action);
@@ -118,7 +119,7 @@
   if(!old&&!obj)return;
   const b=old||{ref,kind:'unknown',x:n.x,y:n.y,confidence:0,at:clock,status:'uncertain'};
   // A failed action can establish depletion only from same-level contact.
-  const expected=root.AgentWorld.HARVEST_KINDS?.[action]||(action==='drink_source'?'water':null);
+  const expected=root.AgentWorld.HARVEST_KINDS?.[action]||(action==='drink_source'||wetStage?'water':null);
   const witnessedEmpty=obj&&obj.kind===expected&&obj.stock===0&&
    (n.z||0)===(obj.z||0)&&root.Frontier.distance(world,n,obj)<=1;
   if(obj&&(success||witnessedEmpty)){

@@ -591,6 +591,8 @@ test('a model decision is rejected if its personal resource target changed durin
  resolveDecision({action:'forage',source:'rein',durationMs:100});
  await inFlight;
  assert.equal(b.activity(n).rejected,1);
+ assert.equal(b.activity(n).modelStale,1);
+ assert.equal(b.activity(n).modelStarted,0);
  assert.equal(n.task,null,'Old target must not create a new activity');
  assert.ok(b.state.receipts.some(x=>x.status==='REJECTED'&&x.action==='forage'));
 });
@@ -628,6 +630,8 @@ test('unrelated actors and world receipts do not invalidate a personal model cho
  assert.equal(b.activity(n).rejected,0,
   'Changes unrelated to this NPC must not waste the shared model slot');
  assert.equal(b.activity(n).decisions,1);
+ assert.equal(b.activity(n).modelAbstained,1);
+ assert.equal(b.activity(n).modelStarted,0,'Fallback work is not attributed to the model');
  assert.ok(n.task||n.plan,'Accepted none decision should allow self-directed work');
 });
 
@@ -722,6 +726,13 @@ test('crafting inspector shows the current operation and resident-specific seal 
  b.selectNpc(maker.id);
  assert.equal(b.elements.get('npcCrafting').textContent,
   'No workpiece · Last trial held water with binding grade 3/5');
+ maker.evidenceMemory.comparisons.push({failedQuality:1,passedQuality:3,
+  sourceReceiptIds:['receipt_14','receipt_31']});
+ b.selectNpc(maker.id);
+ assert.match(b.elements.get('npcCrafting').textContent,
+  /Inferred comparison: grade 1\/5 leaked, grade 3\/5 held\. Cause uncertain\. Receipts receipt_14, receipt_31/);
+ b.selectNpc(peer.id);
+ assert.equal(b.elements.get('npcCrafting').textContent,'No workpiece');
 });
 
 
@@ -830,4 +841,122 @@ test('construction drawings are a pure overlay; built tiles and unfinished plans
   'A completed vector wall adds visible geometry beyond the base world draw');
  assert.equal(JSON.stringify(w.construction),builtState,
   'Drawing a wall must not modify its receipt or collision state');
+});
+
+test('the actual model request exposes a tested flask method only to its founder',async()=>{
+ const requests=[];
+ const b=makeBrowser({fetch:async (url,init)=>{
+  if(url==='/api/decide')requests.push(JSON.parse(init.body));
+  return {ok:true,json:async()=>({connected:true,action:'not_a_legal_action',source:'rein'})};
+ }});
+ const s=b.state,[maker,peer]=s.npcs;
+ s.npcs=[maker,peer];
+ s.auto=false;
+ s.connected=true;
+ const requestFor=async actor=>{
+  const count=requests.length;
+  await b.deliberate(actor);
+  assert.equal(requests.length,count+1);
+  return requests.at(-1);
+ };
+ const hasAction=(request,key)=>request.options.some(x=>x.key===key);
+ for(const n of [maker,peer]){
+  assert.ok(Object.values(n.inventory).every(count=>count===0));
+  const request=await requestFor(n);
+  assert.match(request.scene,/Known crafting methods: No discovered crafting methods/);
+  assert.equal(hasAction(request,'craft_flask'),false);
+ }
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=4&&
+  b.pathfind(maker,{x:x.x,y:x.y,z:x.z||0}).length);
+ assert.ok(spring);
+ Object.assign(maker,{x:spring.x,y:spring.y,z:spring.z||0,energy:100});
+ const w=s.world;
+ const nearby=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>({
+  x:(spring.x+dx+w.width)%w.width,y:(spring.y+dy+w.height)%w.height,z:maker.z
+ })).find(tile=>b.pathfind(maker,tile).length===1);
+ assert.ok(nearby);
+ Object.assign(peer,nearby);
+ const supply=actor=>{
+  Object.assign(actor.inventory,{wood:1,cord:1,blade:1});
+  for(const kind of ['cord','blade']){
+   if(!actor.craftedItems.some(x=>x.kind===kind))
+    actor.craftedItems.push({kind,quality:2,maker:actor.id,craftedAt:s.clock,
+     method:kind,materialQuality:2});
+  }
+ };
+ supply(maker);
+ assert.equal(b.setAction(maker,'craft_hollow_wood_trial','rein'),true);
+ b.step(56);
+ assert.equal(maker.inventory.flask,1);
+ assert.ok(s.receipts.some(r=>r.actorId===maker.id&&r.action==='craft_stage'&&
+  r.status==='COMPLETED'&&r.delta.knowledge?.learnedMethods?.includes('flask')));
+ supply(maker);
+ supply(peer);
+ assert.deepEqual(['wood','cord','blade'].map(k=>maker.inventory[k]),
+  ['wood','cord','blade'].map(k=>peer.inventory[k]));
+ const own=await requestFor(maker),other=await requestFor(peer);
+ assert.match(own.scene,/Known crafting methods: flask\./);
+ assert.equal(hasAction(own,'craft_flask'),true);
+ assert.match(other.scene,/Known crafting methods: No discovered crafting methods/);
+ assert.equal(hasAction(other,'craft_flask'),false);
+ assert.match(other.scene,new RegExp('Visible people: '+maker.name+' at'));
+ assert.doesNotMatch(other.scene,/learned.*flask|flask-sealing instructions/i);
+ assert.equal(b.availableActivities(peer).some(x=>x.key==='craft_flask'),false);
+ assert.equal(b.setAction(peer,'craft_flask','rein'),false);
+});
+
+test('a pending personal review gives a founder with no model request priority over a repeat caller',async()=>{
+ const requests=[];
+ let reply;
+ const b=makeBrowser({fetch:async (url,init)=>{
+  if(url!=='/api/decide')return {ok:true,json:async()=>({connected:true})};
+  requests.push(JSON.parse(init.body));
+  return new Promise(resolve=>{reply=resolve;});
+ }});
+ await new Promise(resolve=>setImmediate(resolve));
+ const s=b.state,[repeat,first]=s.npcs;
+ s.npcs=[repeat,first];
+ for(const n of s.npcs){
+  n.energy=100;n.needs.social=0;n.needs.thirst=20;n.needs.hunger=20;
+  n.bio.hydrationBudgetMl=2400;
+  for(const type of ['shelter','campfire','workbench','crate'])
+   s.world.structures.push({id:type+'_'+n.id,type,x:n.x,y:n.y,maker:n.id});
+ }
+ repeat.thoughtAt=s.clock-1;
+ repeat.attention={reviewedThrough:0,reviewedAt:null,requestedAt:s.clock-31};
+ first.thoughtAt=s.clock;
+ s.lastDecisionMs=-5000;
+ b.scheduleIdleAgents();
+ assert.equal(s.modelDecisionActor,first);
+ assert.equal(requests.length,1);
+ assert.equal(requests[0].persona,first.personality);
+ b.scheduleIdleAgents();
+ assert.equal(requests.length,1,'The shared model lane stays serialized');
+ reply({ok:true,json:async()=>({action:'not_offered',source:'rein'})});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(b.activity(first).modelRefused,1);
+ assert.equal(b.activity(first).modelStale,0);
+ assert.equal(first.attention.reviewedAt,null);
+ b.save();
+ const restored=makeBrowser({saved:b.saved});
+ const same=restored.state.npcs.find(n=>n.id===first.id);
+ assert.equal(b.activity(same).modelRefused,1);
+ assert.equal(same.attention.requestedAt,s.clock);
+});
+
+test('a legal model action is counted only after it starts through the world runtime',async()=>{
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
+  {action:'forage',source:'rein'}:{connected:true}})});
+ await new Promise(resolve=>setImmediate(resolve));
+ const s=b.state,n=s.npcs[0];
+ const source=s.world.nodes.find(x=>x.kind==='food'&&x.stock>=2);
+ assert.ok(source);
+ Object.assign(n,{x:source.x,y:source.y,z:source.z||0,energy:100});
+ n.needs.hunger=80;
+ const initial=source.stock;
+ await b.deliberate(n);
+ assert.equal(b.activity(n).modelStarted,1);
+ assert.equal(b.activity(n).decisions,1);
+ assert.equal(n.task?.key,'forage');
+ assert.equal(source.stock,initial,'An accepted model decision has not executed its physical effects');
 });

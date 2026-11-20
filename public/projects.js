@@ -116,6 +116,7 @@
   return state.world.structures.some(s=>s.type===type&&
    (s.maker===n.id||root.Frontier.distance(state.world,n,s)<5));
  }
+ const vesselWorkpiece=n=>['hollow_wood_trial','flask'].includes(n.workpiece?.recipe);
  function predicate(state,n,kind,id){
   const have=(k,q)=>(n.inventory?.[k]||0)>=q;
   const knows=k=>n.knowledge?.recipes?.includes(k)===true;
@@ -170,12 +171,12 @@
   if(kind==='water_vessel'){
    // Consumed intermediate inputs still count as completed dependencies
    // while the subsequent physical assembly is underway.
-   const done=have('flask',1);
-   if(id==='fiber')return have('fiber',3)||have('cord',1)||done;
-   if(id==='cord')return have('cord',1)||done;
-   if(id==='stone')return have('stone',2)||have('blade',1)||done;
-   if(id==='blade')return have('blade',1)||done;
-   if(id==='wood')return have('wood',1)||done;
+   const done=have('flask',1),assembly=vesselWorkpiece(n);
+   if(id==='fiber')return have('fiber',3)||have('cord',1)||assembly||done;
+   if(id==='cord')return have('cord',1)||assembly||done;
+   if(id==='stone')return have('stone',2)||have('blade',1)||assembly||done;
+   if(id==='blade')return have('blade',1)||assembly||done;
+   if(id==='wood')return have('wood',1)||assembly||done;
    if(id==='build')return done;
   }
   if(kind==='water_supply'){
@@ -298,7 +299,7 @@
  // keep guessing at a spring the actor has not actually reached.
  const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
  const waitMinutes=node=>Math.min(360,15*2**Math.min(5,Math.max(0,node.failures-1)));
- function next(state,n,options=[]){
+ function next(state,n,affordances=[]){
   const p=sync(state,n);
   if(!p||p.status==='COMPLETED'||p.status==='ABANDONED')
    return {status:'done'};
@@ -311,9 +312,12 @@
    p.status='BLOCKED';p.blockedReason='DEPENDENCY_CYCLE_OR_MISSING_NODE';
    return {status:'blocked',reason:p.blockedReason};
   }
+  const options=typeof affordances==='function'?affordances():affordances;
   let action=node.action;
-  if(p.kind==='water_vessel'&&node.id==='build'&&
-   n.knowledge?.recipes?.includes('flask'))action='craft_flask';
+  if(p.kind==='water_vessel'&&node.id==='build'){
+   if(vesselWorkpiece(n))action='craft_stage';
+   else if(n.knowledge?.recipes?.includes('flask'))action='craft_flask';
+  }
   if(p.kind==='home'&&node.id==='build'){
    const pending=(state.world.construction?.blueprints||[]).filter(b=>
     b.actorId===n.id&&p.homeSite&&
@@ -329,8 +333,10 @@
    else {p.nextAt=state.clock+5;return {status:'deferred'};}
   }
   let option=options.find(o=>o.key===action);
-  if(!option&&['collect_wood','collect_stone','collect_fiber',
-   'forage','fill_water','build_tile'].includes(action)){
+  const seekWater=action==='craft_stage'&&root.Crafting.wetSealPending(n);
+  const scoutable=seekWater||['collect_wood','collect_stone','collect_fiber',
+   'forage','fill_water','build_tile'].includes(action);
+  if(!option&&scoutable){
    // Unknown resource locations prompt bounded physical exploration, not an
    // omniscient search query or fictitious harvest.
    const scout=options.find(o=>o.key==='explore');
@@ -341,9 +347,11 @@
   if(!option){
    if(recoverable)node.failures=Math.min(100,node.failures+1);
    node.status='BLOCKED';
-   node.blockedBy=recoverable&&node.scouts>=4&&
-    ['collect_wood','collect_stone','collect_fiber','fill_water','build_tile'].includes(action)?
-    'SCOUT_LIMIT:'+action:'LEGAL_ACTION_UNAVAILABLE:'+action;
+   const prerequisite=seekWater?'seal_test_water':action;
+   if(action==='craft_flask'&&root.Crafting.knowinglyWeakBinding(n,'flask'))
+    node.blockedBy='TESTED_SEAL_RISK';
+   else node.blockedBy=recoverable&&node.scouts>=4&&scoutable?
+    'SCOUT_LIMIT:'+prerequisite:'LEGAL_ACTION_UNAVAILABLE:'+prerequisite;
    p.status='BLOCKED';p.blockedReason=node.id+':'+node.blockedBy;
    p.nextAt=state.clock+(recoverable?waitMinutes(node):5);
    history(p,state.clock,'BLOCKED',node);
@@ -371,7 +379,7 @@
    (x.action===key||recoverable&&key==='explore'||
     p.kind==='home'&&x.id==='build'&&
      ['collect_wood','collect_fiber'].includes(key)||
-    p.kind==='water_vessel'&&x.id==='build'&&key==='craft_flask'));
+    p.kind==='water_vessel'&&x.id==='build'&&['craft_flask','craft_stage'].includes(key)));
   // An experiment can complete physically yet fail to make a watertight
   // object. Its receipt records the consumed workpiece with no learned method.
   const leaked=p.kind==='water_vessel'&&key==='craft_stage'&&

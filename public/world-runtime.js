@@ -177,7 +177,8 @@
  }
  function stats(n){
   return n.activityStats ||= {decisions:0,none:0,rejected:0,started:0,
-   completed:0,failed:0,blocked:0,abandoned:0,errors:0,last:'No decisions yet'};
+   completed:0,failed:0,blocked:0,abandoned:0,errors:0,
+   modelStarted:0,modelAbstained:0,modelStale:0,modelRefused:0,last:'No decisions yet'};
  }
  function note(n,text){stats(n).last=String(text).slice(0,110);}
  function move(state,n,elapsed){
@@ -267,6 +268,9 @@
     .filter(x=>x.commandId===commandId)}:
    root.Reservations.claim(state,n.id,commandId,request);
   if(!hold.ok){
+   if(hold.reason==='RESERVATION_CONFLICT'&&action==='craft_stage'&&
+    root.Crafting.wetSealPending(n))
+    root.Agency.observe(n,state.world,'seal_test',option.ref,false,state.clock);
    stats(n).rejected++;note(n,'Material blocked: '+hold.reason);
    root.WorldReceipts.decision(state,n,action,'world','REJECTED',hold.reason);
    return false;
@@ -377,11 +381,14 @@
   const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId,
    source:n.source};
   const expected=n.task.reservationIds?.length||0;
-  const outcome=root.WorldReceipts.execute(state,n,finished,()=>(
-   root.Reservations.validCommand(state,finished.commandId,expected)?
-    root.AgentWorld.complete(n,state.world,state.npcs):
-    {ok:false,message:'RESERVATION_EXPIRED: required materials unavailable'}
-  ));
+  const outcome=root.WorldReceipts.execute(state,n,finished,()=>{
+   if(!root.Reservations.validCommand(state,finished.commandId,expected))
+    return {ok:false,message:'RESERVATION_EXPIRED: required materials unavailable'};
+   const kind=root.AgentWorld.HARVEST_KINDS[finished.key];
+   const budget=kind?root.Reservations.harvestBudget(state,n.id,finished.commandId,
+    finished.ref,kind):undefined;
+   return root.AgentWorld.complete(n,state.world,state.npcs,budget);
+  });
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   if(finished.key==='socialize'&&finished.source==='offline routine'){
@@ -397,6 +404,9 @@
   if(finished.source==='project'||(n.project&&finished.source==='plan'&&
     finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
    root.Projects?.onOutcome(state,n,finished.key,outcome.ok,outcome.receipt);
+  if(!outcome.ok&&finished.key==='craft_stage'&&
+   outcome.message.startsWith('WET_TEST_WATER_UNAVAILABLE:'))
+   root.Agency.observe(n,state.world,'seal_test',finished.ref,false,state.clock);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);
@@ -434,7 +444,7 @@
  const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
  function advanceProject(state,n,hooks={}){
   if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
-  const result=root.Projects.next(state,n,available(state,n));
+  const result=root.Projects.next(state,n,()=>available(state,n));
   if(result.status!=='action')return false;
   const ok=begin(state,n,result.action,'project',null,hooks);
   if(!ok){

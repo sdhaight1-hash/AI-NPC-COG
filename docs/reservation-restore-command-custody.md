@@ -6,6 +6,8 @@ A saved `ACTIVE` material claim is only reinstalled when the named living actor 
 
 The existing `WorldRuntime.begin` and `WorldReceipts.execute` still validate available material and completed effects. Expired suspended claims are discarded and restarted from fresh legal commands. No held lot is consumed or refunded merely by restoration.
 
-The tests cover genuine live task claims, orphaned claims, a claim made to look like it belongs to a different command, duplicate tokens, foreign resource retargeting, a nine-minute interrupted physical project, and resumed work with only one final structure and exact input debits.
+At completion, a variable-size harvest can take up to its own live claim and the physical stock left after accounting for rival claims. Growth during the job, changing carry capacity and increasing yields cannot enlarge an existing claim. Legacy tasks without a live token may use only unreserved stock.
+
+The tests cover competing harvests during regrowth, genuine live task claims, orphaned claims, a claim made to look like it belongs to a different command, duplicate tokens, foreign resource retargeting, a nine-minute interrupted physical project, and resumed work with only one final structure and exact input debits.
 
 **Limitations:** the current saved task records token identities rather than a cryptographic inventory-lot digest. This validates custody and exclusivity, not the full provenance of every numeric legacy inventory unit or every possible forged quantity in client-controlled save data. Longer-term dedicated item lots and hauling custody remain in #26.
