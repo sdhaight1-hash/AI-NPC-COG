@@ -48,7 +48,7 @@ function restore(state,saved){
   state.world.weather=Frontier.weather(state.world,saved.clock);
   Frontier.restore(state.world,saved.world);
   const seenVessels=new Set();
-  AgentWorld.restoreWorld(state.world,saved.world,seenVessels);
+  AgentWorld.restoreWorld(state.world,saved.world,seenVessels,saved.receipts);
   Civilization.restoreRemains(state.world,saved.world?.remains,saved.dead,seenVessels);
   root.WorldRuntime.invalidateNavigation(state.world);
   state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;
