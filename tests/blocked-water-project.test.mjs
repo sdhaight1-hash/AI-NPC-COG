@@ -82,7 +82,11 @@ test('repeated unrewarded exploration is bounded and a new reachable source can 
  const recovered=c.Projects.next(s,n,[fresh]);
  assert.equal(recovered.action,'collect_fiber');
  assert.equal(p.status,'ACTIVE');
- assert.equal(p.nodes.find(x=>x.id==='fiber').scouts,0);
+ assert.equal(p.nodes.find(x=>x.id==='fiber').scouts,4,
+  'Selecting a real source is not yet proof of successful collection');
+ c.Projects.onOutcome(s,n,'collect_fiber',true);
+ assert.equal(p.nodes.find(x=>x.id==='fiber').scouts,0,
+  'Only committed collection resets the scouting allowance');
 });
 
 test('depleted source at physical completion produces a failed receipt and deferred project',()=>{
