@@ -431,6 +431,70 @@ function clientToTile(clientX,clientY,rect){
  return {x:wrapX(Math.floor((state.camera.x+sx/state.zoom)/TILE)),
   y:wrapY(Math.floor((state.camera.y+sy/state.zoom)/TILE)),z:state.viewZ};
 }
+// Pure Canvas projection: blueprints are outlines, finished tiles have
+// material silhouettes. Hiding a roof changes only rendering, never physics.
+function drawConstructionProjection(view){
+ const layer=state.viewZ,construction=state.world.construction;
+ if(!construction)return;
+ const visible=p=>p.z===layer&&p.x>=view.left&&p.x<=view.right&&
+  p.y>=view.top&&p.y<=view.bottom;
+ for(const b of construction.blueprints.filter(visible)){
+  const x=b.x*TILE,y=b.y*TILE;
+  ctx.save();ctx.strokeStyle='#e6c67a';ctx.lineWidth=1.25;
+  ctx.setLineDash([3,2]);ctx.strokeRect(x+1.5,y+1.5,TILE-3,TILE-3);
+  ctx.setLineDash([]);
+  const builder=state.npcs.find(n=>n.task?.key==='build_tile'&&n.task.ref===b.id);
+  if(builder?.currentActivity){
+   const a=builder.currentActivity;
+   const ratio=clamp(a.workDone/a.workRequired,0,1);
+   ctx.fillStyle='#f2d991';ctx.fillRect(x+2,y+TILE-3,(TILE-4)*ratio,2);
+  }
+  ctx.restore();
+ }
+ const order={floor:0,wall:1,door:2,roof:3};
+ const selected=selectedNpc();
+ const tiles=construction.tiles.filter(visible).slice()
+  .sort((a,b)=>order[a.kind]-order[b.kind]||a.id.localeCompare(b.id));
+ for(const tile of tiles){
+  const x=tile.x*TILE,y=tile.y*TILE;
+  ctx.save();
+  if(tile.kind==='floor'){
+   ctx.fillStyle='#b09a70';ctx.fillRect(x,y,TILE,TILE);
+   ctx.strokeStyle='#70593c';ctx.lineWidth=1;
+   for(let line=4;line<TILE;line+=5){
+    ctx.beginPath();ctx.moveTo(x+1,y+line);ctx.lineTo(x+TILE-1,y+line);
+    ctx.stroke();
+   }
+  }else if(tile.kind==='wall'){
+   ctx.fillStyle='#433c32';ctx.fillRect(x,y,TILE,TILE);
+   ctx.fillStyle='#8f806b';ctx.fillRect(x+1,y+1,TILE-2,TILE-3);
+   ctx.fillStyle='#b9a185';ctx.fillRect(x+3,y+3,TILE-6,3);
+   ctx.fillStyle='#685744';ctx.fillRect(x+3,y+8,TILE-6,3);
+  }else if(tile.kind==='door'){
+   ctx.fillStyle='#7f6242';ctx.fillRect(x+1,y+1,TILE-2,TILE-2);
+   ctx.fillStyle='#292a25';ctx.fillRect(x+5,y+3,TILE-7,TILE-6);
+   ctx.strokeStyle='#d7b78b';ctx.lineWidth=2;
+   ctx.beginPath();ctx.moveTo(x+4,y+TILE-3);ctx.lineTo(x+10,y+4);ctx.stroke();
+  }else if(tile.kind==='roof'){
+   const under=(selected?.z||0)===layer&&selected?.x===tile.x&&
+    selected?.y===tile.y;
+   if(!under){
+    ctx.fillStyle='#6e6049';ctx.fillRect(x,y,TILE,TILE);
+    ctx.fillStyle='#ac9370';
+    ctx.beginPath();ctx.moveTo(x+1,y+5);ctx.lineTo(x+TILE/2,y+1);
+    ctx.lineTo(x+TILE-1,y+5);ctx.lineTo(x+TILE-1,y+TILE-1);
+    ctx.lineTo(x+1,y+TILE-1);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#524938';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x+TILE/2,y+2);
+    ctx.lineTo(x+TILE/2,y+TILE-1);ctx.stroke();
+   }else{
+    ctx.strokeStyle='rgba(232,204,153,.8)';ctx.lineWidth=1;
+    ctx.strokeRect(x+1,y+1,TILE-2,TILE-2);
+   }
+  }
+  ctx.restore();
+ }
+}
 function drawWorld(){
  updateCamera();
  ctx.imageSmoothingEnabled=false;ctx.fillStyle='#152925';
@@ -448,6 +512,8 @@ function drawWorld(){
    if (useVectorArt()) ContentArt.drawObjects(ctx,state.world,TILE,view);
    else VillageArt.drawWorldObjects(ctx,state.world,view);
   }
+  drawConstructionProjection({left:-x/TILE-1,top:-y/TILE-1,
+   right:(vw-x)/TILE+1,bottom:(vh-y)/TILE+1});
   if(state.viewZ!==0)for(const item of state.world.items){
    if(item.kind==='flask'&&item.z===state.viewZ)VillageArt.drawGroundFlask(ctx,item);
   }
@@ -677,7 +743,7 @@ function updateHUD(now){
   ' · '+state.world.weather.temperature+'°C';
  $('worldSeed').textContent=String(state.world.seed);
  $('populationStats').textContent=state.npcs.length+' living · '+state.dead.length+
-  ' deaths · '+state.world.structures.length+' constructed objects · next arrivals on the 1st';
+  ' deaths · '+(state.world.structures.length+(state.world.construction?.tiles.length||0))+' constructed objects · next arrivals on the 1st';
  $('zLabel').textContent='Z '+state.viewZ;
  $('worldStatus').textContent=state.fatalFrameError?
   'ERROR · '+state.fatalFrameError.slice(0,110):state.paused?'Paused':state.backgroundBusy?
