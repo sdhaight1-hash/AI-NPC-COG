@@ -249,7 +249,7 @@ async function checkModel(){
 // An unrelated global effect must not cancel somebody else's private choice.
 function modelDecisionBasis(n){
  const options=Perception.filterAffordances(state,n,availableActivities(n));
- const references={},physical={};
+ const references={none:null},physical={none:JSON.stringify({ref:null,stock:null,count:null,claims:[]})};
  for(const option of options){
   // WorldRuntime.begin commits the FIRST legal option for an action key.
   // Record that exact target instead of accidentally tracking the last one.
