@@ -96,7 +96,8 @@ function restore(state,saved){
    n.bio=Biology.restore(old.bio,n.inventory.food);
    if(old.activityStats&&typeof old.activityStats==='object'){
     const a=root.WorldRuntime.stats(n);
-    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','abandoned','errors'])
+    for(const k of ['decisions','none','rejected','started','completed','failed','blocked','abandoned','errors',
+     'modelStarted','modelAbstained','modelStale','modelRefused'])
      if(Number.isInteger(old.activityStats[k])&&old.activityStats[k]>=0)
       a[k]=Math.min(old.activityStats[k],10000000);
     if(typeof old.activityStats.last==='string')

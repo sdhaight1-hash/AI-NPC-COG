@@ -176,7 +176,8 @@
  }
  function stats(n){
   return n.activityStats ||= {decisions:0,none:0,rejected:0,started:0,
-   completed:0,failed:0,blocked:0,abandoned:0,errors:0,last:'No decisions yet'};
+   completed:0,failed:0,blocked:0,abandoned:0,errors:0,
+   modelStarted:0,modelAbstained:0,modelStale:0,modelRefused:0,last:'No decisions yet'};
  }
  function note(n,text){stats(n).last=String(text).slice(0,110);}
  function move(state,n,elapsed){

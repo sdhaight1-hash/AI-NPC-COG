@@ -591,6 +591,8 @@ test('a model decision is rejected if its personal resource target changed durin
  resolveDecision({action:'forage',source:'rein',durationMs:100});
  await inFlight;
  assert.equal(b.activity(n).rejected,1);
+ assert.equal(b.activity(n).modelStale,1);
+ assert.equal(b.activity(n).modelStarted,0);
  assert.equal(n.task,null,'Old target must not create a new activity');
  assert.ok(b.state.receipts.some(x=>x.status==='REJECTED'&&x.action==='forage'));
 });
@@ -628,6 +630,8 @@ test('unrelated actors and world receipts do not invalidate a personal model cho
  assert.equal(b.activity(n).rejected,0,
   'Changes unrelated to this NPC must not waste the shared model slot');
  assert.equal(b.activity(n).decisions,1);
+ assert.equal(b.activity(n).modelAbstained,1);
+ assert.equal(b.activity(n).modelStarted,0,'Fallback work is not attributed to the model');
  assert.ok(n.task||n.plan,'Accepted none decision should allow self-directed work');
 });
 
@@ -899,4 +903,60 @@ test('the actual model request exposes a tested flask method only to its founder
  assert.doesNotMatch(other.scene,/learned.*flask|flask-sealing instructions/i);
  assert.equal(b.availableActivities(peer).some(x=>x.key==='craft_flask'),false);
  assert.equal(b.setAction(peer,'craft_flask','rein'),false);
+});
+
+test('a pending personal review gives a founder with no model request priority over a repeat caller',async()=>{
+ const requests=[];
+ let reply;
+ const b=makeBrowser({fetch:async (url,init)=>{
+  if(url!=='/api/decide')return {ok:true,json:async()=>({connected:true})};
+  requests.push(JSON.parse(init.body));
+  return new Promise(resolve=>{reply=resolve;});
+ }});
+ await new Promise(resolve=>setImmediate(resolve));
+ const s=b.state,[repeat,first]=s.npcs;
+ s.npcs=[repeat,first];
+ for(const n of s.npcs){
+  n.energy=100;n.needs.social=0;n.needs.thirst=20;n.needs.hunger=20;
+  n.bio.hydrationBudgetMl=2400;
+  for(const type of ['shelter','campfire','workbench','crate'])
+   s.world.structures.push({id:type+'_'+n.id,type,x:n.x,y:n.y,maker:n.id});
+ }
+ repeat.thoughtAt=s.clock-1;
+ repeat.attention={reviewedThrough:0,reviewedAt:null,requestedAt:s.clock-31};
+ first.thoughtAt=s.clock;
+ s.lastDecisionMs=-5000;
+ b.scheduleIdleAgents();
+ assert.equal(s.modelDecisionActor,first);
+ assert.equal(requests.length,1);
+ assert.equal(requests[0].persona,first.personality);
+ b.scheduleIdleAgents();
+ assert.equal(requests.length,1,'The shared model lane stays serialized');
+ reply({ok:true,json:async()=>({action:'not_offered',source:'rein'})});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(b.activity(first).modelRefused,1);
+ assert.equal(b.activity(first).modelStale,0);
+ assert.equal(first.attention.reviewedAt,null);
+ b.save();
+ const restored=makeBrowser({saved:b.saved});
+ const same=restored.state.npcs.find(n=>n.id===first.id);
+ assert.equal(b.activity(same).modelRefused,1);
+ assert.equal(same.attention.requestedAt,s.clock);
+});
+
+test('a legal model action is counted only after it starts through the world runtime',async()=>{
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>url==='/api/decide'?
+  {action:'forage',source:'rein'}:{connected:true}})});
+ await new Promise(resolve=>setImmediate(resolve));
+ const s=b.state,n=s.npcs[0];
+ const source=s.world.nodes.find(x=>x.kind==='food'&&x.stock>=2);
+ assert.ok(source);
+ Object.assign(n,{x:source.x,y:source.y,z:source.z||0,energy:100});
+ n.needs.hunger=80;
+ const initial=source.stock;
+ await b.deliberate(n);
+ assert.equal(b.activity(n).modelStarted,1);
+ assert.equal(b.activity(n).decisions,1);
+ assert.equal(n.task?.key,'forage');
+ assert.equal(source.stock,initial,'An accepted model decision has not executed its physical effects');
 });
