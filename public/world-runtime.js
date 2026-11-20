@@ -308,7 +308,7 @@
     state.clock+remaining};
    if(active)active.reservationIds=[...n.task.reservationIds];
    if(!active){
-    const activity=root.Activities.start(state,n,n.task,duration,hooks.decisionId);
+    const activity=root.Activities.start(state,n,n.task,duration,hooks.decisionId,hooks.project);
     activity.reservationIds=[...n.task.reservationIds];
    }
    if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
@@ -446,7 +446,9 @@
   if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
   const result=root.Projects.next(state,n,()=>available(state,n));
   if(result.status!=='action')return false;
-  const ok=begin(state,n,result.action,'project',null,hooks);
+  const {kind,startedAt}=n.project;
+  const project={kind,startedAt,nodeId:result.nodeId};
+  const ok=begin(state,n,result.action,'project',null,{...hooks,project});
   if(!ok){
    if(RECOVERABLE_PROJECTS.has(n.project.kind))
     root.Projects.onOutcome(state,n,result.action,false);

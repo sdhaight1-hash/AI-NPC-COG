@@ -226,3 +226,24 @@ test('completed projects are archived before an NPC chooses a different ambition
  assert.equal(saved.project.kind,'shelter');
  assert.equal(saved.completedProjects[0].kind,'campfire');
 });
+
+test('project scouting receipts identify the missing step after a checkpoint restart',()=>{
+ const {c,s,n}=setup();
+ for(const source of s.world.nodes)if(source.kind==='wood'){source.stock=0;source.regrow=0;}
+ c.Projects.create(s,n,'shelter');
+ assert.equal(c.WorldRuntime.advanceProject(s,n),true);
+ assert.equal(n.task.key,'explore');
+ const command=n.task.commandId;
+ const started=s.receipts.find(r=>r.commandId===command&&r.status==='ACCEPTED');
+ assert.equal(started.context.projectId,n.id+':shelter:'+n.project.startedAt);
+ assert.equal(started.context.projectKind,'shelter');
+ assert.equal(started.context.projectNodeId,'wood');
+ const saved=JSON.parse(JSON.stringify(c.Persistence.save(s)));
+ const restored=c.Simulation.initial(379210);restored.auto=false;
+ assert.equal(c.Persistence.restore(restored,saved),true);
+ tick(c,restored,20);
+ const completed=restored.receipts.find(r=>r.commandId===command&&r.status==='COMPLETED');
+ assert.ok(completed);
+ assert.equal(completed.context.projectId,started.context.projectId);
+ assert.equal(completed.context.projectNodeId,'wood');
+});

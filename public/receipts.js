@@ -101,12 +101,15 @@
   if(state.receipts.length>MAX)state.receipts.splice(0,state.receipts.length-MAX);
   return receipt;
  }
- function contextFor(n,commandId,decisionId=null){
-  const activity=n.currentActivity?.commandId===commandId?n.currentActivity:null;
+ function contextFor(n,commandId,decisionId=null,activity=n.currentActivity){
+  if(activity?.commandId!==commandId)activity=null;
+  const project=activity?.project;
   const goal=n.agency?.goal;
   decisionId=activity?.decisionId??decisionId;
   return {activityId:activity?.id??null,goalKey:goal?.key??null,
-   goalStartedAt:goal?.startedAt??null,projectId:n.project?.id??null,
+   goalStartedAt:goal?.startedAt??null,
+   projectId:project?[n.id,project.kind,project.startedAt].join(':'):null,
+   ...(project?{projectKind:project.kind,projectNodeId:project.nodeId}:{}),
    position:{x:n.x,y:n.y,z:n.z||0},
    reservationIds:activity?.reservationIds?.slice(0,40)||[],
    ...(validDecisionId(decisionId)?{decisionId}:{})};
@@ -124,7 +127,7 @@
   if(!['INTERRUPTED','RESUMED','ABANDONED'].includes(status))throw Error('Invalid lifecycle status');
   return append(state,{actorId:n.id,commandId:activity.commandId,
    action:activity.key,targetId:activity.ref,status,reason,
-   context:{...contextFor(n,activity.commandId,activity.decisionId),activityId:activity.id}});
+   context:contextFor(n,activity.commandId,null,activity)});
  }
  function committed(state,commandId){
   return state.receipts?.find(r=>r.commandId===commandId&&

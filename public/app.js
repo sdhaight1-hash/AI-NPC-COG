@@ -673,6 +673,7 @@ function updateInspector(){
   const impacts=(r.delta?.inventory||[]).map(d=>d.key+' '+(d.delta>0?'+':'')+d.delta);
   const stocks=(r.delta?.nodeStock||[]).map(d=>d.key+' '+(d.delta>0?'+':'')+d.delta);
   return r.id+' '+r.action+' '+r.status+
+   (r.context?.projectNodeId?' · '+r.context.projectKind+' / '+r.context.projectNodeId:'')+
    (r.reason?' ('+r.reason+')':'')+
    (impacts.length||stocks.length?' ['+[...impacts,...stocks].join(', ')+']':'');
  }).join('\n')||'No completed physical effects yet';

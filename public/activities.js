@@ -20,11 +20,18 @@
   }
   return a;
  }
- function start(state,n,task,minutes,decisionId){
+ function projectTrace(trace,clock){
+  if(!trace||!Number.isFinite(trace.startedAt)||trace.startedAt<0||trace.startedAt>clock||
+   !root.Projects?.DEFINITIONS?.[trace.kind]?.nodes?.some(n=>n.id===trace.nodeId))return null;
+  return {kind:trace.kind,startedAt:trace.startedAt,nodeId:trace.nodeId};
+ }
+ function start(state,n,task,minutes,decisionId,project){
+  const trace=projectTrace(project,state.clock);
   const a={id:'act_'+task.commandId,commandId:task.commandId,key:task.key,
    ref:task.ref??null,state:'RUNNING',workRequired:minutes,workDone:0,
    startedAt:state.clock,lastTick:state.clock,reason:null,
    ...(root.WorldReceipts.validDecisionId(decisionId)?{decisionId}:{}),
+   ...(trace?{project:trace}:{}),
    workpieceRecipe:n.workpiece?.recipe??null,
    workpieceStage:n.workpiece?.stage??null,reservationIds:[]};
   n.currentActivity=a;
@@ -100,18 +107,22 @@
     workRequired:source.lastActivity.workRequired,
     reason:typeof source.lastActivity.reason==='string'?
      source.lastActivity.reason.slice(0,48):null};
-  const copy=a=>({
-   id:'act_'+a.commandId,commandId:a.commandId,key:a.key,
-   ref:typeof a.ref==='string'?a.ref:null,state:a.state,
-   workRequired:a.workRequired,workDone:a.workDone,
-   startedAt:Number.isFinite(a.startedAt)&&a.startedAt<=clock?a.startedAt:clock,
-   lastTick:clock,reason:typeof a.reason==='string'?a.reason.slice(0,48):null,
-   workpieceRecipe:typeof a.workpieceRecipe==='string'?a.workpieceRecipe:null,
-   workpieceStage:Number.isInteger(a.workpieceStage)?a.workpieceStage:null,
-   ...(root.WorldReceipts.validDecisionId(a.decisionId)?{decisionId:a.decisionId}:{}),
-   reservationIds:Array.isArray(a.reservationIds)?a.reservationIds.filter(x=>
-    typeof x==='string'&&/^res_[1-9]\d*$/.test(x)).slice(0,40):[]
-  });
+  const copy=a=>{
+   const trace=projectTrace(a.project,clock);
+   return {
+    id:'act_'+a.commandId,commandId:a.commandId,key:a.key,
+    ref:typeof a.ref==='string'?a.ref:null,state:a.state,
+    workRequired:a.workRequired,workDone:a.workDone,
+    startedAt:Number.isFinite(a.startedAt)&&a.startedAt<=clock?a.startedAt:clock,
+    lastTick:clock,reason:typeof a.reason==='string'?a.reason.slice(0,48):null,
+    workpieceRecipe:typeof a.workpieceRecipe==='string'?a.workpieceRecipe:null,
+    workpieceStage:Number.isInteger(a.workpieceStage)?a.workpieceStage:null,
+    ...(root.WorldReceipts.validDecisionId(a.decisionId)?{decisionId:a.decisionId}:{}),
+    ...(trace?{project:trace}:{}),
+    reservationIds:Array.isArray(a.reservationIds)?a.reservationIds.filter(x=>
+     typeof x==='string'&&/^res_[1-9]\d*$/.test(x)).slice(0,40):[]
+   };
+  };
   if(Array.isArray(source?.suspendedActivities)){
    n.suspendedActivities=source.suspendedActivities.filter(valid).slice(-MAX_SUSPENDED).map(copy);
   }
