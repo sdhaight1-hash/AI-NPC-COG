@@ -250,6 +250,14 @@
     spec.stages[part.stage].name};
   const quality=Math.max(1,Math.min(5,Math.round(
    (part.workmanship/spec.stages.length+part.materialQuality)/2)));
+  // A completed experiment may discover a physical defect rather than a
+  // usable product. The trial is still a successful *world operation*, so
+  // receipts capture spent inputs, labor and the missing output without an
+  // illegal rollback. A poorly made binding cannot seal this first vessel.
+  if(spec.experimentalFor==='flask'&&part.materialQuality<=1){
+   npc.workpiece=null;
+   return {ok:true,message:'Water-retention trial finished: weak stopper binding leaked; no usable vessel'};
+  }
   const output=spec.output;
   if(output.structure){
    world.structures.push({id:output.structure+'_'+(world.structures.length+1),
