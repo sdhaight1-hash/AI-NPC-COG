@@ -16,4 +16,4 @@ An active `water_vessel` project treats a leaking result as an unresolved practi
 
 ## Explicitly unfinished
 
-This first rule does not yet include wood grain, dampness, alternative seal experiments, salvageable defective objects, procedural analogy or interpersonal instruction. Avoid inferring those features from the existence of one deterministic test. Refer to #107 and #110 for the broader experimental and learning work.
+This first rule does not yet include wood grain, dampness, alternative seal experiments, salvageable defective objects, procedural analogy or interpersonal instruction. The final seal test currently **abstracts a small wetness/leak probe** as a material-quality outcome: it does not consume or claim a separately metered spring-water unit, and must not be cited as a water-conservation test. A future phase must explicitly source and account for physical test liquid before claiming a fully conserved wet trial. Avoid inferring those features from the existence of one deterministic test. Refer to #107 and #110 for the broader experimental and learning work.
