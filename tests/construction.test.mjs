@@ -84,3 +84,29 @@ test('malicious or stale saves cannot mint finished tiles or overlapping plans',
  assert.equal(restored.world.construction.blueprints[0].id,good.id);
  assert.ok(restored.world.construction.nextId>Number(good.id.slice(3)));
 });
+
+test('roof declarations require compatible supports across the seam and after reload',()=>{
+ const k=kernels(),state=k.Simulation.initial(379210),world=state.world,actor=state.npcs[0];
+ world.now=state.clock;
+ const y=Array.from({length:world.height},(_,row)=>row).find(row=>
+  k.Frontier.traversable(world,0,row)&&k.Frontier.traversable(world,world.width-1,row));
+ assert.notEqual(y,undefined);
+ const roofAt={x:0,y,z:0},wallAt={x:world.width-1,y,z:0};
+ assert.equal(k.Construction.plan(world,'roof',roofAt,actor.id),null);
+ const wall=k.Construction.plan(world,'wall',wallAt,actor.id);
+ assert.equal(wall.material,'wood');
+ const roof=k.Construction.plan(world,'roof',roofAt,actor.id);
+ assert.equal(roof.material,'thatch');
+ assert.equal(k.Construction.cancel(world,wall.id,actor.id),false);
+ const save=JSON.parse(JSON.stringify(k.Persistence.save(state)));
+ save.world.construction.blueprints.reverse();
+ delete save.world.construction.blueprints[0].material; // pre-material v3 plan
+ save.world.construction.blueprints.push({...wall,id:'bp_99999999999999999999'});
+ const restored=k.Simulation.initial(379210);
+ assert.equal(k.Persistence.restore(restored,save),true);
+ assert.deepEqual(Array.from(restored.world.construction.blueprints,b=>b.id),[roof.id,wall.id]);
+ assert.equal(restored.world.construction.blueprints[0].material,'thatch');
+ assert.equal(k.Construction.cancel(restored.world,roof.id,actor.id),true);
+ assert.equal(k.Construction.cancel(restored.world,wall.id,actor.id),true);
+ assert.ok(k.Construction.plan(restored.world,'floor',roofAt,actor.id),'Malformed ID cannot block allocation');
+});

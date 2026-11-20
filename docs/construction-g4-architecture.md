@@ -55,3 +55,13 @@ Keep physical simulation independent of the drawing backend. Favor a scalable hy
 - A roof can be cut away visually while still being physically present.
 - Multiple residents can supply and build without duplicated materials.
 - Deterministic multi-seed soak and physical conservation tests remain green.
+
+## Blueprint validation checkpoint
+
+Floor, wall and door plans specify timber. Roof plans specify thatch and
+require a wall or door plan within one cardinal step on the same level.
+Neighbors wrap at the map seam. Removing the last planned support requires
+cancelling its dependent roof first. Restore checks support independent of
+record order, infers material for older supported plans, and rejects
+unsafe IDs and unsupported roofs. These constraints govern plans. The
+physical work milestone adds actual materials, built support and enclosure.
