@@ -172,9 +172,11 @@
   }
   return false;
  }
- function create(state,n,kind){
+ function create(state,n,kind,rememberVisible=true){
   if(!DEFINITIONS[kind]||n.project)return null;
-  if(kind==='water_vessel'){
+  // Loading a checkpoint reconstructs a project; it must not invent a fresh
+  // visual observation or rewrite the original sighting timestamp.
+  if(kind==='water_vessel'&&rememberVisible){
    // Record the actual visual evidence for a future return trip, not the
    // deposit stock or a complete technology recipe from world data.
    const seen=root.Perception?.snapshot(state,n).objects.filter(o=>o.kind==='water')||[];
@@ -321,7 +323,7 @@
   if(!definition||!validateGraph(definition.nodes)||
    !Number.isFinite(old.startedAt)||old.startedAt>state.clock)return null;
   if(!['ACTIVE','BLOCKED','COMPLETED'].includes(old.status))return null;
-  const p=create(state,n,kind);
+  const p=create(state,n,kind,false);
   p.startedAt=old.startedAt;p.status=old.status;
   p.blockedReason=typeof old.blockedReason==='string'?
    old.blockedReason.slice(0,140):null;
