@@ -712,7 +712,7 @@ test('crafting inspector shows the current operation and resident-specific seal 
  maker.workpiece={recipe:'hollow_wood_trial',stage:2};
  maker.evidenceMemory.trials.push({heldWater:false,materialQuality:1});
  b.selectNpc(maker.id);
- assert.match(b.elements.get('npcCrafting').textContent,/3\/3.*Fill, tilt and test the seal/);
+ assert.match(b.elements.get('npcCrafting').textContent,/3\/3.*Tilt-test seal using one measured freshwater unit/);
  assert.match(b.elements.get('npcCrafting').textContent,/Last trial leaked with binding grade 1\/5/);
  b.selectNpc(peer.id);
  assert.equal(b.elements.get('npcCrafting').textContent,'No workpiece');
