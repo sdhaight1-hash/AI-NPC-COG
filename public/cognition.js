@@ -6,20 +6,25 @@
  const terms=text=>[...new Set(String(text||'').toLowerCase().match(/[a-z][a-z0-9_]{2,}/g)||[])]
   .filter(t=>!STOP.has(t));
  const bound=(x,a,b)=>Math.max(a,Math.min(b,x));
- function record(n,text,clock,meta={}){
-  if(!Array.isArray(n.memories))n.memories=[];
+ function memoryEntry(n,text,clock,meta){
   const time=Number.isFinite(clock)?clock:0;
   const kind=['event','success','failure','observation','conversation','need'].includes(meta.kind)?
    meta.kind:'event';
-  const entry={text:String(text).slice(0,180),at:time,kind,
+  return {text:String(text).slice(0,180),at:time,kind,
    action:String(meta.action||'').slice(0,40),ref:String(meta.ref||'').slice(0,80),
    x:Number.isInteger(n.x)?n.x:0,y:Number.isInteger(n.y)?n.y:0,
    salience:bound(Number(meta.salience)||1,1,5)};
+ }
+ function record(n,text,clock,meta={}){
+  if(!Array.isArray(n.memories))n.memories=[];
+  const entry=memoryEntry(n,text,clock,meta);
   const last=n.memories[n.memories.length-1];
   if(last&&last.text===entry.text&&last.action===entry.action&&
-   last.ref===entry.ref&&time-last.at<12){
-   last.at=time;last.salience=Math.max(last.salience,entry.salience);
-  }else n.memories.push(entry);
+   last.ref===entry.ref&&entry.at>=last.at&&entry.at-last.at<12){
+   last.at=entry.at;last.salience=Math.max(last.salience,entry.salience);
+   return last;
+  }
+  n.memories.push(entry);
   // Retain distinct experiences beyond the 24-entry recent-event buffer.
   if(n.memories.length>160){
    const recent=n.memories.slice(-100),older=n.memories.slice(0,-100)
@@ -54,13 +59,11 @@
   if(!Array.isArray(saved))return;
   for(const m of saved.slice(-160)){
    if(!m||typeof m.text!=='string')continue;
-   const at=Number.isFinite(m.at)?m.at:0;
-   record(n,m.text,at,{kind:m.kind,action:m.action,ref:m.ref,
-    salience:Number(m.salience)||1});
-   const item=n.memories[n.memories.length-1];
+   const item=memoryEntry(n,m.text,m.at,m);
    if(Number.isInteger(m.x))item.x=m.x;
    if(Number.isInteger(m.y))item.y=m.y;
    if(typeof m.time==='string')item.time=m.time.slice(0,80);
+   n.memories.push(item);
   }
  }
  // Fast involuntary responses. A threat overrides low-priority jobs, never

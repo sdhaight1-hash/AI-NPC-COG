@@ -28,6 +28,8 @@ A resource report queues a cue from the listener’s own recorded speech episode
 
 A failed model request can start offline routine work only if the resident remains idle and eligible. Emergency rest, active plans, travel, and peer commitments can start while inference is pending and keep control when it fails.
 
+Checkpoint restore preserves the order and identity of retained personal memories, intentional pauses in work, social cooldowns, and crafted shelter ownership. Those details affect which tasks residents choose after a restart.
+
 ## Tests
 
 `tests/client.test.mjs` tests depletion during inference, same-lot contention, unrelated private inventory changes, private belief/report revisions, simulated expiry, actor death and a deliberately unresolved model response that arrives after an urgent physical drink starts.
