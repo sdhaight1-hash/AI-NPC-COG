@@ -787,11 +787,12 @@ canvas.addEventListener('click',event=>{
  const tile=clientToTile(event.clientX,event.clientY,canvas.getBoundingClientRect());
  const remains=state.world.remains.find(o=>o.z===tile.z&&o.x===tile.x&&o.y===tile.y);
  const item=state.world.items.find(o=>(o.z||0)===tile.z&&o.x===tile.x&&o.y===tile.y);
- const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=((remains||item)?0:1));
- if(n){state.selectedObject=null;selectNpc(n.id);renderObjectInspector();return;}
  const built=[...(state.world.construction?.tiles||[]),
   ...(state.world.construction?.blueprints||[])].find(o=>
    o.z===tile.z&&o.x===tile.x&&o.y===tile.y);
+ const n=state.npcs.find(p=>(p.z||0)===tile.z&&
+  dist(p,tile)<=((remains||item||built)?0:1));
+ if(n){state.selectedObject=null;selectNpc(n.id);renderObjectInspector();return;}
  const object=remains||item||built||(tile.z===0?[...state.world.nodes,
   ...state.world.structures].find(o=>o.x===tile.x&&o.y===tile.y):null);
  state.selectedObject=object?.id||null;renderObjectInspector();
