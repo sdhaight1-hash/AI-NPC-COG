@@ -489,7 +489,11 @@
  }
  const WAITING_ACTIONS=new Set(['drink','drink_source','eat','forage','rest',
   'explore','inspect','socialize','share_food','none']);
- function chooseOffline(state,n,allowed=null){
+ function projectWaiting(state,n){
+  return RECOVERABLE_PROJECTS.has(n.project?.kind)&&n.project.status==='BLOCKED'&&
+   state.clock<(n.project.nextAt||0);
+ }
+ function chooseOffline(state,n,allowed=projectWaiting(state,n)?WAITING_ACTIONS:null){
   const options=available(state,n).filter(o=>(!allowed||allowed.has(o.key))&&
    (o.key!=='socialize'||
    (n.needs.social>=50&&n.energy>=25&&
@@ -502,10 +506,7 @@
   if(!state.auto||state.paused)return;
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
-   (!n.project||n.project.status==='COMPLETED'||
-    (RECOVERABLE_PROJECTS.has(n.project.kind)&&
-     n.project.status==='BLOCKED'&&
-     state.clock<(n.project.nextAt||0)))&&
+   (!n.project||n.project.status==='COMPLETED'||projectWaiting(state,n))&&
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
@@ -528,8 +529,7 @@
    if(policy.projects!==false&&root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
-   const waiting=RECOVERABLE_PROJECTS.has(n.project?.kind)&&
-    n.project.status==='BLOCKED'&&state.clock<(n.project.nextAt||0);
+   const waiting=projectWaiting(state,n);
    const suspended=n.suspendedActivities?.at(-1);
    const canResume=suspended&&(!waiting||WAITING_ACTIONS.has(suspended.key))&&
     available(state,n).some(o=>o.key===suspended.key&&
@@ -542,6 +542,6 @@
  }
  root.WorldRuntime={DURATION,stats,note,pathfind,reachability,available,moveTo,
   approach,move,actionDuration,begin,complete,advancePlan,advanceProject,survival,chooseOffline,scheduleOffline,
-  invalidateNavigation,
+  invalidateNavigation,projectWaiting,
   finishPlan,remember,log};
 })(globalThis);

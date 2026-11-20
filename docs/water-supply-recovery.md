@@ -8,6 +8,8 @@ A subsequently accessible, personally known spring may satisfy `fill_water` thro
 
 Project retries request an affordance scan only when their backoff expires. The project still reconciles already-completed prerequisites during the wait, so outside actions can satisfy physical requirements without repeated visibility and path queries.
 
+The browser scheduler uses the same bounded choices as headless simulation during a water or housing project's backoff. A resident can forage, rest or attend to other immediate needs without releasing their project or requesting a separate model review.
+
 ## Verification
 
 `tests/blocked-water-project.test.mjs` checks missing-source backoff, interrupted or failed scouting not counted as travel, bounded attempts, checkpoint restore, survival fallback, real recovery when freshwater is reachable, and two-person reservation contention. Existing `tests/water-vessel-project.test.mjs` covers the complete empty-hand craft → physical fill → off-source drinking path, and the headless production benchmark covers conserved inputs and actor-private manufacturing knowledge.

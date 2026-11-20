@@ -115,6 +115,7 @@ function backgroundOptions(n){
  return choices.map(({key,when})=>({key,when}));
 }
 function fallbackBackground(n){
+ if(WorldRuntime.projectWaiting(state,n))return WorldRuntime.chooseOffline(state,n);
  const options=availableActivities(n).filter(o=>o.key!=='socialize');
  const choice=Agency.choose(n,options,state.world,state.clock);
  return choice?.key||AgentWorld.fallback(n,backgroundOptions(n));
@@ -148,7 +149,7 @@ function scheduleIdleAgents(){
   if(initiator)socialInitiative(initiator);
  }
  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&!n.peerReservedFor&&
-  (!n.project||n.project.status==='COMPLETED')&&
+  (!n.project||n.project.status==='COMPLETED'||WorldRuntime.projectWaiting(state,n))&&
   n.action!=='rest'&&state.clock>=n.thoughtAt)
   .sort((a,b)=>a.thoughtAt-b.thoughtAt);
  if(!state.connected){
@@ -173,7 +174,8 @@ function scheduleIdleAgents(){
    n.thoughtAt=state.clock+(success?18:3);
   }
  }else{
-  const cues=new Map(due.map(n=>[n,Cognition.attentionCue(n,state.clock)]));
+  const cues=new Map(due.filter(n=>!WorldRuntime.projectWaiting(state,n))
+   .map(n=>[n,Cognition.attentionCue(n,state.clock)]));
   // Keep the model lane for one NPC, but don't let a serialized inference
   // backlog freeze every other body for hours at accelerated world speeds.
   const n=due.filter(actor=>cues.get(actor)).sort((a,b)=>
