@@ -611,7 +611,8 @@
   function stepNeeds(n,world,dt) {
     // Biology owns digestion, fuel, hydration budget, sleep pressure and
     // normalized endocrine indices; needs are experienced gameplay pressures.
-    const sheltered=world.structures.some(site=>site.type==='shelter'&&distance(n,site)<=4);
+    const sheltered=(root.Construction?.sheltered(world,n)??false)||
+      world.structures.some(site=>site.type==='shelter'&&distance(n,site)<=4);
     const warm=world.structures.some(site=>site.type==='campfire'&&distance(n,site)<=3);
     const phys=Biology.advance(n.bio,dt,{
       clock:world.now,temperatureC:world.weather?.temperature??20,
