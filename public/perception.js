@@ -68,7 +68,8 @@
  }
  function inspect(state,n,id){
   const world=state.world;
-  const target=[...world.nodes,...world.items,...world.structures,...(world.remains||[])]
+  const target=[...world.nodes,...world.items,...world.structures,
+   ...(world.construction?.tiles||[]),...(world.remains||[])]
    .find(o=>o.id===id);
   if(!target||(n.z||0)!==(target.z||0)||distance(world,n,target)>1||
    (target.kind==='remains'&&!canSee(state,n,target)))return null;
@@ -117,7 +118,8 @@
    .map(p=>({sense:'vision',kind:'resident',id:p.id,name:p.name,
     x:p.x,y:p.y,z:p.z||0,activity:String(p.action||'none').slice(0,40),
     at:state.clock})).sort((a,b)=>a.id.localeCompare(b.id));
-  const objects=[...world.nodes,...world.items,...world.structures,...(world.remains||[])]
+  const objects=[...world.nodes,...world.items,...world.structures,
+   ...(world.construction?.tiles||[]),...(world.remains||[])]
    .filter(o=>canSee(state,n,o))
    .map(o=>({sense:'vision',id:o.id,kind:String(o.kind||o.type||'object'),
     x:o.x,y:o.y,z:o.z||0,at:state.clock}))
