@@ -159,3 +159,21 @@ test('cached reachability invalidates when a traversable tile is edited',()=>{
  delete state.world.edits[key];
  assert.equal(k.WorldRuntime.reachability(state,actor)(target),true);
 });
+
+test('solid wall edits block movement and unsupported air above water is unwalkable',()=>{
+ const k=kernels(),s=k.Simulation.initial(379210),world=s.world,actor=s.npcs[0];
+ const target=k.Frontier.neighbors(world,actor)[0];
+ const key=target.x+':'+target.y+':0';
+ assert.equal(k.WorldRuntime.reachability(s,actor)(target),true);
+ world.edits[key]='wall';
+ assert.equal(k.Frontier.traversable(world,target.x,target.y,0),false);
+ assert.equal(k.WorldRuntime.reachability(s,actor)(target),false);
+ const save=JSON.parse(JSON.stringify(k.Persistence.save(s)));
+ const restored=k.Simulation.initial(379210);
+ assert.equal(k.Persistence.restore(restored,save),true);
+ assert.equal(k.Frontier.materialAt(restored.world,target.x,target.y,0),'wall');
+ assert.equal(k.WorldRuntime.reachability(restored,restored.npcs[0])(target),false);
+ const i=world.terrain.indexOf('water');
+ assert.ok(i>=0);
+ assert.equal(k.Frontier.traversable(world,i%world.width,Math.floor(i/world.width),1),false);
+});

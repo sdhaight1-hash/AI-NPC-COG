@@ -83,9 +83,11 @@ function materialAt(world,x,y,z=0){
 }
 function traversable(world,x,y,z=0){
  const material=materialAt(world,x,y,z);
- if(z===0)return material!=='water'&&material!=='bedrock'&&material!=='stone';
- return material==='cave'||(material==='air'&&
-  materialAt(world,x,y,z-1)!=='air'&&materialAt(world,x,y,z-1)!=='cave');
+ if(z===0)return material!=='water'&&material!=='bedrock'&&material!=='stone'&&material!=='wall';
+ if(material==='cave')return true;
+ if(material!=='air')return false;
+ const support=materialAt(world,x,y,z-1);
+ return support!=='air'&&support!=='cave'&&support!=='water';
 }
 function neighbors(world,position){
  const z=position.z||0,x=wrap(position.x,world.width),y=wrap(position.y,world.height);
