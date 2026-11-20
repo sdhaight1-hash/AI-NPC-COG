@@ -2,7 +2,7 @@
 // consumes or refunds inventory. World action kernels remain the effect authority.
 (function(root){
  'use strict';
- const TYPES=new Set(['node','npc','structure','item']);
+ const TYPES=new Set(['node','npc','structure','item','blueprint']);
  const MAX_ACTIVE=5000;
  const key=s=>s.type+':'+s.id+':'+s.kind;
  const clean=s=>s&&TYPES.has(s.type)&&typeof s.id==='string'&&s.id.length<=100&&
@@ -22,6 +22,9 @@
    const site=w.structures.find(n=>n.id===s.id);
    return site?.contents?.[s.kind]||0;
   }
+  if(s.type==='blueprint')
+   return s.kind==='tile'&&w.construction?.blueprints.some(b=>
+    b.id===s.id&&b.status==='PLANNED')?1:0;
   const item=w.items.find(i=>i.id===s.id);
   return item?.kind===s.kind?item.count:0;
  }
@@ -34,6 +37,12 @@
   const npc=(kind,quantity)=>({type:'npc',id:n.id,kind,quantity});
   const node=(kind,quantity)=>({type:'node',id:ref,kind,quantity});
   const site=(kind,quantity)=>({type:'structure',id:ref,kind,quantity});
+  if(action==='build_tile'){
+   const b=state.world.construction?.blueprints.find(x=>x.id===ref);
+   const input=root.Construction?.cost(b?.kind);
+   return b&&input?[npc(input.kind,input.quantity),
+    {type:'blueprint',id:ref,kind:'tile',quantity:1}]:[];
+  }
   // Final wet seal trial claims exactly one existing physical freshwater unit.
   if(action==='craft_stage'&&root.Crafting?.wetSealPending(n))
    return typeof ref==='string'?[node('water',1)]:[];

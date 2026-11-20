@@ -81,13 +81,19 @@ function materialAt(world,x,y,z=0){
  if(z===0)return terrainAt(world,x,y);
  return underground(world.seed,x,y,z);
 }
-function traversable(world,x,y,z=0){
+function terrainTraversable(world,x,y,z=0){
  const material=materialAt(world,x,y,z);
  if(z===0)return material!=='water'&&material!=='bedrock'&&material!=='stone'&&material!=='wall';
  if(material==='cave')return true;
  if(material!=='air')return false;
  const support=materialAt(world,x,y,z-1);
  return support!=='air'&&support!=='cave'&&support!=='water';
+}
+function traversable(world,x,y,z=0){
+ if(!terrainTraversable(world,x,y,z))return false;
+ x=wrap(x,world.width);y=wrap(y,world.height);
+ return !(world.construction?.tiles||[]).some(t=>t.kind==='wall'&&
+  t.x===x&&t.y===y&&t.z===z&&t.status==='BUILT');
 }
 function neighbors(world,position){
  const z=position.z||0,x=wrap(position.x,world.width),y=wrap(position.y,world.height);
@@ -210,5 +216,5 @@ function restore(map,data){
  return true;
 }
 root.Frontier={WIDTH,HEIGHT,MIN_Z,MAX_Z,DEFAULT_SEED,COLORS,generate,baseRegion,matchesSave,terrainAt,
- wrap,hash,distance,materialAt,traversable,neighbors,calendar,DAYS_PER_MONTH,DAYS_PER_YEAR,weather,reveal,revealed,restore};
+ wrap,hash,distance,materialAt,terrainTraversable,traversable,neighbors,calendar,DAYS_PER_MONTH,DAYS_PER_YEAR,weather,reveal,revealed,restore};
 })(globalThis);
