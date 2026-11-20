@@ -15,6 +15,10 @@ test('eight grounded scenarios satisfy authoritative postconditions',()=>{
  assert.equal(vessel.learnedMethodReceipts,1);
  assert.equal(vessel.finalVessels,1);
  assert.ok(vessel.completedStages>=9);
+ assert.ok(vessel.liveActivityCounters.completed>0);
+ for(const key of ['started','completed','failed','blocked','abandoned'])
+  assert.ok(Number.isInteger(vessel.liveActivityCounters[key])&&
+   vessel.liveActivityCounters[key]>=0,'Malformed '+key+' activity count');
  for(const kind of ['fiber','stone','wood'])
   assert.ok(vessel.sourceDebits[kind]>0,kind+' stock must be physically consumed');
 });
@@ -35,6 +39,10 @@ test('five-founder autonomy survives a model-free multi-day soak',()=>{
  assert.equal(result.pass,true);
  assert.equal(result.elapsedTicks,2880);
  assert.ok(result.completed>0);
+ assert.ok(result.liveActivityCounters.completed>=0);
+ for(const key of ['blocked','abandoned'])
+  assert.ok(Number.isInteger(result.liveActivityCounters[key])&&
+   result.liveActivityCounters[key]>=0,key+' must be reported even when zero');
  assert.equal(result.modelCalls,0);
 });
 
