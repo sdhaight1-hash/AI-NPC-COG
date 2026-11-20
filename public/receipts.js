@@ -152,6 +152,8 @@
    action:task.key,targetId:task.ref,status:outcome.ok?'COMPLETED':'FAILED',
    reason:outcome.ok?null:String(outcome.message||'Action rejected').slice(0,160),
    delta,context});
+  if(outcome.ok&&task.key==='build_tile')
+   root.Construction?.recordProof(state.world,receipt);
   if(outcome.ok)root.EvidenceMemory?.fromReceipt(state,n,receipt);
   else root.EvidenceMemory?.fromFailedReceipt(state,n,receipt);
   return {...outcome,receipt};

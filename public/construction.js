@@ -5,7 +5,7 @@
  const LAYERS=Object.freeze({floor:'floor',wall:'barrier',door:'barrier',roof:'roof'});
  const MATERIALS=Object.freeze({floor:'wood',wall:'wood',door:'wood',roof:'thatch'});
  const MAX_PLANS=512,MAX_TILES=512;
- const fresh=()=>({version:1,nextId:1,blueprints:[],tiles:[]});
+ const fresh=()=>({version:1,nextId:1,blueprints:[],tiles:[],proofs:[]});
  const validPoint=(world,p)=>p&&Number.isInteger(p.x)&&Number.isInteger(p.y)&&
   Number.isInteger(p.z)&&p.x>=0&&p.x<world.width&&p.y>=0&&p.y<world.height&&
   p.z>=root.Frontier.MIN_Z&&p.z<=root.Frontier.MAX_Z&&
@@ -150,6 +150,22 @@
   return {ok:true,message:'Constructed one '+b.kind+' tile at '+b.x+','+b.y+
    ' from one '+checked.input.kind};
  }
+ function compactProof(receipt){
+  return {actorId:receipt.actorId,commandId:receipt.commandId,
+   targetId:receipt.targetId,action:'build_tile',status:'COMPLETED',clock:receipt.clock,
+   delta:{inventory:(receipt.delta?.inventory||[]).map(x=>({...x})),
+    collections:{constructionTiles:{added:(receipt.delta?.collections?.constructionTiles?.added||[])
+     .map(x=>({...x}))}}}};
+ }
+ function recordProof(world,receipt){
+  const state=world.construction;
+  if(!state||receipt?.action!=='build_tile'||receipt.status!=='COMPLETED'||
+   state.proofs.some(x=>x.commandId===receipt.commandId)||
+   receipt.delta?.collections?.constructionTiles?.added?.length!==1)return false;
+  state.proofs.push(compactProof(receipt));
+  if(state.proofs.length>MAX_TILES)state.proofs.splice(0,state.proofs.length-MAX_TILES);
+  return true;
+ }
  // An enclosed room is derived only from committed geometry, never from
  // blueprints or a nearby wall. A roof must cover every interior floor cell.
  // Keep the flood bounded, including on the toroidal world seam.
@@ -199,9 +215,15 @@
   }
   // A completed tile must match its original physical receipt, including
   // its command, actor, work location and actual inventory consumption.
-  const proofs=new Map((Array.isArray(receipts)?receipts:[]).filter(r=>
+  // The rolling event log is not a durable archive. Retain minimal
+  // material+tile proof for every extant finished tile across log eviction.
+  const source=[...(Array.isArray(saved.proofs)?saved.proofs.slice(-MAX_TILES):[]),
+   ...(Array.isArray(receipts)?receipts:[])];
+  const proofs=new Map(source.filter(r=>
    r?.status==='COMPLETED'&&r.action==='build_tile'&&
-   typeof r.commandId==='string').map(r=>[r.commandId,r]));
+   validId(r.commandId,'cmd_')&&validOwner(r.actorId)&&
+   validId(r.targetId,'bp_')&&Number.isFinite(r.clock)&&
+   r.clock>=0&&r.clock<=world.now).map(r=>[r.commandId,r]));
   const sites=new Set(),ids=new Set();
   const candidates=(Array.isArray(saved.tiles)?saved.tiles:[])
    .slice(0,MAX_TILES).filter(t=>{
@@ -222,6 +244,7 @@
    .map(t=>({id:t.id,blueprintId:t.blueprintId,kind:t.kind,material:t.material,
     x:t.x,y:t.y,z:t.z,actorId:t.actorId,builtAt:t.builtAt,
     status:'BUILT',commandId:t.commandId}));
+  next.proofs=next.tiles.map(t=>compactProof(proofs.get(t.commandId)));
   const planIds=new Set(),occupied=new Set(next.tiles.map(t=>slot(t.kind,t)));
   for(const b of saved.blueprints.slice(0,MAX_PLANS)){
    if(!b||!validId(b.id,'bp_')||planIds.has(b.id)||ids.has('tile_'+b.id.slice(3))||
@@ -244,5 +267,5 @@
   world.construction=next;
  }
  root.Construction={LAYERS,MAX_PLANS,MAX_TILES,fresh,plan,cancel,cost,
-  canBuild,options,build,compactSite,designHome,sheltered,restore};
+  canBuild,options,build,compactSite,designHome,sheltered,recordProof,restore};
 })(globalThis);
