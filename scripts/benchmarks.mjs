@@ -242,7 +242,7 @@ export function runSoak(seed=379210,days=30,profile='no-llm',startDay=1){
  if(profile==='mock-model')policy.choose=(state,n)=>{
   // A deterministic test double scores the same privacy-filtered menu used
   // for model requests and still submits through ordinary physical commands.
-  const privateMenu=globalThis.Perception.filterAffordances(state,n,WorldRuntime.available(state,n));
+  const privateMenu=WorldRuntime.available(state,n);
   const proposed=WorldRuntime.chooseOffline(state,n);
   const accepted=privateMenu.some(option=>option.key===proposed)?proposed:'none';
   modelCalls++;

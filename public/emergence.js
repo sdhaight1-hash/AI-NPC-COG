@@ -817,6 +817,10 @@
       id:typeof v.id==='string'&&/^(?:fire|campfire|shelter|cache)_[1-9]\d*$/.test(v.id)?
         v.id:v.type+'_'+(i+1),
       type:v.type,x:v.x,y:v.y,
+      ...(v.type==='shelter'&&Number.isInteger(v.craftQuality)?
+       {craftQuality:Math.max(1,Math.min(5,v.craftQuality))}:{}),
+      ...(v.type==='shelter'&&typeof v.maker==='string'?
+       {maker:v.maker.slice(0,64)}:{}),
       ...(v.type==='workbench'?{craftQuality:Number.isInteger(v.craftQuality)?
        Math.max(1,Math.min(5,v.craftQuality)):1,maker:String(v.maker||'').slice(0,64)}:{}),
       ...(v.type==='crate'?{

@@ -49,7 +49,7 @@ function position(n){
  return {x:n.x+dx*fraction,y:n.y+dy*fraction};
 }
 function updateMovement(n,elapsed){return WorldRuntime.move(state,n,elapsed);}
-function sceneFor(n){
+function sceneFor(n,attentionSubject=''){
  const sensed=Perception.snapshot(state,n);
  const audible=sensed.heard.slice(-4).map(e=>e.kind+' '+e.proximity+
   ' to the '+e.direction).join('; ')||'Nothing distinctive';
@@ -62,12 +62,12 @@ function sceneFor(n){
  const sensations=Biology.sensation(n.bio,n.needs);
  const known=(n.knowledge?.recipes||[]).join(', ')||'No discovered crafting methods';
  const a=Agency.state(n),motives=Agency.drives(n);
- const memoryQuery=(a.goal?.key||n.goal)+' '+sensations+' '+nearby+' '+n.action;
+ const memoryQuery=[attentionSubject,a.goal?.key||n.goal,sensations,nearby,n.action].join(' ');
  const memories=Cognition.recall(n,memoryQuery,state.clock,4)
   .map(m=>m.kind+': '+m.text).join('; ')||'No relevant personal recollections';
  const evidenced=EvidenceMemory.recall(n,memoryQuery,state.clock,3)
   .map(m=>m.certainty+' '+m.type+': '+m.text+
-   (m.receiptId?' [verified '+m.receiptId+']':'')+
+   (m.receiptId?' [event '+m.receiptId+']':'')+
    (m.type==='inspection'&&m.certainty==='observed'&&m.ref?
     ' [source:'+m.ref+']':'')).join('; ')||'No source-backed experiences';
  const beliefs=a.beliefs.slice(-4).map(b=>b.kind+' at '+b.x+','+b.y+
@@ -110,8 +110,7 @@ function sceneFor(n){
 function backgroundOptions(n){
  // The same legal affordances serve the model and the autonomous executor.
  // Personal need, traits, remembered outcomes and ongoing goals order them.
- const sensedOptions=Perception.filterAffordances(state,n,availableActivities(n));
- const choices=Agency.ranked(n,sensedOptions.filter(o=>o.key!=='none'),
+ const choices=Agency.ranked(n,availableActivities(n).filter(o=>o.key!=='none'),
   state.world,state.clock).slice(0,9);
  choices.push({key:'none',when:'Observe surroundings before deciding'});
  return choices.map(({key,when})=>({key,when}));
@@ -254,7 +253,7 @@ async function checkModel(){
 // Bind each asynchronous decision to actor-local evidence, work and resources.
 // An unrelated global effect must not cancel somebody else's private choice.
 function modelDecisionBasis(n){
- const options=Perception.filterAffordances(state,n,availableActivities(n));
+ const options=availableActivities(n);
  const references={none:null},physical={none:JSON.stringify({ref:null,stock:null,count:null,claims:[]})};
  for(const option of options){
   // WorldRuntime.begin commits the FIRST legal option for an action key.
@@ -321,8 +320,9 @@ async function deliberate(n,cue=null){
   if(state.connected){
    if(cue)Cognition.attentionState(n).requestedAt=state.clock;
    const data=await jsonPost('/api/decide',{
-    persona:n.personality,scene:sceneFor(n),history:[],
-    question:cue?'Review '+cue.kind+' and choose a legal action using your own evidence.':
+    persona:n.personality,scene:sceneFor(n,cue?.subject),history:[],
+    question:cue?'Review '+cue.kind+(cue.subject?' about '+cue.subject:'')+
+     ' and choose a legal action using your own evidence.':
      'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
    });
    const offered=options.some(o=>o.key===data.action);
@@ -355,7 +355,10 @@ async function deliberate(n,cue=null){
   if(e.status!==429){
    activity(n).errors++;activityNote(n,'Model error: '+e.message);
    record(n.name+': '+state.modelLabel+' error '+e.message,'warning');
-   if(!state.paused&&state.npcs.includes(n))
+   if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&
+    n.alive!==false&&key(n)===location&&!n.task&&!n.plan&&!n.path.length&&
+    n.action!=='rest'&&!n.peerPending&&!n.peerReservedFor&&
+    (!n.project||n.project.status==='COMPLETED'||WorldRuntime.projectWaiting(state,n)))
     setAction(n,fallbackBackground(n),'offline routine');
    void checkModel();
   }

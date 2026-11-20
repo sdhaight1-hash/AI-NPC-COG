@@ -423,7 +423,9 @@
    Number.isFinite(p.startedAt)&&p.startedAt<=npc.spawnAt+1e9?
    {recipe:p.recipe,stage:p.stage,workmanship:p.workmanship,
     materialQuality:p.materialQuality,station:typeof p.station==='string'?p.station:null,
-    x:npc.x,y:npc.y,startedAt:p.startedAt}:null;
+    x:Number.isInteger(p.x)&&p.x>=0&&p.x<root.Frontier.WIDTH?p.x:npc.x,
+    y:Number.isInteger(p.y)&&p.y>=0&&p.y<root.Frontier.HEIGHT?p.y:npc.y,
+    startedAt:p.startedAt}:null;
  }
  root.Crafting={RECIPES,MATERIALS,KINDS,FLASK_CAPACITY,options,getRecipe,begin,advance,wetSealPending,interact,restore,
   knowinglyWeakBinding,flaskFields,vesselRoom,fillFlask,takeWater,removeFlask,receiveFlask};

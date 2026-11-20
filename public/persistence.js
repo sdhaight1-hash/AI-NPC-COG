@@ -137,6 +137,9 @@ function restore(state,saved){
      .map(x=>({kind:x.kind,startedAt:x.startedAt,finishedAt:x.finishedAt,
       actions:Math.min(100000,x.actions)})):[];
    if(Array.isArray(old.peerLog))n.peerLog=old.peerLog.slice(-12);
+   if(Number.isFinite(old.lastPeerAt)&&old.lastPeerAt<=state.clock)
+    n.lastPeerAt=Math.max(-100000,old.lastPeerAt);
+   if(Number.isFinite(old.nextPlanAt)&&old.nextPlanAt>=0)n.nextPlanAt=old.nextPlanAt;
    if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
    if(validSavedPath(state,old.path,n))n.path=old.path;
@@ -164,7 +167,7 @@ function restore(state,saved){
     const seq=Number(n.task.commandId.slice(4));
     if(Number.isSafeInteger(seq))state.commandSeq=Math.max(state.commandSeq,seq);
    }
-   if(n.workpiece&&(!n.plan||n.plan.key!=='craft_project'||
+   if(n.workpiece&&old.plan!==null&&(!n.plan||n.plan.key!=='craft_project'||
     n.plan.recipe!==n.workpiece.recipe))
     n.plan={key:'craft_project',recipe:n.workpiece.recipe,steps:0};
    if(!n.workpiece&&n.plan?.key==='craft_project')n.plan=null;

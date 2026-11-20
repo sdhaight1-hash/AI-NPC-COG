@@ -31,6 +31,35 @@ function compareSchedules(k,minutes,configure=()=>{},ports=()=>({})){
  return {batched,stepped,a};
 }
 
+test('checkpoint preserves separate memories and an intentionally dormant workpiece',()=>{
+ const k=kernels(),original=k.Simulation.initial(379210),actor=original.npcs[0];
+ original.auto=false;
+ const previousX=(actor.x+1)%original.world.width;
+ actor.workpiece={recipe:'crate',stage:0,workmanship:1,materialQuality:2,
+  station:null,x:previousX,y:actor.y,startedAt:original.clock-20};
+ actor.plan=null;actor.nextPlanAt=original.clock+2;actor.lastPeerAt=original.clock-10;
+ const shelter={id:'shelter_1',type:'shelter',x:actor.x,y:actor.y,
+  craftQuality:2,maker:actor.id};
+ original.world.structures.push(shelter);
+ // A bounded history can become adjacent when the intervening episode expires.
+ actor.memories=[{text:'Interrupted work',at:original.clock-3,kind:'need',
+  action:'',ref:'',x:actor.x,y:actor.y,salience:4},
+  {text:'Interrupted work',at:original.clock-1,kind:'need',
+   action:'',ref:'',x:previousX,y:actor.y,salience:4}];
+ const reopened=k.Simulation.initial(379210);reopened.auto=false;
+ assert.equal(k.Persistence.restore(reopened,clone(k.Persistence.save(original))),true);
+ const resident=reopened.npcs[0];
+ assert.deepEqual(clone(resident.memories),clone(actor.memories));
+ assert.deepEqual(clone(resident.workpiece),clone(actor.workpiece));
+ assert.deepEqual(clone(reopened.world.structures[0]),clone(shelter));
+ assert.equal(resident.nextPlanAt,actor.nextPlanAt);
+ assert.equal(resident.lastPeerAt,actor.lastPeerAt);
+ assert.equal(resident.plan,null);
+ k.Simulation.advance(reopened,5);
+ assert.equal(resident.task,null);
+ assert.equal(resident.plan,null);
+});
+
 test('time partition: 720 minute advance integrates every body and world minute',()=>{
  const k=kernels();
  const {batched}=compareSchedules(k,720);

@@ -160,7 +160,8 @@ test('reports remain unverified actor-local cues and cooldown restores from chec
  const memory=npc.evidenceMemory;
  const id='ev_'+(++memory.sequence);
  memory.episodes.push({id,at:500,type:'interaction',certainty:'reported'});
- memory.claims.push({sourceEpisodeId:id,sourceId:'spring',status:'unverified'});
+ memory.claims.push({sourceEpisodeId:'ev_7',speechEpisodeId:id,
+  sourceId:'spring',status:'unverified'});
  C.attentionReviewed(other,500,0);
  assert.equal(C.attentionCue(npc,500).kind,'unverified resource report');
  assert.equal(C.attentionCue(other,500),null);
