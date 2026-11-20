@@ -124,6 +124,21 @@
  }
  const hasInputs=(npc,recipe)=>Object.entries(recipe.inputs)
   .every(([kind,amount])=>(npc.inventory[kind]||0)>=amount);
+ function weakSealThreshold(npc){
+  const comparisons=(npc.evidenceMemory?.comparisons||[]).filter(x=>
+   x.method==='flask'&&x.certainty==='inferred'&&
+   Number.isFinite(x.failedQuality)&&Number.isFinite(x.passedQuality)&&
+   x.failedQuality<x.passedQuality);
+  return comparisons.length?Math.max(...comparisons.map(x=>x.failedQuality)):null;
+ }
+ function knowinglyWeakBinding(npc,id){
+  if(id!=='flask')return false;
+  const limit=weakSealThreshold(npc);
+  if(limit===null)return false;
+  const cords=(npc.craftedItems||[]).filter(x=>x.kind==='cord'&&
+   Number.isFinite(x.quality));
+  return cords.length>0&&!cords.some(x=>x.quality>limit);
+ }
  function stationNear(npc,world,type,range=8){
   // A craftsperson remembers a station they personally constructed even
   // when gathering has taken them beyond immediate sensory range.
@@ -142,7 +157,7 @@
     target:station||null,ref:station?.id||null}];
   }
   const work=Object.entries(RECIPES).flatMap(([id,spec])=>{
-   if(!hasInputs(npc,spec)||npc.energy<18||
+   if(!hasInputs(npc,spec)||npc.energy<18||knowinglyWeakBinding(npc,id)||
     (spec.experimentalFor&&npc.knowledge?.recipes?.includes(spec.experimentalFor))||
     (spec.knowledge&&!npc.knowledge?.recipes?.includes(spec.knowledge))||
     (spec.tool&&(npc.inventory[spec.tool]||0)<1))return [];
@@ -186,6 +201,8 @@
    return {ok:false,message:'Manufacturing prerequisites are missing'};
   if(id==='hafted_hatchet'&&npc.inventory.hatchet>0)
    return {ok:false,message:'Already carrying a hatchet'};
+  if(knowinglyWeakBinding(npc,id))
+   return {ok:false,message:'TESTED_SEAL_RISK: personally compared binding grades predict a leak'};
   let station=null;
   if(spec.station){
    station=world.structures.find(s=>s.id===stationId&&s.type===spec.station);
@@ -201,7 +218,15 @@
   for(const [kind,quantity] of Object.entries(spec.inputs)){
    for(let i=0;i<quantity;i++){
     if(KINDS.includes(kind)){
-     const index=(npc.craftedItems||[]).findIndex(p=>p.kind===kind);
+     let index=(npc.craftedItems||[]).findIndex(p=>p.kind===kind);
+     // Only a resident with personal comparative evidence deliberately
+     // selects a stronger available binding instead of repeating the leak.
+     if(id==='flask'&&kind==='cord'&&weakSealThreshold(npc)!==null){
+      const choices=(npc.craftedItems||[]).map((p,i)=>({p,i}))
+       .filter(x=>x.p.kind==='cord'&&Number.isFinite(x.p.quality))
+       .sort((a,b)=>b.p.quality-a.p.quality);
+      if(choices.length)index=choices[0].i;
+     }
      if(index!==-1){
       inherited+=npc.craftedItems[index].quality;parts++;
       npc.craftedItems.splice(index,1);
@@ -254,9 +279,11 @@
   // usable product. The trial is still a successful *world operation*, so
   // receipts capture spent inputs, labor and the missing output without an
   // illegal rollback. A poorly made binding cannot seal this first vessel.
-  if(spec.experimentalFor==='flask'&&part.materialQuality<=1){
+  if((spec.experimentalFor==='flask'||part.recipe==='flask')&&part.materialQuality<=1){
    npc.workpiece=null;
-   return {ok:true,message:'Water-retention trial finished: weak stopper binding leaked; no usable vessel'};
+   return {ok:true,message:part.recipe==='flask'?
+    'Finished attempted flask: weak stopper binding leaked; no usable vessel':
+    'Water-retention trial finished: weak stopper binding leaked; no usable vessel'};
   }
   const output=spec.output;
   if(output.structure){
