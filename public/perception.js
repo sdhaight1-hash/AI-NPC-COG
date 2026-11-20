@@ -25,6 +25,8 @@
    if(opaque.has(F.materialAt(world,cx,cy,a.z||0)))return false;
    if(world.structures.some(s=>s.x===cx&&s.y===cy&&
     (s.z||0)===(a.z||0)&&['wall','closed_door'].includes(s.type)))return false;
+   if(world.construction?.tiles.some(t=>t.kind==='wall'&&
+    t.x===cx&&t.y===cy&&t.z===(a.z||0)))return false;
   }
   return true;
  }
@@ -138,6 +140,8 @@
   // The actor can recall the existence of infrastructure they themselves
   // constructed; this grants no knowledge of unobserved foreign structures.
   const built=new Set(state.world.structures.filter(s=>s.maker===n.id).map(s=>s.id));
+  for(const b of state.world.construction?.blueprints||[])
+   if(b.actorId===n.id)built.add(b.id);
   const known=id=>visible.has(id)||witnessed.has(id)||built.has(id);
   const visibleKinds=new Set(packet.objects.map(o=>o.kind));
   const rememberedKinds=new Set((n.agency?.beliefs||[])
