@@ -42,13 +42,19 @@ function until(state,predicate,budget=100){
  }
  throw Error('Unmet authoritative predicate after '+budget+' minutes');
 }
+function liveActivityCounters(state){
+ const keys=['started','completed','failed','blocked','abandoned'];
+ return Object.fromEntries(keys.map(key=>[key,state.npcs.reduce((total,n)=>
+  total+(Number.isInteger(n.activityStats?.[key])?n.activityStats[key]:0),0)]));
+}
 function end(name,state,elapsed,goal){
  assert.equal(goal(),true,name+' goal predicate failed');
  return {scenario:name,pass:true,elapsedTicks:elapsed,worldHash:hash(state),
   modelCalls:0,goalsCompleted:1,receiptSequence:state.receiptSeq,
   committed:state.receipts.filter(r=>r.status==='COMPLETED').length,
   rejected:state.receipts.filter(r=>r.status==='FAILED'||r.status==='REJECTED').length,
-  noops:state.receipts.filter(r=>r.action==='none').length};
+  noops:state.receipts.filter(r=>r.action==='none').length,
+  liveActivityCounters:liveActivityCounters(state)};
 }
 function waterEmergency(seed){
  const s=setup(seed),n=s.npcs[0];s.auto=true;
@@ -325,6 +331,7 @@ export function runSoak(seed=379210,days=30,profile='no-llm',startDay=1){
   noops:state.receipts.filter(r=>r.status==='DECIDED'&&r.action==='none').length,
   rejectionRate:completed+rejected>0?rejected/(completed+rejected):0,
   retainedProjectCompletions:state.npcs.reduce((sum,n)=>sum+(n.completedProjects?.length||0),0),
+  liveActivityCounters:liveActivityCounters(state),
   deathDetails,modelCalls};
 }
 if(process.argv[1]?.replaceAll('\\','/').endsWith('/scripts/benchmarks.mjs')){
