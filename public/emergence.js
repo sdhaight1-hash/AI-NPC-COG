@@ -294,7 +294,7 @@
       if(n.inventory.wood<2&&(cache.contents?.wood||0)>0&&roomFor(n,'wood')>0)
         add('retrieve_wood','Take one stored wood from a nearby cache',cache,cache.id);
     }
-    for(const job of root.Crafting.options(n,world))
+    for(const job of root.Crafting.options(n,world,canReach))
       add(job.key,job.when,job.target||null,job.ref||null);
     for(const job of root.Construction?.options(world,n,residents,canReach)||[])
       add(job.key,job.when,job.target,job.ref);

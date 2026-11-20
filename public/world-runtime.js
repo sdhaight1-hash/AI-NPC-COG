@@ -266,6 +266,9 @@
     .filter(x=>x.commandId===commandId)}:
    root.Reservations.claim(state,n.id,commandId,request);
   if(!hold.ok){
+   if(hold.reason==='RESERVATION_CONFLICT'&&action==='craft_stage'&&
+    root.Crafting.wetSealPending(n))
+    root.Agency.observe(n,state.world,'seal_test',option.ref,false,state.clock);
    stats(n).rejected++;note(n,'Material blocked: '+hold.reason);
    root.WorldReceipts.decision(state,n,action,'world','REJECTED',hold.reason);
    return false;
@@ -396,6 +399,9 @@
   if(finished.source==='project'||(n.project&&finished.source==='plan'&&
     finished.key==='craft_stage'&&n.plan?.key==='craft_project'))
    root.Projects?.onOutcome(state,n,finished.key,outcome.ok,outcome.receipt);
+  if(!outcome.ok&&finished.key==='craft_stage'&&
+   outcome.message.startsWith('WET_TEST_WATER_UNAVAILABLE:'))
+   root.Agency.observe(n,state.world,'seal_test',finished.ref,false,state.clock);
   root.Agency.outcome(n,state.world,finished.key,finished.ref,outcome.ok,state.clock);
   if(outcome.ok){
    stats(n).completed++;note(n,'Completed: '+outcome.message);

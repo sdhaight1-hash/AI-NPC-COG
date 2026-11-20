@@ -115,6 +115,41 @@ test('a dry or unvisited spring cannot complete a wet stage or modify its workpi
  assert.deepEqual(copy(n.workpiece),original);
 });
 
+test('a vessel project retries its existing workpiece at a personally known alternative spring',()=>{
+ const run=setup(),{k,s,n,spring}=run;
+ const second=s.world.nodes.find(x=>x.kind==='water'&&x.id!==spring.id&&
+  x.stock>=2&&(x.z||0)===n.z&&k.Frontier.distance(s.world,n,x)<=18&&
+  k.WorldRuntime.reachability(s,n)(x));
+ assert.ok(second,'A second reachable, already generated spring is required');
+ // Limit the fixture to these two generated freshwater deposits.
+ s.world.nodes=s.world.nodes.filter(x=>x.kind!=='water'||x===spring||x===second);
+ n.knowledge.sightings=[{id:second.id,kind:'water',x:second.x,y:second.y,
+  z:second.z||0,at:s.clock}];
+ finalStage(run);
+ k.Projects.create(s,n,'water_vessel',false);
+ const wood=n.inventory.wood,cord=n.inventory.cord,stock=second.stock;
+ assert.equal(wood,0);
+ assert.equal(cord,0);
+ spring.stock=0;
+ k.Simulation.advance(s,1);
+ assert.ok(n.agency.beliefs.some(x=>x.ref===spring.id&&x.status==='depleted'));
+ assert.equal(n.workpiece?.stage,2);
+ assert.equal(n.inventory.flask,0);
+ assert.equal(n.task?.key,'craft_stage','Resume the unfinished vessel, rather than gathering new inputs');
+ assert.equal(n.task.ref,second.id);
+ for(let tick=0;tick<40&&n.inventory.flask===0;tick++)k.Simulation.advance(s,1);
+ assert.equal(n.inventory.flask,1);
+ assert.equal(n.project.status,'COMPLETED');
+ assert.equal(n.inventory.wood,wood);
+ assert.equal(n.inventory.cord,cord);
+ assert.equal(spring.stock,0);
+ assert.equal(second.stock,stock-1);
+ assert.equal(s.receipts.filter(x=>x.action==='craft_hollow_wood_trial'&&x.status==='COMPLETED').length,1);
+ const wet=s.receipts.findLast(x=>x.action==='craft_stage'&&x.status==='COMPLETED');
+ assert.equal(wet.targetId,second.id);
+ assert.deepEqual(copy(wet.delta.nodeStock.filter(x=>x.key===second.id).map(x=>x.delta)),[-1]);
+});
+
 test('two residents cannot claim the same last seal-test water unit',()=>{
  const run=setup(),{k,s,n,peer,spring}=run;
  finalStage(run);

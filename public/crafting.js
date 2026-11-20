@@ -150,16 +150,16 @@
   return (part?.recipe==='flask'||part?.recipe==='hollow_wood_trial')&&
    part.stage===recipe.stages.length-1;
  }
- function sealSource(npc,world){
+ function sealSource(npc,world,canReach){
   // Personal location evidence authorizes navigation, never grants live stock.
   const inspected=new Set((npc.knowledge?.observations||[]).map(x=>x.id));
   const sightings=new Map((npc.knowledge?.sightings||[])
    .filter(x=>x.kind==='water'&&x.at<=world.now).map(x=>[x.id,x]));
-  const recentDry=new Set((npc.agency?.beliefs||[])
-   .filter(b=>b.kind==='water'&&b.status==='depleted'&&
+  const inaccessible=new Set((npc.agency?.beliefs||[])
+   .filter(b=>((b.kind==='water'&&b.status==='depleted')||b.status==='failed')&&
     world.now-b.at>=0&&world.now-b.at<60).map(b=>b.ref));
   const candidates=world.nodes.filter(x=>x.kind==='water'&&
-   !recentDry.has(x.id)&&(npc.z||0)===(x.z||0)&&
+   !inaccessible.has(x.id)&&(npc.z||0)===(x.z||0)&&
    root.Frontier.distance(world,npc,x)<=18&&
    (inspected.has(x.id)||(
     sightings.has(x.id)&&sightings.get(x.id).x===x.x&&
@@ -168,16 +168,18 @@
      root.Perception.canSee({world,clock:world.now},npc,x):
      root.Frontier.distance(world,npc,x)<=1)));
   return candidates.sort((a,b)=>root.Frontier.distance(world,npc,a)-
-   root.Frontier.distance(world,npc,b)||a.id.localeCompare(b.id))[0]||null;
+   root.Frontier.distance(world,npc,b)||a.id.localeCompare(b.id)).find(source=>
+   !canReach||root.Frontier.distance(world,npc,source)<=1||
+   root.Frontier.neighbors(world,source).some(canReach))||null;
  }
- function options(npc,world){
+ function options(npc,world,canReach){
   if(npc.workpiece){
    const spec=RECIPES[npc.workpiece.recipe];
    const step=spec?.stages[npc.workpiece.stage];
    if(!step)return [];
    const station=npc.workpiece.station?
     world.structures.find(s=>s.id===npc.workpiece.station):null;
-   const wet=wetSealPending(npc),source=wet?sealSource(npc,world):null;
+   const wet=wetSealPending(npc),source=wet?sealSource(npc,world,canReach):null;
    if(wet&&!source)return []; // No wet experiment absent firsthand water evidence.
    return [{key:'craft_stage',when:'Continue '+spec.name+': '+step.name+
     ' ('+(npc.workpiece.stage+1)+'/'+spec.stages.length+' stages)'+

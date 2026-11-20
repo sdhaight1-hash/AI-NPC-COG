@@ -831,3 +831,65 @@ test('construction drawings are a pure overlay; built tiles and unfinished plans
  assert.equal(JSON.stringify(w.construction),builtState,
   'Drawing a wall must not modify its receipt or collision state');
 });
+
+test('the actual model request exposes a tested flask method only to its founder',async()=>{
+ const requests=[];
+ const b=makeBrowser({fetch:async (url,init)=>{
+  if(url==='/api/decide')requests.push(JSON.parse(init.body));
+  return {ok:true,json:async()=>({connected:true,action:'not_a_legal_action',source:'rein'})};
+ }});
+ const s=b.state,[maker,peer]=s.npcs;
+ s.npcs=[maker,peer];
+ s.auto=false;
+ s.connected=true;
+ const requestFor=async actor=>{
+  const count=requests.length;
+  await b.deliberate(actor);
+  assert.equal(requests.length,count+1);
+  return requests.at(-1);
+ };
+ const hasAction=(request,key)=>request.options.some(x=>x.key===key);
+ for(const n of [maker,peer]){
+  assert.ok(Object.values(n.inventory).every(count=>count===0));
+  const request=await requestFor(n);
+  assert.match(request.scene,/Known crafting methods: No discovered crafting methods/);
+  assert.equal(hasAction(request,'craft_flask'),false);
+ }
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=4&&
+  b.pathfind(maker,{x:x.x,y:x.y,z:x.z||0}).length);
+ assert.ok(spring);
+ Object.assign(maker,{x:spring.x,y:spring.y,z:spring.z||0,energy:100});
+ const w=s.world;
+ const nearby=[[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy])=>({
+  x:(spring.x+dx+w.width)%w.width,y:(spring.y+dy+w.height)%w.height,z:maker.z
+ })).find(tile=>b.pathfind(maker,tile).length===1);
+ assert.ok(nearby);
+ Object.assign(peer,nearby);
+ const supply=actor=>{
+  Object.assign(actor.inventory,{wood:1,cord:1,blade:1});
+  for(const kind of ['cord','blade']){
+   if(!actor.craftedItems.some(x=>x.kind===kind))
+    actor.craftedItems.push({kind,quality:2,maker:actor.id,craftedAt:s.clock,
+     method:kind,materialQuality:2});
+  }
+ };
+ supply(maker);
+ assert.equal(b.setAction(maker,'craft_hollow_wood_trial','rein'),true);
+ b.step(56);
+ assert.equal(maker.inventory.flask,1);
+ assert.ok(s.receipts.some(r=>r.actorId===maker.id&&r.action==='craft_stage'&&
+  r.status==='COMPLETED'&&r.delta.knowledge?.learnedMethods?.includes('flask')));
+ supply(maker);
+ supply(peer);
+ assert.deepEqual(['wood','cord','blade'].map(k=>maker.inventory[k]),
+  ['wood','cord','blade'].map(k=>peer.inventory[k]));
+ const own=await requestFor(maker),other=await requestFor(peer);
+ assert.match(own.scene,/Known crafting methods: flask\./);
+ assert.equal(hasAction(own,'craft_flask'),true);
+ assert.match(other.scene,/Known crafting methods: No discovered crafting methods/);
+ assert.equal(hasAction(other,'craft_flask'),false);
+ assert.match(other.scene,new RegExp('Visible people: '+maker.name+' at'));
+ assert.doesNotMatch(other.scene,/learned.*flask|flask-sealing instructions/i);
+ assert.equal(b.availableActivities(peer).some(x=>x.key==='craft_flask'),false);
+ assert.equal(b.setAction(peer,'craft_flask','rein'),false);
+});
