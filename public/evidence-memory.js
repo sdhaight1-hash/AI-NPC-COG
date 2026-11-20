@@ -7,7 +7,11 @@
  const unique=s=>[...new Set(words(s))];
  const empty=()=>({sequence:0,episodes:[],facts:[],claims:[],summaries:[],
   methods:[],trials:[],comparisons:[],social:[],lastDay:0});
- const state=n=>n.evidenceMemory ||=empty();
+ const state=n=>{
+  const m=n.evidenceMemory ||=empty();
+  m.trials ||= [];m.comparisons ||= [];
+  return m;
+ };
  const clone=x=>JSON.parse(JSON.stringify(x));
  const kinds=new Set(['action','inspection','interaction','sound','personal']);
  function sourceReceipt(sim,n,receiptId){
