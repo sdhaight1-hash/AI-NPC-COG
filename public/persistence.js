@@ -21,11 +21,12 @@
   if(stored.currentActivity===null)delete stored.currentActivity;
   return stored;
  }
+ const selectedId=(npcs,id)=>npcs.some(n=>n.id===id)?id:npcs[0]?.id||null;
  function save(state){
   return {version:3,seed:state.world.seed,clock:state.clock,
    nextPersonId:state.nextPersonId,npcs:state.npcs.map(serializePerson),
    dead:state.dead,world:state.world,events:state.events,
-   selected:state.selected,viewZ:state.viewZ,
+   selected:selectedId(state.npcs,state.selected),viewZ:state.viewZ,
    commandSeq:state.commandSeq||0,receiptSeq:state.receiptSeq||0,
    effectRevision:state.effectRevision||0,receipts:(state.receipts||[]).slice(-4096),
    reservationSeq:state.reservationSeq||0,
@@ -41,12 +42,14 @@ function restore(state,saved){
     !Frontier.matchesSave(state.world,saved.world))return false;
   // Use the validated simulation clock before restoring dated blueprints.
   // Saved world.now can be forged and is not a reliable clock.
+  state.clock=saved.clock;
+  state.day=Frontier.calendar(saved.clock).totalDay;
   state.world.now=saved.clock;
+  state.world.weather=Frontier.weather(state.world,saved.clock);
   Frontier.restore(state.world,saved.world);
   AgentWorld.restoreWorld(state.world,saved.world);
   Civilization.restoreRemains(state.world,saved.world?.remains,saved.dead);
   root.WorldRuntime.invalidateNavigation(state.world);
-  state.clock=saved.clock;
   state.commandSeq=Number.isSafeInteger(saved.commandSeq)&&saved.commandSeq>=0?saved.commandSeq:0;
   state.receiptSeq=Number.isSafeInteger(saved.receiptSeq)&&saved.receiptSeq>=0?saved.receiptSeq:0;
   state.effectRevision=Number.isSafeInteger(saved.effectRevision)&&saved.effectRevision>=0?saved.effectRevision:0;
@@ -172,8 +175,7 @@ function restore(state,saved){
     .map(v=>Number(v.id.slice(7))));
   state.nextPersonId=Math.max(saved.nextPersonId,maxId+1);
   state.events=Array.isArray(saved.events)?saved.events.slice(0,100):[];
-  state.selected=state.npcs.some(n=>n.id===saved.selected)
-   ?saved.selected:state.npcs[0]?.id||null;
+  state.selected=selectedId(state.npcs,saved.selected);
   if(Number.isInteger(saved.viewZ)&&saved.viewZ>=Frontier.MIN_Z&&
    saved.viewZ<=Frontier.MAX_Z)state.viewZ=saved.viewZ;
   return true;

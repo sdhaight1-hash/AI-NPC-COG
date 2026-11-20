@@ -69,9 +69,11 @@
   return {advanced:true,arrivals:arrivals.map(n=>n.id),deaths};
  }
  function initial(seed){
-  const world=root.AgentWorld.newWorld(seed);
-  const npcs=root.Civilization.founders(world,490);
-  return {clock:490,day:1,paused:false,auto:true,npcs,dead:[],
+  const clock=490,world=root.AgentWorld.newWorld(seed);
+  world.now=clock;
+  world.weather=root.Frontier.weather(world,clock);
+  const npcs=root.Civilization.founders(world,clock);
+  return {clock,day:1,paused:false,auto:true,npcs,dead:[],
    nextPersonId:6,world,events:[],selected:npcs[0]?.id||null,
    commandSeq:0,receiptSeq:0,effectRevision:0,receipts:[],
    reservationSeq:0,reservations:[]};
