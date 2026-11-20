@@ -426,10 +426,13 @@
   }
   return begin(state,n,urgent,'survival instinct',null,hooks);
  }
- function chooseOffline(state,n){
-  const options=available(state,n).filter(o=>o.key!=='socialize'||
+ const WAITING_ACTIONS=new Set(['drink','drink_source','eat','forage','rest',
+  'explore','inspect','socialize','share_food','none']);
+ function chooseOffline(state,n,allowed=null){
+  const options=available(state,n).filter(o=>(!allowed||allowed.has(o.key))&&
+   (o.key!=='socialize'||
    (n.needs.social>=50&&n.energy>=25&&
-    o.target?.needs.social>=45&&o.target?.energy>=20));
+    o.target?.needs.social>=45&&o.target?.energy>=20)));
   const selected=root.Agency.choose(n,options,state.world,state.clock);
   if(selected)return selected.key;
   return root.AgentWorld.fallback(n,options);
@@ -438,7 +441,9 @@
   if(!state.auto||state.paused)return;
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
-   (!n.project||n.project.status==='COMPLETED')&&
+   (!n.project||n.project.status==='COMPLETED'||
+    (n.project.kind==='water_vessel'&&n.project.status==='BLOCKED'&&
+     state.clock<(n.project.nextAt||0)))&&
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
@@ -452,10 +457,14 @@
    if(policy.projects!==false&&root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
+   const waiting=n.project?.kind==='water_vessel'&&
+    n.project.status==='BLOCKED'&&state.clock<(n.project.nextAt||0);
    const suspended=n.suspendedActivities?.at(-1);
-   const canResume=suspended&&available(state,n).some(o=>o.key===suspended.key&&
-    (o.ref??null)===suspended.ref);
-   const action=canResume?suspended.key:(policy.choose||chooseOffline)(state,n);
+   const canResume=suspended&&(!waiting||WAITING_ACTIONS.has(suspended.key))&&
+    available(state,n).some(o=>o.key===suspended.key&&
+     (o.ref??null)===suspended.ref);
+   const action=canResume?suspended.key:waiting?
+    chooseOffline(state,n,WAITING_ACTIONS):(policy.choose||chooseOffline)(state,n);
    const ok=begin(state,n,action,canResume?'resume':'offline routine',null,hooks);
    n.thoughtAt=state.clock+(ok?18:3);
   }
