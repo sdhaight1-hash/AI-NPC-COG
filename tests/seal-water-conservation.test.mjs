@@ -98,10 +98,20 @@ test('a dry or unvisited spring cannot complete a wet stage or modify its workpi
  assert.ok(s.receipts.slice(before).some(x=>x.status==='REJECTED'));
  // After the source is unknown and not even perceptible, no wet stage affordance.
  spring.stock=4;
- n.x=k.Frontier.wrap(spring.x+25,s.world.width);
- n.y=spring.y;n.path=[];n.knowledge.sightings=[];
+ const waterNodes=s.world.nodes.filter(x=>x.kind==='water');
+ let unseen=null;
+ for(let y=0;y<s.world.height&&!unseen;y++)
+  for(let x=0;x<s.world.width&&!unseen;x++){
+   const p={x,y,z:0};
+   if(!k.Frontier.traversable(s.world,x,y,0)||
+    k.Frontier.distance(s.world,p,spring)<=18)continue;
+   if(!waterNodes.some(src=>k.Perception.canSee(s,p,src)))unseen=p;
+  }
+ assert.ok(unseen,'A walkable place out of sight of all real springs');
+ Object.assign(n,unseen);n.path=[];n.knowledge.sightings=[];
  n.knowledge.observations=[];
- assert.equal(k.WorldRuntime.available(s,n).some(x=>x.key==='craft_stage'),false);
+ assert.equal(k.WorldRuntime.available(s,n).some(x=>x.key==='craft_stage'),false,
+  'Seeing a different spring by accident cannot make an unvisited-source fixture dry');
  assert.deepEqual(copy(n.workpiece),original);
 });
 
