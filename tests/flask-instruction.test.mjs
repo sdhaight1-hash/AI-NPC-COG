@@ -12,6 +12,10 @@ function setup(){
   vm.runInContext(readFileSync(new URL('../public/'+name+'.js',import.meta.url),'utf8'),c);
  const s=c.Simulation.initial(379210);s.auto=false;
  const [teacher,learner]=s.npcs;s.npcs=[teacher,learner];
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=3&&
+  c.Frontier.traversable(s.world,x.x,x.y,x.z||0));
+ assert.ok(spring);
+ teacher.x=spring.x;teacher.y=spring.y;teacher.z=spring.z||0;teacher.path=[];
  const nearby=c.Frontier.neighbors(s.world,teacher).find(p=>
   c.Frontier.traversable(s.world,p.x,p.y,p.z||0));
  assert.ok(nearby);
