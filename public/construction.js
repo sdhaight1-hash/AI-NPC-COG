@@ -103,6 +103,40 @@
   return {ok:true,message:'Constructed one '+b.kind+' tile at '+b.x+','+b.y+
    ' from one '+checked.input.kind};
  }
+ // An enclosed room is derived only from committed geometry, never from
+ // blueprints or a nearby wall. A roof must cover every interior floor cell.
+ // Keep the flood bounded, including on the toroidal world seam.
+ function sheltered(world,actor){
+  if(!actor||!Number.isInteger(actor.x)||!Number.isInteger(actor.y))return false;
+  const z=actor.z||0,tiles=world.construction?.tiles||[];
+  const layers=new Map();
+  for(const t of tiles){
+   if(t.status!=='BUILT'||t.z!==z)continue;
+   const key=t.x+':'+t.y,entry=layers.get(key)||new Set();
+   entry.add(t.kind);layers.set(key,entry);
+  }
+  const start=actor.x+':'+actor.y;
+  if(!layers.get(start)?.has('floor')||!layers.get(start)?.has('roof'))
+   return false;
+  const queue=[{x:actor.x,y:actor.y}],visited=new Set([start]);
+  let doors=0;
+  for(let i=0;i<queue.length;i++){
+   if(i>=64)return false;
+   const p=queue[i],inside=layers.get(p.x+':'+p.y);
+   if(!inside?.has('floor')||!inside.has('roof'))return false;
+   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const x=root.Frontier.wrap(p.x+dx,world.width);
+    const y=root.Frontier.wrap(p.y+dy,world.height);
+    const key=x+':'+y,neighbor=layers.get(key);
+    if(neighbor?.has('wall'))continue;
+    if(neighbor?.has('door')){doors++;continue;}
+    if(!neighbor?.has('floor'))return false;
+    if(!visited.has(key)){visited.add(key);queue.push({x,y});}
+   }
+  }
+  // A sealed box with no passage is not a viable house.
+  return doors>0;
+ }
  function validTile(world,t){
   return t&&validId(t.id,'tile_')&&validId(t.blueprintId,'bp_')&&
    t.id.slice(5)===t.blueprintId.slice(3)&&validId(t.commandId,'cmd_')&&
@@ -163,5 +197,5 @@
   world.construction=next;
  }
  root.Construction={LAYERS,MAX_PLANS,MAX_TILES,fresh,plan,cancel,cost,
-  canBuild,options,build,restore};
+  canBuild,options,build,sheltered,restore};
 })(globalThis);
