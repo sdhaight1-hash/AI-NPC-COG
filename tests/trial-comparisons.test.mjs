@@ -127,3 +127,28 @@ test('external or stale receipt references cannot fabricate comparative evidence
  assert.deepEqual(copy(n.evidenceMemory.trials),before);
  assert.equal(n.evidenceMemory.comparisons.length,0);
 });
+
+test('an uninformed taught maker can still leak a poor seal, without counting the goal as achieved',()=>{
+ const {c,s,n}=setup();
+ n.knowledge.recipes.push('flask'); // Prior oral instruction, without personal trials.
+ furnish(n,s.clock,1);
+ const failures=n.agency.failedGoals;
+ assert.ok(c.WorldRuntime.available(s,n).some(o=>o.key==='craft_flask'));
+ assert.equal(c.WorldRuntime.begin(s,n,'craft_flask'),true);
+ c.Simulation.advance(s,56);
+ assert.equal(n.inventory.flask,0);
+ assert.equal(n.inventory.wood,0);
+ assert.equal(n.inventory.cord,0);
+ assert.equal(n.inventory.blade,1);
+ assert.equal(n.workpiece,null);
+ assert.equal(n.plan,null);
+ assert.equal(n.evidenceMemory.comparisons.length,0);
+ assert.ok(n.agency.failedGoals>failures,
+  'Completing physical labor with no working flask is not completing the goal');
+ assert.ok(n.memories.some(m=>m.kind==='failure'&&/seal leaked/i.test(m.text)));
+ const final=s.receipts.findLast(x=>x.action==='craft_stage'&&
+  x.status==='COMPLETED'&&x.delta?.workpiece?.before?.recipe==='flask'&&
+  x.delta.workpiece.after===null);
+ assert.ok(final);
+ assert.equal(final.delta.inventory.some(x=>x.key==='flask'&&x.delta>0),false);
+});
