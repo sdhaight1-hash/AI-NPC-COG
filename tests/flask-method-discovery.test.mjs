@@ -72,10 +72,14 @@ test('interrupted trial and learned method survive checkpoint replay',()=>{
   run.k.Simulation.advance(run.s,5);
   assert.ok(run.n.workpiece,'Trial still has unfinished labor');
  }
+ const goalBefore=copy(b.n.agency.goal);
+ assert.equal(goalBefore.key,'craft_hollow_wood_trial');
  const checkpoint=copy(b.k.Persistence.save(b.s));
  const fresh=b.k.Simulation.initial(379210);fresh.auto=false;
  assert.equal(b.k.Persistence.restore(fresh,checkpoint),true);
  const maker=fresh.npcs.find(x=>x.id===b.n.id);
+ assert.deepEqual(copy(maker.agency.goal),goalBefore,
+  'Loading an active workpiece must not invent a new goal origin');
  assert.equal(maker.workpiece.recipe,'hollow_wood_trial');
  a.k.Simulation.advance(a.s,47);
  b.k.Simulation.advance(fresh,47);
@@ -98,7 +102,9 @@ test('interrupted trial and learned method survive checkpoint replay',()=>{
   ['craft_hollow_wood_trial','craft_stage'].includes(x.action))
   .map(x=>({commandId:x.commandId,action:x.action,
    inputChanges:x.delta.inventory||[],
-   learned:x.delta.knowledge?.learnedMethods||[]}));
+   learned:x.delta.knowledge?.learnedMethods||[],
+   goalKey:x.context?.goalKey||null,
+   goalStartedAt:x.context?.goalStartedAt??null}));
  assert.deepEqual(copy(terminal(fresh)),copy(terminal(a.s)));
  assert.equal(fresh.receipts.filter(x=>x.delta?.knowledge?.learnedMethods?.includes('flask')).length,1);
 });
