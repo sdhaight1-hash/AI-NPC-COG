@@ -789,7 +789,10 @@ canvas.addEventListener('click',event=>{
  const item=state.world.items.find(o=>(o.z||0)===tile.z&&o.x===tile.x&&o.y===tile.y);
  const n=state.npcs.find(p=>(p.z||0)===tile.z&&dist(p,tile)<=((remains||item)?0:1));
  if(n){state.selectedObject=null;selectNpc(n.id);renderObjectInspector();return;}
- const object=remains||item||(tile.z===0?[...state.world.nodes,
+ const built=[...(state.world.construction?.tiles||[]),
+  ...(state.world.construction?.blueprints||[])].find(o=>
+   o.z===tile.z&&o.x===tile.x&&o.y===tile.y);
+ const object=remains||item||built||(tile.z===0?[...state.world.nodes,
   ...state.world.structures].find(o=>o.x===tile.x&&o.y===tile.y):null);
  state.selectedObject=object?.id||null;renderObjectInspector();
  if(!object){state.follow=false;state.camera.x=tile.x*TILE-canvas.width/(2*state.zoom);
