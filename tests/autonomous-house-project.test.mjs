@@ -78,8 +78,18 @@ test('resident autonomously obtains real wood and fiber and builds an enclosed r
  const baseline=copy(sources.map(x=>({id:x.id,stock:x.stock})));
  // Existing shelter and campfire remove the earlier survival-infrastructure
  // project priority; this is a housing test, not a claim they built themselves.
- s.world.structures.push({id:'shelter_900',type:'shelter',x:n.x,y:n.y},
-  {id:'fire_900',type:'campfire',x:n.x,y:n.y});
+ const landmarks=[];
+ for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){
+  const p={x:k.Frontier.wrap(n.x+dx,s.world.width),
+   y:k.Frontier.wrap(n.y+dy,s.world.height),z:0};
+  if(k.Frontier.distance(s.world,n,p)>=3&&
+   k.Frontier.distance(s.world,n,p)<=4&&
+   k.Frontier.traversable(s.world,p.x,p.y,p.z)&&
+   !sources.some(v=>v.x===p.x&&v.y===p.y))landmarks.push(p);
+ }
+ assert.ok(landmarks.length>=2,'Two legitimate nearby legacy utility sites');
+ s.world.structures.push({id:'shelter_900',type:'shelter',...landmarks[0]},
+  {id:'fire_900',type:'campfire',...landmarks[1]});
  assert.equal(k.Projects.maybeStart(s,n)?.kind,'home');
  let finished=false;
  for(let minute=0;minute<1600;minute++){
