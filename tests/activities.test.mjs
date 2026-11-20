@@ -151,3 +151,22 @@ test('a freshwater source occupied by another resident remains drinkable from a 
  assert.ok(n.bio.hydrationBudgetMl>500);
  assert.ok(s.receipts.some(r=>r.action==='drink_source'&&r.status==='COMPLETED'));
 });
+
+test('evicting a suspended action releases its claims without consuming inputs',()=>{
+ const {c,state:s,n}=create();
+ n.inventory.wood=5;
+ for(let i=1;i<=5;i++){
+  const commandId='cmd_'+i;
+  assert.equal(c.Reservations.claim(s,n.id,commandId,
+   [{type:'npc',id:n.id,kind:'wood',quantity:1}]).ok,true);
+  n.task={key:'build_fire',ref:null,commandId,readyAt:s.clock+20};
+  c.Activities.start(s,n,n.task,20);
+  c.Activities.interrupt(s,n,'CRITICAL_NEED');
+  n.task=null;
+ }
+ assert.equal(n.suspendedActivities.length,4);
+ assert.equal(n.suspendedActivities[0].commandId,'cmd_2');
+ assert.equal(c.Reservations.active(s).length,4);
+ assert.equal(c.Reservations.active(s).some(r=>r.commandId==='cmd_1'),false);
+ assert.equal(n.inventory.wood,5);
+});

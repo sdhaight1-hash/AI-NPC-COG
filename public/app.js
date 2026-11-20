@@ -20,12 +20,6 @@ const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
 const dist=(a,b)=>Frontier.distance(state.world,a,b);
 const key=p=>(p.z||0)+':'+p.x+':'+p.y;
 const wrapX=x=>Frontier.wrap(x,W),wrapY=y=>Frontier.wrap(y,H);
-const DURATIONS={forage:2,collect_wood:4,collect_stone:5,collect_fiber:2,
- fill_water:1,eat:3,drink:1,drink_source:1,craft_hatchet:12,experiment_wood_stone:15,
- experiment_wood_fiber:15,experiment_wood_stone_fiber:15,
- build_fire:20,build_shelter:75,share_food:2,socialize:3,inspect:2,drop_wood:2,drop_stone:2,drop_fiber:2,pickup_item:2,place_crate:6,
- stash_wood:2,stash_stone:2,stash_fiber:2,
- withdraw_wood:2,withdraw_stone:2,withdraw_fiber:2,build_cache:18,store_wood:2,retrieve_wood:2,explore:1,none:1};
 let installedAtlas=null,showAtlas=true;
 function selectedNpc(){return state.npcs.find(n=>n.id===state.selected)||null;}
 function selectNpc(id){
@@ -33,38 +27,17 @@ function selectNpc(id){
  state.selected=id;state.follow=true;updateCamera(true);
  renderResidents();updateInspector();renderChat();
 }
-function nearest(n,range=8){
- return state.npcs.filter(p=>p!==n&&dist(p,n)<=range).sort((a,b)=>dist(a,n)-dist(b,n))[0]||null;
-}
-function isBlocked(x,y,z=0){return !Frontier.traversable(state.world,wrapX(x),wrapY(y),z);}
 function pathfind(start,end){return WorldRuntime.pathfind(state,start,end);}
-function reachable(n,point){
- if(isBlocked(point.x,point.y,point.z||0))return false;
- return dist(n,point)===0||pathfind(n,point).length>0;
-}
-function reachability(n){return WorldRuntime.reachability(state,n);}
 function availableActivities(n){return WorldRuntime.available(state,n);}
 function timeString(){
  const d=Civilization.stamp(state.clock);
  return String(d.hour).padStart(2,'0')+':'+String(d.minute).padStart(2,'0');
 }
-function activity(n){
- return n.activityStats ||= {decisions:0,none:0,rejected:0,started:0,
-  completed:0,failed:0,blocked:0,errors:0,last:'No decisions yet'};
-}
-function activityNote(n,text){activity(n).last=String(text).slice(0,110);}
-function record(message,type='routine'){
- state.events.unshift({time:'Y'+Civilization.stamp(state.clock).year+' '+timeString(),
-  text:String(message).slice(0,250),type});
- state.events=state.events.slice(0,100);renderEvents();
-}
-function remember(n,entry,meta={}){
- const memory=Cognition.record(n,entry,state.clock,meta);
- memory.time='Y'+Civilization.stamp(state.clock).year+' '+timeString();
- return memory;
-}
+function activity(n){return WorldRuntime.stats(n);}
+function activityNote(n,text){WorldRuntime.note(n,text);}
+function record(message,type='routine'){WorldRuntime.log(state,message,type,{onRecord:renderEvents});}
+function remember(n,entry,meta={}){return WorldRuntime.remember(state,n,entry,meta);}
 function moveTo(n,target){return WorldRuntime.moveTo(state,n,target);}
-function approach(n,target){return WorldRuntime.approach(state,n,target);}
 function position(n){
  if(!n.travel||!n.path?.length)return {x:n.x,y:n.y};
  const next=n.path[0],fraction=clamp(1-n.travel.remaining/n.travel.total,0,1);
@@ -132,7 +105,6 @@ function sceneFor(n){
   '. Intent: '+n.goal+'. Choose only available actions. Unknown recipes are not available.'+
   ' Others have independent beliefs, relationships and decisions.';
 }
-function actionDuration(n,key){return WorldRuntime.actionDuration(n,key);}
 function backgroundOptions(n){
  // The same legal affordances serve the model and the autonomous executor.
  // Personal need, traits, remembered outcomes and ongoing goals order them.
@@ -149,34 +121,7 @@ function fallbackBackground(n){
 }
 // Physiological responses continue while inference is busy. They still consume
 // simulation time and inventory through the ordinary action executor.
-function survivalReflex(n){
- if(n.peerPending||n.peerReservedFor)return false;
- const critical=n.needs.thirst>=90||n.needs.hunger>=95||
-  n.bio?.hydrationBudgetMl<200;
- if((n.task||n.path.length||n.action==='rest')&&!critical)return false;
- const hydration=n.bio?.hydrationBudgetMl??2400;
- // Resume a protected suspended activity after the immediate emergency.
- if((n.suspendedActivities?.length||n.plan?.key==='craft_project')&&
-   hydration>=450&&
-  n.needs.thirst<85&&n.needs.hunger<90&&n.energy>18)return false;
- const waterSafe=n.needs.thirst<62&&hydration>=1200&&
-  (n.inventory.water>=2||hydration>=1600);
- if(waterSafe&&n.needs.hunger<85&&n.bio?.longTermKcal>=150&&
-  n.energy>18)return false;
- const urgent=Cognition.instinct(n,availableActivities(n));
- if(!urgent)return false;
- if(n.task?.key===urgent)return false;
- if(n.task||n.path.length||n.action==='rest'){
-  // A physical emergency interrupts activity, never destroys the workpiece.
-  // The multi-stage project remains and resumes after recovery.
-  Activities.interrupt(state,n,'CRITICAL_NEED');
-  n.task=null;n.path=[];n.travel=null;n.action='none';
-  if(n.plan)n.nextPlanAt=state.clock+2;
-  remember(n,'Interrupted work to address immediate bodily danger',
-   {kind:'need',salience:4});
- }
- return setAction(n,urgent,'survival instinct');
-}
+function survivalReflex(n){return WorldRuntime.survival(state,n,{onRecord:renderEvents});}
 function autonomousPurpose(n){
  if(n.task||n.plan||n.path.length||n.action==='rest')return false;
  const options=availableActivities(n).filter(o=>
@@ -228,20 +173,20 @@ function scheduleIdleAgents(){
    n.thoughtAt=state.clock+(success?18:3);
   }
  }else{
+  const cues=new Map(due.map(n=>[n,Cognition.attentionCue(n,state.clock)]));
   // Keep the model lane for one NPC, but don't let a serialized inference
   // backlog freeze every other body for hours at accelerated world speeds.
-  if(!state.backgroundBusy&&due.length&&
-   performance.now()-state.lastDecisionMs>=1500){
-   const n=due[0];
+  const n=due.find(actor=>cues.get(actor));
+  if(!state.backgroundBusy&&n&&performance.now()-state.lastDecisionMs>=1500){
    if(Projects.maybeStart(state,n)){
     WorldRuntime.advanceProject(state,n,{onRecord:renderEvents});
     n.thoughtAt=state.clock+18;
-   }else void deliberate(n);
+   }else void deliberate(n,cues.get(n));
   }
   for(const n of due){
    if(n===state.modelDecisionActor||n.task||n.plan||n.path.length||
     n.action==='rest'||n.peerPending||n.peerReservedFor||
-    state.clock-n.thoughtAt<8)continue;
+    (cues.get(n)&&state.clock-n.thoughtAt<8))continue;
    // After eight simulated minutes waiting, use the same legal, physical
    // offline agency already exercised headlessly. Do not invent dialogue.
    if(Projects.maybeStart(state,n)){
@@ -253,16 +198,6 @@ function scheduleIdleAgents(){
    }
   }
  }
-}
-function finishPlan(n,reason,type='social'){
- if(!n.plan)return;
- const success=reason==='Plan completed';
- Agency.finish(n,success,state.clock);
- remember(n,'Plan '+n.plan.key+': '+reason,{kind:success?'success':'failure',
-  action:n.plan.key,salience:success?4:3});
- record(n.name+': '+reason,type);
- n.plan=null;n.action='none';n.task=null;
- n.goal='Reconsidering my next action';n.thoughtAt=state.clock+3;
 }
 function setAction(n,action,source='rein',scores=null){
  return WorldRuntime.begin(state,n,action,source,scores,{onRecord:renderEvents});
@@ -337,16 +272,18 @@ function modelChoiceStillRelevant(n,original,choice){
   if(original[field]!==current[field])return false;
  return (original.references[choice]??null)===(current.references[choice]??null);
 }
-async function deliberate(n){
+async function deliberate(n,cue=null){
  if(!state.npcs.includes(n))return;
  state.backgroundBusy=true;state.modelDecisionActor=n;
  const location=key(n),options=backgroundOptions(n),basis=modelDecisionBasis(n);
  let rejected=false;
  try{
   if(state.connected){
+   if(cue)Cognition.attentionState(n).requestedAt=state.clock;
    const data=await jsonPost('/api/decide',{
     persona:n.personality,scene:sceneFor(n),history:[],
-    question:'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
+    question:cue?'Review '+cue.kind+' and choose a legal action using your own evidence.':
+     'Choose a legal action using your needs, witnessed beliefs and personal intention.',options
    });
    activity(n).decisions++;
    WorldReceipts.decision(state,n,String(data.action||'').slice(0,64),
@@ -355,7 +292,9 @@ async function deliberate(n){
    if(!state.paused&&!state.conversationBusy&&state.npcs.includes(n)&&key(n)===location&&
       options.some(o=>o.key===data.action)&&
       backgroundOptions(n).some(o=>o.key===data.action)&&
-      modelChoiceStillRelevant(n,basis,data.action)){
+      modelChoiceStillRelevant(n,basis,data.action)&&
+      (!cue||Cognition.attentionCue(n,state.clock,false)?.sourceId===cue.sourceId)){
+    if(cue)Cognition.attentionReviewed(n,state.clock,basis.evidenceSequence);
     const selected=setAction(n,data.action,
      data.source==='hivemind'?'hivemind':'rein',data.scores);
     if(selected&&data.action==='none')autonomousPurpose(n);
@@ -658,7 +597,6 @@ function renderChat(){
   }
  }
 }
-function serializePerson(n){return Persistence.save({...state,npcs:[n]}).npcs[0];}
 function save(){
  if(state.saveLoadFailed)return;
  try{localStorage.setItem(STORE,JSON.stringify(Persistence.save(state)));}

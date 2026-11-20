@@ -644,3 +644,37 @@ test('an incompatible world generator checkpoint is preserved by browser autosav
  reopened.save();
  assert.equal(reopened.saved.get(key),raw);
 });
+
+test('connected routine work does not repoll a resident after a saved review',async()=>{
+ let calls=0;
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>{
+  if(url==='/api/decide'){calls++;return {action:'none',source:'rein'};}
+  return {connected:true};
+ }})});
+ // Finish model-status initialization before simulating the scheduler.
+ await new Promise(resolve=>setImmediate(resolve));
+ const n=b.state.npcs[0];
+ b.state.npcs=[n];b.state.connected=true;n.needs.social=0;n.thoughtAt=b.state.clock;
+ for(const type of ['shelter','campfire','workbench','crate'])
+  b.state.world.structures.push({id:type+'_1',type,x:n.x,y:n.y});
+ b.state.lastDecisionMs=-5000;
+ b.scheduleIdleAgents();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,1);
+ assert.equal(n.attention.reviewedAt,b.state.clock);
+ b.save();
+ const reopened=makeBrowser({saved:b.saved,fetch:async url=>({ok:true,json:async()=>{
+  if(url==='/api/decide')calls++;
+  return {connected:true};
+ }})});
+ await new Promise(resolve=>setImmediate(resolve));
+ const resident=reopened.state.npcs[0];
+ resident.task=null;resident.path=[];resident.travel=null;resident.plan=null;
+ resident.project=null;resident.action='none';
+ reopened.state.clock+=40;reopened.state.world.now=reopened.state.clock;
+ resident.thoughtAt=reopened.state.clock;reopened.state.lastDecisionMs=-5000;
+ reopened.scheduleIdleAgents();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(calls,1,'No new actor-private cue warrants another model call');
+ assert.ok(resident.task||resident.plan||resident.action!=='none','Routine work still starts');
+});

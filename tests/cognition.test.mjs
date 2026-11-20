@@ -130,3 +130,46 @@ test('episodic locality ranks personally remembered places across both toroidal 
  assert.ok(found.findIndex(m=>m.text==='far inland')>
   found.findIndex(m=>m.text==='adjacent across southern seam'));
 });
+
+test('review cues deduplicate unchanged private observations and expire',()=>{
+ const {npc,Cognition:C}=setup(),other=setup().npc;
+ const memory=npc.evidenceMemory;
+ const inspect=(at,stock)=>{
+  const id='ev_'+(++memory.sequence);
+  memory.episodes.push({id,at,type:'inspection',certainty:'observed'});
+  memory.facts.push({sourceEpisodeId:id,key:'stock',entityId:'spring',
+   value:String(stock),certainty:'observed'});
+ };
+ assert.equal(C.attentionCue(npc,500).kind,'initial review');
+ C.attentionReviewed(npc,500,0);
+ C.attentionReviewed(other,500,0);
+ inspect(502,8);
+ const found=C.attentionCue(npc,502);
+ assert.equal(found.kind,'source found');
+ assert.equal(C.attentionCue(other,502),null);
+ C.attentionState(npc).requestedAt=502;
+ C.attentionReviewed(npc,502,found.sequence);
+ inspect(540,7);
+ assert.equal(C.attentionCue(npc,540),null);
+ inspect(541,0);
+ assert.equal(C.attentionCue(npc,541).kind,'source depleted');
+ assert.equal(C.attentionCue(npc,721),null);
+});
+test('reports remain unverified actor-local cues and cooldown restores from checkpoint',()=>{
+ const {npc,Cognition:C}=setup(),other=setup().npc;
+ const memory=npc.evidenceMemory;
+ const id='ev_'+(++memory.sequence);
+ memory.episodes.push({id,at:500,type:'interaction',certainty:'reported'});
+ memory.claims.push({sourceEpisodeId:id,sourceId:'spring',status:'unverified'});
+ C.attentionReviewed(other,500,0);
+ assert.equal(C.attentionCue(npc,500).kind,'unverified resource report');
+ assert.equal(C.attentionCue(other,500),null);
+ const attention=C.attentionState(npc);
+ attention.requestedAt=501;
+ C.restoreAttention(npc,JSON.parse(JSON.stringify(attention)),510);
+ assert.equal(C.attentionCue(npc,510),null);
+ assert.equal(C.attentionCue(npc,531).kind,'unverified resource report');
+ memory.claims[0].status='contradicted';
+ C.attentionReviewed(npc,531,0);
+ assert.equal(C.attentionCue(npc,532),null);
+});

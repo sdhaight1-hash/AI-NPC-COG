@@ -91,5 +91,73 @@
   if(n.energy<=18)return choose('rest');
   return null;
  }
- root.Cognition={record,recall,recentFailure,restore,instinct};
+
+ const ATTENTION_COOLDOWN=30,ATTENTION_LIFETIME=180,MAX_CUES=8;
+ function attentionState(n){
+  return n.attention ||= {reviewedThrough:0,reviewedAt:null,requestedAt:null};
+ }
+ function restoreAttention(n,saved,clock){
+  if(!saved)return;
+  const sequence=n.evidenceMemory?.sequence||0;
+  const time=value=>Number.isFinite(value)&&value>=0&&value<=clock?value:null;
+  n.attention={
+   reviewedThrough:Number.isSafeInteger(saved.reviewedThrough)&&saved.reviewedThrough>=0?
+    Math.min(saved.reviewedThrough,sequence):0,
+   reviewedAt:time(saved.reviewedAt),requestedAt:time(saved.requestedAt)
+  };
+ }
+ function attentionCue(n,clock,checkCooldown=true){
+  const a=n.attention,seen=a?.reviewedThrough||0;
+  if(checkCooldown&&a?.requestedAt!=null&&clock-a.requestedAt<ATTENTION_COOLDOWN)return null;
+  const m=n.evidenceMemory;
+  if(m?.sequence>seen){
+   const episodes=new Map(m.episodes.map(e=>[e.id,e]));
+   const inbox=new Map();
+   const add=(kind,key,sourceId,subject)=>{
+    const source=episodes.get(sourceId);
+    if(!source||source.at>clock||clock-source.at>=ATTENTION_LIFETIME)return;
+    const sequence=Number(sourceId.slice(3));
+    if(sequence<=seen)return;
+    inbox.set(key,{kind,sourceId,subject,at:source.at,sequence});
+    if(inbox.size>MAX_CUES){
+     const oldest=[...inbox].reduce((a,b)=>a[1].sequence<=b[1].sequence?a:b);
+     inbox.delete(oldest[0]);
+    }
+   };
+   const lastStock=new Map();
+   for(const fact of m.facts){
+    if(fact.key!=='stock'||fact.certainty!=='observed')continue;
+    const source=episodes.get(fact.sourceEpisodeId);
+    if(source?.type!=='inspection'||source.certainty!=='observed')continue;
+    const available=Number(fact.value)>0;
+    const ref=fact.entityId;
+    const previous=lastStock.get(ref);
+    lastStock.set(ref,available);
+    if(previous===available)continue;
+    const key='stock:'+ref;
+    inbox.delete(key);
+    add(available?'source found':'source depleted',key,source.id,ref);
+   }
+   const reports=new Set();
+   for(const claim of m.claims){
+    const key='report:'+claim.sourceId;
+    // A witnessed result supersedes rumors of the same source. Repeating a
+    // report without a new firsthand observation is one cue, not a new call.
+    if(claim.status!=='unverified'||reports.has(key)||lastStock.has(claim.sourceId))continue;
+    reports.add(key);
+    add('unverified resource report',key,claim.sourceEpisodeId,claim.sourceId);
+   }
+   for(const method of m.methods)
+    add('method discovered','method:'+method.method,method.sourceEpisodeId,method.method);
+   const cue=[...inbox.values()].sort((x,y)=>y.sequence-x.sequence)[0];
+   if(cue)return cue;
+  }
+  return a?.reviewedAt!=null?null:{kind:'initial review',sourceId:null,subject:null,sequence:0};
+ }
+ function attentionReviewed(n,clock,sequence){
+  const a=attentionState(n);
+  a.reviewedAt=clock;
+  a.reviewedThrough=Math.max(a.reviewedThrough,sequence);
+ }
+ root.Cognition={record,recall,recentFailure,restore,instinct,attentionState,restoreAttention,attentionCue,attentionReviewed};
 })(globalThis);
