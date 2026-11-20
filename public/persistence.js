@@ -80,12 +80,7 @@ function restore(state,saved){
    for(const k of ['mood','energy','trust'])if(Number.isFinite(old[k]))n[k]=clamp(old[k]);
    for(const k of ['goal','source','personality','facing'])
     if(typeof old[k]==='string')n[k]=old[k].slice(0,300);
-   // Legacy saves without this field retain the seeded per-person defaults.
-   if(old.traits&&typeof old.traits==='object'&&
-      ['socialApproach','solitudePreference'].every(k=>
-       Number.isFinite(old.traits[k])&&old.traits[k]>=0&&old.traits[k]<=1))
-    n.traits={socialApproach:old.traits.socialApproach,
-     solitudePreference:old.traits.solitudePreference};
+   Civilization.restoreProfile(n,old);
    for(const k of Object.keys(n.needs))
     if(Number.isFinite(old.needs?.[k]))n.needs[k]=clamp(old.needs[k]);
    for(const k of Object.keys(n.inventory))

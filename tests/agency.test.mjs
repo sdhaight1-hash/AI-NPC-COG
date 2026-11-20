@@ -17,8 +17,10 @@ function setup(){
 test('personal trait differences rank the same legal options differently',()=>{
  const {Agency:A,world,npc,other}=setup();
  const options=[{key:'inspect'},{key:'socialize'}];
- npc.personality='A curious adventurous explorer';
- other.personality='A gentle expressive companion';
+ Object.assign(npc.traits,{exploratoryOrientation:1,socialOrientation:.25});
+ Object.assign(other.traits,{exploratoryOrientation:.25,socialOrientation:.9});
+ npc.personality='A gentle expressive companion';
+ other.personality='A curious adventurous explorer';
  npc.needs.curiosity=65;npc.needs.social=65;
  other.needs.curiosity=65;other.needs.social=65;
  const curious=A.ranked(npc,options,world,490);

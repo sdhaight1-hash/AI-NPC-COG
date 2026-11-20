@@ -30,7 +30,7 @@
     inventory:{...a.inventory},needs:{...a.needs},
     learnedRecipes:[...(a.knowledge?.recipes||[])],
     foodPantry:a.bio?.pantry?.length||0,lastPeerAt:a.lastPeerAt??null,
-    mood:a.mood,relationship:plain(a.relationships?.[n.id])
+    mood:a.mood,affect:{...a.affect},relationship:plain(a.relationships?.[n.id])
    }])),
    workpiece:plain(n.workpiece),craftedItems:plain(n.craftedItems||[])
   };
@@ -64,14 +64,15 @@
    const inventory=nums(a.inventory,b.inventory),needs=nums(a.needs,b.needs);
    const personal=nums({foodPantry:a.foodPantry,lastPeerAt:a.lastPeerAt||0,mood:a.mood},
     {foodPantry:b.foodPantry,lastPeerAt:b.lastPeerAt||0,mood:b.mood});
+   const affect=nums(a.affect,b.affect);
    const relationship=JSON.stringify(a.relationship)===JSON.stringify(b.relationship)?
     null:{actorId:before.actorId,before:a.relationship,after:b.relationship};
    const learnedMethods=(b.learnedRecipes||[])
     .filter(method=>!(a.learnedRecipes||[]).includes(method));
-   if(inventory.length||needs.length||personal.length||learnedMethods.length||relationship)
+   if(inventory.length||needs.length||personal.length||learnedMethods.length||relationship||affect.length)
     (delta.otherActors ||= []).push({actorId:id,inventory,needs,personal,
      ...(learnedMethods.length?{knowledge:{learnedMethods}}:{}),
-     ...(relationship?{relationship}:{})});
+     ...(relationship?{relationship}:{}),...(affect.length?{affect}:{})});
   }
   const knowledge={
    observations:after.observedCount-before.observedCount,

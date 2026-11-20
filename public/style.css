@@ -108,3 +108,6 @@ body{background:radial-gradient(ellipse at 48% -10%,#34543a 0,transparent 54%),l
  .catalog-detail-head { align-items:flex-start; flex-direction:column }
  .catalog-detail-head h3 { font-size:21px }
 }
+
+.portrait{width:48px;height:56px;image-rendering:pixelated}
+.temperament{white-space:pre-line;margin-top:8px}

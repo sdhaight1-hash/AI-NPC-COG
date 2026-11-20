@@ -82,7 +82,7 @@
    <div class="panel-head small"><div><span class="eyebrow">INHABITANT INSPECTOR</span><h2>Individual state</h2></div>
     <span class="small-count" id="npcCount">5 alive</span></div>
    <div class="resident-list" id="residentList"></div>
-   <div class="identity"><div class="portrait" id="npcPortrait">?</div>
+   <div class="identity"><canvas class="portrait" id="npcPortrait" width="48" height="56" role="img" aria-label="Selected resident portrait"></canvas>
     <div><h3 id="npcName">Select an inhabitant</h3><p id="npcMeta">Independent actor</p></div></div>
    <div class="stat"><div class="stat-label"><span>Mood</span><strong id="moodVal">—</strong></div>
     <div class="meter"><div id="moodMeter"></div></div></div>
@@ -106,6 +106,9 @@
    <div class="info-line"><span>Personal motivations</span><strong id="npcMotivations">—</strong></div>
    <div class="info-line"><span>Beliefs from experience</span><strong id="npcBeliefs">No observations yet</strong></div>
    <div class="info-line"><span>Mood</span><strong id="npcMood">-</strong></div>
+   <div class="info-line"><span>Current emotions</span><strong id="npcAffect">-</strong></div>
+   <div class="info-line"><span>Emotional baseline</span><strong id="npcAffectBaseline">-</strong></div>
+   <details class="subsection"><summary>Temperament</summary><div class="memory temperament" id="npcTraits"></div></details>
    <div class="info-line"><span>Relationships</span><strong id="npcRelationships">No shared history yet</strong></div>
     <div class="info-line"><span>Production work</span><strong id="npcCrafting">No workpiece</strong></div>
     <div class="info-line"><span>Finished goods</span><strong id="npcGoods">None</strong></div>

@@ -11,6 +11,96 @@ const FAMILY=['Vale','Fern','Moss','Stone','Reed','Ash','River','Briar','Hale','
 const PALETTE=['#e9aa85','#9bc3cc','#bc9add','#a1d6aa','#d9cb79',
  '#e693ad','#c4b38e','#83a9cf','#e5a971','#d4b8c4'];
 const seedValue=(world,index,salt)=>root.Frontier.hash(index*31,salt,world.seed+salt);
+const TRAIT_GROUPS=Object.freeze({
+ 'Exploration':Object.freeze(['noveltySeeking','inquisitiveness','openMindedness','imagination','riskTolerance']),
+ 'Work habits':Object.freeze(['persistence','orderliness','foresight','patience','adaptability']),
+ 'Social style':Object.freeze(['socialApproach','solitudePreference','expressiveness','assertiveness','playfulness']),
+ 'Cooperation':Object.freeze(['empathy','generosity','trustInclination','cooperativeness','forgiveness']),
+ 'Emotional regulation':Object.freeze(['emotionalReactivity','composure','optimism','threatSensitivity','recovery','frustrationTolerance']),
+ 'Learning':Object.freeze(['evidenceSkepticism','attentionalFocus','teachingInclination','practicalOrientation']),
+ 'Priorities':Object.freeze(['socialOrientation','exploratoryOrientation','securityOrientation',
+  'workOrientation','fieldInitiative'])
+});
+const FACETS=Object.values(TRAIT_GROUPS).flat();
+const APPEARANCE_FIELDS=Object.freeze({skin:9,hair:8,eyes:6,hairStyle:7,face:3,
+ build:3,garment:4,outfit:10,detail:5});
+const round=value=>Math.round(value*100)/100;
+const bounded=(value,max=1)=>Math.max(0,Math.min(max,value));
+function trait(n,key){
+ const value=n.traits?.[key];
+ return Number.isFinite(value)?bounded(value):.5;
+}
+function temperament(world,index,labels){
+ const tones=Object.fromEntries(FACETS.map((key,i)=>[key,round(
+  (seedValue(world,index,1700+i*13)+seedValue(world,index,2100+i*17))/2)]));
+ const has=(...values)=>values.some(label=>labels.includes(label));
+ // Keep established founder tendencies on the seed while replacing prose
+ // parsing with numeric dispositions. Facets refine choices within them.
+ Object.assign(tones,{
+  socialApproach:round(seedValue(world,index,119)),
+  solitudePreference:round(seedValue(world,index,129)),
+  socialOrientation:has('expressive','gentle')?.9:has('reserved','independent')?.25:.5,
+  exploratoryOrientation:has('curious','adventurous')?1:has('cautious','reserved')?9/34:.5,
+  securityOrientation:has('cautious','patient','pragmatic')?1:has('adventurous')?8/26:.5,
+  workOrientation:has('patient','pragmatic','independent')?1:.5,
+  fieldInitiative:has('curious','adventurous','expressive')?.9:tones.fieldInitiative*.7
+ });
+ return tones;
+}
+function emotionalBaseline(n){
+ return {
+  joy:round(30+40*trait(n,'optimism')+10*trait(n,'playfulness')),
+  calm:round(32+32*trait(n,'composure')+12*trait(n,'patience')),
+  concern:round(12+30*trait(n,'threatSensitivity')+10*trait(n,'foresight')),
+  frustration:round(8+25*(1-trait(n,'frustrationTolerance'))+14*trait(n,'emotionalReactivity'))
+ };
+}
+function restoreProfile(n,old){
+ for(const key of FACETS){
+  const value=old.traits?.[key];
+  if(Number.isFinite(value)&&value>=0&&value<=1)n.traits[key]=value;
+ }
+ if(old.appearance?.version===1)
+  for(const [key,count] of Object.entries(APPEARANCE_FIELDS)){
+   const value=old.appearance[key];
+   if(Number.isInteger(value)&&value>=0&&value<count)n.appearance[key]=value;
+  }
+ n.color=PALETTE[n.appearance.outfit];
+ n.affectBaseline=emotionalBaseline(n);
+ n.affect=Object.fromEntries(Object.entries(n.affectBaseline).map(([key,value])=>{
+  const saved=old.affect?.[key];
+  return [key,Number.isFinite(saved)&&saved>=0&&saved<=100?saved:value];
+ }));
+}
+function updateAffect(n,minutes){
+ if(!n.affect||!n.affectBaseline)return;
+ const strain=bounded(Math.max(n.needs.hunger-55,n.needs.thirst-55,38-n.energy)/45);
+ const sensitivity=.7+.6*trait(n,'emotionalReactivity');
+ const target={joy:-20,calm:-28,concern:30,frustration:24};
+ const recovery=1-Math.exp(-minutes/(110-65*trait(n,'recovery')));
+ for(const key of Object.keys(target)){
+  const settled=bounded(n.affectBaseline[key]+target[key]*strain*sensitivity,100);
+  n.affect[key]+=recovery*(settled-n.affect[key]);
+ }
+}
+function socialAffect(n,helped){
+ if(!n.affect)return;
+ const response=.7+.6*trait(n,'emotionalReactivity');
+ if(helped){
+  n.affect.joy=bounded(n.affect.joy+5*response,100);
+  n.affect.frustration=bounded(n.affect.frustration-4*trait(n,'forgiveness'),100);
+ }else{
+  n.affect.frustration=bounded(n.affect.frustration+6*response,100);
+  n.affect.calm=bounded(n.affect.calm-3*response,100);
+ }
+}
+function traitLabel(key){return key.replace(/[A-Z]/g,letter=>' '+letter.toLowerCase());}
+function traitSummary(n){
+ return FACETS.filter(key=>!TRAIT_GROUPS.Priorities.includes(key))
+  .map(key=>[key,trait(n,key)])
+  .sort(([,a],[,b])=>Math.abs(b-.5)-Math.abs(a-.5)).slice(0,5)
+  .map(([key,value])=>traitLabel(key)+' '+Math.round(value*100)).join(', ');
+}
 function dateAt(clock){return new Date(EPOCH+Math.floor(clock)*60000);}
 function age(n,clock){return Math.max(0,(clock-n.birthAt)/YEAR_MINUTES);}
 function suitable(world,p){
@@ -47,14 +137,12 @@ function person(world,index,clock,position){
   'pragmatic','expressive','gentle','skeptical'];
  const trait1=values[Math.floor(seedValue(world,index,99)*values.length)];
  const trait2=values[Math.floor(seedValue(world,index,109)*values.length)];
- // Independent, reproducible gameplay temperament; words remain descriptions.
- const traits={
-  socialApproach:Math.round(seedValue(world,index,119)*100)/100,
-  solitudePreference:Math.round(seedValue(world,index,129)*100)/100
- };
+ const traits=temperament(world,index,[trait1,trait2]);
+ const appearance={version:1,...Object.fromEntries(Object.entries(APPEARANCE_FIELDS)
+  .map(([key,count],i)=>[key,Math.floor(seedValue(world,index,2800+i*43)*count)]))};
  const npc=root.AgentWorld.newAgent({
   id:'person_'+index,name,x:position.x,y:position.y,z:0,mood:55+Math.floor(a*30),
-  energy:75,trust:50,color:PALETTE[index%PALETTE.length],traits,
+  energy:75,trust:50,color:PALETTE[appearance.outfit],traits,appearance,
   personality:name+' is an adult individual, '+trait1+' and '+trait2+
    '. No profession, group membership or relationship is assigned.',
   goal:'Assessing an unfamiliar environment',action:'none',source:'simulation',
@@ -63,6 +151,8 @@ function person(world,index,clock,position){
  },index);
  npc.alive=true;
  npc.health=100;
+ npc.affectBaseline=emotionalBaseline(npc);
+ npc.affect={...npc.affectBaseline};
  npc.birthAt=clock-years*YEAR_MINUTES;
  npc.knowledge={recipes:[],observations:[]};
  npc.lineage={biologicalParents:[],caregivers:[]};
@@ -241,5 +331,6 @@ function stamp(clock){
   dayOfYear:d.dayOfYear,hour:Math.floor(minutes/60),minute:minutes%60};
 }
 root.Civilization={founders,person,addArrival,advanceArrivals,die,updateHealth,
- spawnPosition,stamp,dateAt,age,YEAR_MINUTES,restoreRemains};
+ spawnPosition,stamp,dateAt,age,YEAR_MINUTES,restoreRemains,
+ TRAIT_GROUPS,trait,traitLabel,traitSummary,restoreProfile,updateAffect,socialAffect};
 })(globalThis);

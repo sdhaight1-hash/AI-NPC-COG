@@ -217,7 +217,7 @@
  }
  function chooseKind(state,n){
   if(n.project||n.plan||n.task)return null;
-  const trait=String(n.personality||'').toLowerCase();
+  const exploratory=(n.traits?.fieldInitiative??.5)>=.85;
   // A remembered or currently visible spring motivates portable water security.
   // Neither hidden world deposits nor the existence of a recipe is evidence.
   const hasWaterEvidence=root.Perception?.snapshot(state,n).objects.some(o=>
@@ -232,7 +232,7 @@
    (n.inventory.water||0)<2&&hasWaterEvidence)return 'water_supply';
   // Needs and temperament choose priority, not permission to bypass the world.
   if(!isNear(state,n,'shelter')){
-   if(/curious|adventurous|expressive/.test(trait)&&
+   if(exploratory&&
     !isNear(state,n,'campfire'))return 'campfire';
    return 'shelter';
   }

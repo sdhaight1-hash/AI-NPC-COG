@@ -135,7 +135,8 @@ test('an idle resident can choose a physical gift through normal offline deliber
  const {k,s,builder,helper}=setup();
  Object.assign(helper.inventory,{wood:4,stone:2,food:3});
  assert.equal(k.Biology.addForaged(helper.bio,'nuts',3),true);
- helper.personality='expressive';
+ Object.assign(helper.traits,{socialOrientation:.9,exploratoryOrientation:.5,
+  securityOrientation:.5,workOrientation:.5});
  helper.needs.social=78;
  builder.needs.social=20;
  helper.thoughtAt=s.clock;

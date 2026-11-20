@@ -43,6 +43,7 @@
     peer.task?.key==='socialize'&&peer.task.ref===n.id))delete n.peerReservedFor;
    if(!n.peerPending&&!n.peerReservedFor)move?.(n,elapsed);
    const recovered=AgentWorld.stepNeeds(n,state.world,elapsed);
+   Civilization.updateAffect(n,elapsed);
    if(recovered==='Recovered')ports.onRecovery?.(n);
    const death=Civilization.updateHealth(state,n,elapsed);
    if(death){
