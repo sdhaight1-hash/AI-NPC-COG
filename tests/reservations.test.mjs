@@ -36,6 +36,33 @@ test('two actors cannot overclaim a finite two-plank lot',()=>{
  assert.equal(c.Reservations.claim(state,other.id,'cmd_11',[lot]).ok,true);
  assert.equal(c.Reservations.physical(state,lot),2);
 });
+test('a reservation retry must retain its actor and exact physical requirements',()=>{
+ const {c,state,n,other}=setup();
+ n.inventory.wood=3;
+ const lot={type:'npc',id:n.id,kind:'wood',quantity:1};
+ const claim=c.Reservations.claim(state,n.id,'cmd_44',[lot,lot]);
+ assert.equal(claim.ok,true);
+ const repeat=c.Reservations.claim(state,n.id,'cmd_44',[{...lot,quantity:2}]);
+ assert.equal(repeat.existing,true);
+ assert.equal(repeat.claims[0].idTag,claim.claims[0].idTag);
+ assert.equal(c.Reservations.claim(state,n.id,'cmd_44',[lot]).ok,false);
+ assert.equal(c.Reservations.claim(state,other.id,'cmd_44',[]).ok,false);
+ assert.equal(c.Reservations.active(state).length,1);
+ c.Reservations.releaseCommand(state,'cmd_44');
+ assert.equal(c.Reservations.claim(state,n.id,'cmd_44',[lot]).ok,false);
+ assert.equal(c.Reservations.active(state).length,0);
+});
+
+test('nonfinite reservation lifetimes cannot block physical stock indefinitely',()=>{
+ const {c,state,n}=setup();
+ n.inventory.wood=2;
+ const lot={type:'npc',id:n.id,kind:'wood',quantity:2};
+ for(const ttl of [NaN,Infinity,-Infinity]){
+  assert.equal(c.Reservations.claim(state,n.id,'cmd_45',[lot],ttl).ok,false);
+  assert.equal(c.Reservations.available(state,lot),2);
+ }
+});
+
 test('atomic multi-material claims never partially reserve on failure',()=>{
  const {c,state,n}=setup();
  n.inventory.wood=3;n.inventory.stone=0;

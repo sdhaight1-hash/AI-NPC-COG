@@ -105,8 +105,7 @@
    return {ok:false,reason:'INVALID_COMMAND'};
   if(!Array.isArray(specs)||specs.some(s=>!clean(s)))
    return {ok:false,reason:'INVALID_LOT'};
-  const existing=active(state).filter(x=>x.commandId===commandId);
-  if(existing.length)return {ok:true,claims:existing,existing:true};
+  if(!Number.isFinite(ttl))return {ok:false,reason:'INVALID_LIFETIME'};
   // Group repeated lot requirements before committing any token.
   const grouped=new Map();
   for(const spec of specs){
@@ -117,6 +116,18 @@
    if(!clean(spec))return {ok:false,reason:'INVALID_LOT'};
    if(spec.type==='npc'&&spec.id!==actorId)
     return {ok:false,reason:'PRIVATE_INVENTORY'};
+  }
+  const existing=(state.reservations||[]).filter(x=>x.commandId===commandId);
+  if(existing.length){
+   if(existing.some(x=>x.status!=='ACTIVE'||x.expiresAt<=state.clock))
+    return {ok:false,reason:'RESERVATION_CLOSED'};
+   if(existing.length!==grouped.size||existing.some(x=>x.actorId!==actorId)||
+    [...grouped].some(([lot,spec])=>!existing.some(x=>
+     key(x)===lot&&x.quantity===spec.quantity)))
+    return {ok:false,reason:'COMMAND_CONFLICT'};
+   return {ok:true,claims:existing,existing:true};
+  }
+  for(const spec of grouped.values()){
    if(available(state,spec)<spec.quantity)
     return {ok:false,reason:'RESERVATION_CONFLICT',lot:key(spec),
      remaining:available(state,spec)};
