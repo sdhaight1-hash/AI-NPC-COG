@@ -17,7 +17,7 @@
  const asMap=rows=>Object.fromEntries(rows.map(x=>[x.id,plain(x)]));
  function snapshot(state,n){
   return {
-   inventory:{...n.inventory},skills:{...n.skills},
+   actorId:n.id,inventory:{...n.inventory},skills:{...n.skills},
    needs:{...n.needs},energy:n.energy,health:n.health,
    foodPantry:n.bio?.pantry?.length??0,hydrationMl:n.bio?.hydrationBudgetMl??0,
    nodes:Object.fromEntries(state.world.nodes.map(x=>[x.id,x.stock])),
@@ -29,7 +29,8 @@
    others:Object.fromEntries(state.npcs.filter(a=>a!==n).map(a=>[a.id,{
     inventory:{...a.inventory},needs:{...a.needs},
     learnedRecipes:[...(a.knowledge?.recipes||[])],
-    foodPantry:a.bio?.pantry?.length||0,lastPeerAt:a.lastPeerAt??null
+    foodPantry:a.bio?.pantry?.length||0,lastPeerAt:a.lastPeerAt??null,
+    mood:a.mood,relationship:plain(a.relationships?.[n.id])
    }])),
    workpiece:plain(n.workpiece),craftedItems:plain(n.craftedItems||[])
   };
@@ -61,13 +62,16 @@
    const a=before.others[id],b=after.others[id];
    if(!a||!b)continue;
    const inventory=nums(a.inventory,b.inventory),needs=nums(a.needs,b.needs);
-   const personal=nums({foodPantry:a.foodPantry,lastPeerAt:a.lastPeerAt||0},
-    {foodPantry:b.foodPantry,lastPeerAt:b.lastPeerAt||0});
+   const personal=nums({foodPantry:a.foodPantry,lastPeerAt:a.lastPeerAt||0,mood:a.mood},
+    {foodPantry:b.foodPantry,lastPeerAt:b.lastPeerAt||0,mood:b.mood});
+   const relationship=JSON.stringify(a.relationship)===JSON.stringify(b.relationship)?
+    null:{actorId:before.actorId,before:a.relationship,after:b.relationship};
    const learnedMethods=(b.learnedRecipes||[])
     .filter(method=>!(a.learnedRecipes||[]).includes(method));
-   if(inventory.length||needs.length||personal.length||learnedMethods.length)
+   if(inventory.length||needs.length||personal.length||learnedMethods.length||relationship)
     (delta.otherActors ||= []).push({actorId:id,inventory,needs,personal,
-     ...(learnedMethods.length?{knowledge:{learnedMethods}}:{})});
+     ...(learnedMethods.length?{knowledge:{learnedMethods}}:{}),
+     ...(relationship?{relationship}:{})});
   }
   const knowledge={
    observations:after.observedCount-before.observedCount,
@@ -111,6 +115,8 @@
    projectId:project?[n.id,project.kind,project.startedAt].join(':'):null,
    ...(project?{projectKind:project.kind,projectNodeId:project.nodeId}:{}),
    position:{x:n.x,y:n.y,z:n.z||0},
+   ...(n.task?.commandId===commandId&&n.task.key==='socialize'&&n.task.spoken===true?
+    {speech:true}:{}),
    reservationIds:activity?.reservationIds?.slice(0,40)||[],
    ...(validDecisionId(decisionId)?{decisionId}:{})};
  }

@@ -140,7 +140,7 @@ function restore(state,saved){
    if(Number.isFinite(old.lastPeerAt)&&old.lastPeerAt<=state.clock)
     n.lastPeerAt=Math.max(-100000,old.lastPeerAt);
    if(Number.isFinite(old.nextPlanAt)&&old.nextPlanAt>=0)n.nextPlanAt=old.nextPlanAt;
-   if(old.relationships&&typeof old.relationships==='object')n.relationships=old.relationships;
+   Agency.restoreRelationships(n,old.relationships,state.clock);
    if(Array.isArray(old.visited))n.visited=old.visited.slice(-32);
    if(validSavedPath(state,old.path,n))n.path=old.path;
    if(n.path?.length&&Number.isFinite(old.blockedFor)&&old.blockedFor>0&&old.blockedFor<=5)
@@ -190,7 +190,7 @@ function restore(state,saved){
   // Ephemeral partner reservations are reconstructed from real pending
   // offline activities, not trusted directly from serialized peer flags.
   for(const n of state.npcs){
-   if(n.source!=='offline routine'||n.task?.key!=='socialize')continue;
+   if(n.task?.key!=='socialize')continue;
    const peer=state.npcs.find(p=>p.id===n.task.ref&&p!==n&&
     !p.task&&!p.peerReservedFor);
    if(peer)peer.peerReservedFor=n.id;

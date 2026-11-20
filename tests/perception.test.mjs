@@ -105,6 +105,22 @@ test('model options cannot disclose obscured source stocks or hidden targets',()
   x.key==='collect_wood'),true,'Earlier firsthand evidence may guide retrieval');
 });
 
+test('speech requires a spoken exchange and stays at the witnessed location',()=>{
+ const {P,state,a}=setup();
+ const b=state.npcs.find(n=>n!==a);
+ const receipt={status:'COMPLETED',action:'socialize',
+  actorId:b.id,clock:state.clock,context:{position:{x:a.x+1,y:a.y,z:a.z}}};
+ state.receipts=[receipt];
+ assert.equal(P.snapshot(state,a).heard.length,0);
+ receipt.context.speech=true;
+ b.x=a.x+9;b.y=a.y+9;
+ const heard=P.snapshot(state,a).heard;
+ assert.equal(heard.length,1);
+ assert.equal(heard[0].kind,'speech');
+ assert.equal(heard[0].direction,'east');
+ assert.equal(heard[0].actorId,undefined);
+});
+
 test('verified physical receipts produce anonymous environmental sound',()=>{
  const {P,state,a,world}=setup();
  world.edits['6:5:0']='wall';

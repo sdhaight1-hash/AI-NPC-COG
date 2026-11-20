@@ -51,6 +51,39 @@
   // Belief confidence fades; the world is never secretly rewritten to agree.
   return {...b,effective:b.confidence/(1+Math.max(0,clock-b.at)/2400)};
  }
+ const HELP=new Set(['share_food','give_wood','give_fiber','teach_flask']);
+ function relationship(n,id,clock){
+  const entry=n.relationships?.[id];
+  if(!entry)return {cooperation:0,tension:0};
+  return {cooperation:entry.cooperation||0,
+   tension:Math.max(0,(entry.tension||0)-Math.floor(Math.max(0,clock-entry.at)/360))};
+ }
+ function socialEvent(n,id,action,clock){
+  if(!/^person_[1-9]\d*$/.test(id)||id===n.id||(!HELP.has(action)&&action!=='competition'))return;
+  const existing=n.relationships?.[id];
+  const now=relationship(n,id,clock);
+  if(action==='competition'&&existing?.action===action&&clock-existing.at<60)return;
+  n.relationships ||= {};
+  n.relationships[id]={cooperation:clamp(now.cooperation+(HELP.has(action)?1:0),0,8),
+   tension:clamp(now.tension+(HELP.has(action)?-1:1),0,6),at:clock,action};
+  if(Number.isFinite(n.mood))n.mood=clamp(n.mood+(HELP.has(action)?2:-1),0,100);
+  const keys=Object.keys(n.relationships);
+  if(keys.length>24){
+   const oldest=keys.sort((a,b)=>n.relationships[a].at-n.relationships[b].at)[0];
+   delete n.relationships[oldest];
+  }
+ }
+ function restoreRelationships(n,saved,clock){
+  n.relationships={};
+  for(const [id,row] of Object.entries(saved||{}).filter(([id,row])=>
+   /^person_[1-9]\d*$/.test(id)&&id!==n.id&&row&&
+   (HELP.has(row.action)||row.action==='competition')&&Number.isFinite(row.at)&&
+   row.at>=0&&row.at<=clock&&Number.isInteger(row.cooperation)&&Number.isInteger(row.tension))
+   .sort(([,a],[,b])=>a.at-b.at).slice(-24)){
+   n.relationships[id]={cooperation:clamp(row.cooperation,0,8),
+    tension:clamp(row.tension,0,6),at:row.at,action:row.action};
+  }
+ }
  function score(n,option,world,clock){
   const k=option.key,kind=category(k),m=state(n),d=drives(n),inv=n.inventory||{};
   if(k==='none')return -100;
@@ -59,7 +92,10 @@
   if(kind==='security')value+=d.security*.35;
   if(kind==='craft')value+=d.craft*.30;
   if(kind==='curiosity')value+=d.curiosity*.55;
-  if(kind==='social')value+=d.social*.65;
+  if(kind==='social'){
+   const relation=relationship(n,option.ref,clock);
+   value+=d.social*.65+relation.cooperation*2-relation.tension*8;
+  }
   if(k==='drink'||k==='drink_source')value+=(n.needs.thirst||0)*.65-((n.needs.thirst||0)<30?35:0);
   if(k==='eat')value+=(n.needs.hunger||0)*.58-((n.needs.hunger||0)<30?35:0);
   if(k==='rest')value+=(100-n.energy)*.42;
@@ -184,5 +220,6 @@
   n.agency=a;
  }
  root.Agency={state,drives,score,ranked,choose,begin,observe,outcome,finish,restore,
+  relationship,socialEvent,restoreRelationships,
   isPlan:key=>GOALS.has(key)};
 })(globalThis);
