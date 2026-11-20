@@ -616,6 +616,27 @@ test('new critical physiology supersedes an obsolete pending model decision',asy
  assert.equal(n.task?.key,'drink');
 });
 
+test('an inference failure leaves emergency rest and its command history intact',async()=>{
+ let respond;
+ const b=makeBrowser({fetch:async url=>url==='/api/decide'?
+  new Promise(resolve=>{respond=resolve;}):
+  {ok:true,json:async()=>({connected:true})}});
+ b.state.connected=true;
+ const n=b.state.npcs[0];
+ const pending=b.deliberate(n);
+ assert.equal(typeof respond,'function');
+ b.state.world.nodes=[];
+ n.needs.thirst=100;n.needs.hunger=100;n.bio.hydrationBudgetMl=0;n.energy=1;
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.action,'rest');
+ const commandSeq=b.state.commandSeq;
+ respond({ok:false,status:503,json:async()=>({error:'local model unavailable'})});
+ await pending;
+ assert.equal(n.action,'rest');
+ assert.equal(b.state.commandSeq,commandSeq);
+ assert.equal(b.activity(n).errors,1);
+});
+
 test('unrelated actors and world receipts do not invalidate a personal model choice',async()=>{
  let resolveDecision;
  const response=new Promise(resolve=>resolveDecision=resolve);

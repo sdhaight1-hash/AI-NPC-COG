@@ -125,13 +125,15 @@
      inbox.delete(oldest[0]);
     }
    };
-   const lastStock=new Map();
+   const lastStock=new Map(),lastInspection=new Map();
    for(const fact of m.facts){
     if(fact.key!=='stock'||fact.certainty!=='observed')continue;
     const source=episodes.get(fact.sourceEpisodeId);
     if(source?.type!=='inspection'||source.certainty!=='observed')continue;
     const available=Number(fact.value)>0;
     const ref=fact.entityId;
+    const sequence=Number(source.id.slice(3));
+    lastInspection.set(ref,Math.max(sequence,lastInspection.get(ref)??0));
     const previous=lastStock.get(ref);
     lastStock.set(ref,available);
     if(previous===available)continue;
@@ -144,9 +146,13 @@
     const key='report:'+claim.sourceId;
     // A witnessed result supersedes rumors of the same source. Repeating a
     // report without a new firsthand observation is one cue, not a new call.
-    if(claim.status!=='unverified'||reports.has(key)||lastStock.has(claim.sourceId))continue;
+    const speech=episodes.get(claim.speechEpisodeId);
+    if(claim.status!=='unverified'||reports.has(key)||speech?.type!=='interaction'||
+     speech.certainty!=='reported'||speech.at>clock||
+     clock-speech.at>=ATTENTION_LIFETIME||
+     (lastInspection.get(claim.sourceId)??0)>=Number(speech.id.slice(3)))continue;
     reports.add(key);
-    add('unverified resource report',key,claim.sourceEpisodeId,claim.sourceId);
+    add('unverified resource report',key,speech.id,claim.sourceId);
    }
    for(const method of m.methods)
     add(method.provenance==='instruction'?'method taught':'method discovered',

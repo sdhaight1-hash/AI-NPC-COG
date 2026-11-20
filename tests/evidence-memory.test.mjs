@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 
 function setup(){
  const c=vm.createContext({});
- for(const file of ['frontier','perception','evidence-memory'])
+ for(const file of ['frontier','perception','evidence-memory','cognition'])
   vm.runInContext(readFileSync(new URL('../public/'+file+'.js',import.meta.url),'utf8'),c);
  const actor=id=>({id,x:2,y:3,z:0,needs:{hunger:20,thirst:30},
   inventory:{water:0},energy:80});
@@ -302,6 +302,21 @@ test('historical failed gather cannot be replayed after later depletion',()=>{
  assert.equal(E.state(b).claims[0].status,'unverified');
 });
 
+test('a failed gather one level away cannot verify an empty source',()=>{
+ const {E,sim,a,b,world}=setup();
+ const inspection=committed(sim,a,'inspect','spring_1','evt_913');
+ E.fromReceipt(sim,a,inspection);
+ sim.clock++;
+ const speech=committed(sim,a,'socialize',b.id,'evt_914');
+ E.fromDialogue(sim,a,b,speech,'Visit [source:spring_1]','Thanks');
+ const claim=E.state(b).claims[0],spring=world.nodes[0];
+ b.x=spring.x;b.y=spring.y;b.z=-1;spring.stock=0;
+ const failed=committed(sim,b,'fill_water',spring.id,'evt_915');
+ failed.status='FAILED';
+ assert.equal(E.fromFailedReceipt(sim,b,failed),0);
+ assert.equal(claim.status,'unverified');
+});
+
 test('verified resource reports calibrate speaker reliability without creating friendship',()=>{
  const {E,sim,a,b,world}=setup();
  a.name='Asha';b.name='Mara';
@@ -347,6 +362,58 @@ test('verified resource reports calibrate speaker reliability without creating f
  E.restore(clone,JSON.parse(JSON.stringify(E.state(b))),sim.clock);
  assert.deepEqual(E.speakerReliability(clone,a.id),mixed);
 });
+test('a real report cues only its listener using their local speech episode',()=>{
+ const {E,c,sim,a,b}=setup();
+ a.name='Asha';b.name='Mara';
+ for(let i=0;i<8;i++)E.record(sim,a,{type:'personal',text:'Private sender memory'});
+ const seen=committed(sim,a,'inspect','spring_1','evt_941');
+ E.fromReceipt(sim,a,seen);
+ c.Cognition.attentionReviewed(a,sim.clock,E.state(a).sequence);
+ c.Cognition.attentionReviewed(b,sim.clock,0);
+ sim.clock++;
+ const speech=committed(sim,a,'socialize',b.id,'evt_942');
+ E.fromDialogue(sim,a,b,speech,'Try [source:spring_1]','Okay');
+ const report=E.state(b).claims[0];
+ assert.notEqual(report.sourceEpisodeId,report.speechEpisodeId);
+ const cue=c.Cognition.attentionCue(b,sim.clock);
+ assert.equal(cue?.kind,'unverified resource report');
+ assert.equal(cue.sourceId,report.speechEpisodeId);
+ assert.equal(c.Cognition.attentionCue(a,sim.clock),null);
+ const restored={id:b.id,x:b.x,y:b.y,z:b.z};
+ E.restore(restored,JSON.parse(JSON.stringify(E.state(b))),sim.clock);
+ c.Cognition.restoreAttention(restored,b.attention,sim.clock);
+ assert.equal(c.Cognition.attentionCue(restored,sim.clock)?.sourceId,cue.sourceId);
+ sim.clock=(Math.floor(sim.clock/1440)+1)*1440;
+ assert.equal(E.consolidate(sim,b),0,'Reported speech is not a physical-work summary');
+});
+
+test('episode eviction preserves the same linked evidence across checkpoint restore',()=>{
+ const {E,sim,a}=setup();
+ E.fromReceipt(sim,a,committed(sim,a,'inspect','spring_1','evt_943'));
+ sim.clock=(Math.floor(sim.clock/1440)+1)*1440;
+ assert.equal(E.consolidate(sim,a),1);
+ for(let i=0;i<E.MAX_EPISODES;i++)E.record(sim,a,{type:'personal',text:'Routine memory'});
+ const live=E.state(a);
+ assert.equal(live.facts.length,0);
+ assert.equal(live.summaries.length,0);
+ const restored={id:a.id,x:a.x,y:a.y,z:a.z};
+ E.restore(restored,JSON.parse(JSON.stringify(live)),sim.clock);
+ assert.equal(JSON.stringify(E.state(restored)),JSON.stringify(live));
+});
+
+test('a copied completion cannot assign its own method or target evidence',()=>{
+ const {E,sim,a,b}=setup();
+ a.knowledge={recipes:['flask']};
+ const completed=committed(sim,a,'explore',null,'evt_944');
+ const fake={...completed,action:'share_food',targetId:b.id,
+  delta:{knowledge:{learnedMethods:['flask']}}};
+ const recorded=E.fromReceipt(sim,a,fake);
+ assert.equal(recorded.text,'Completed explore');
+ assert.equal(recorded.ref,null);
+ assert.equal(E.state(a).methods.length,0);
+ assert.equal(E.state(a).social.length,0);
+});
+
 test('stale source or unsupported claimed verification does not affect reliability',()=>{
  const {E,sim,a,b}=setup();a.name='Asha';b.name='Mara';
  const inspection=committed(sim,a,'inspect','spring_1','evt_930');

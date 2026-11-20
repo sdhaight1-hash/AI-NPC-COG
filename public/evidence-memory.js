@@ -12,11 +12,21 @@
   m.trials ||= [];m.comparisons ||= [];
   return m;
  };
+ function appendEpisode(memory,entry){
+  memory.episodes.push(entry);
+  if(memory.episodes.length<=MAX_EPISODES)return;
+  const lost=memory.episodes.shift().id;
+  for(const key of ['facts','methods','trials','social'])
+   memory[key]=memory[key].filter(row=>row.sourceEpisodeId!==lost);
+  memory.claims=memory.claims.filter(row=>row.speechEpisodeId!==lost);
+  for(const key of ['summaries','comparisons'])
+   memory[key]=memory[key].filter(row=>!row.sourceEpisodeIds.includes(lost));
+ }
  const clone=x=>JSON.parse(JSON.stringify(x));
  const kinds=new Set(['action','inspection','interaction','sound','personal']);
  function sourceReceipt(sim,n,receiptId){
   if(typeof receiptId!=='string')return null;
-  return (sim.receipts||[]).find(x=>x.id===receiptId&&
+  return (sim.receipts||[]).findLast(x=>x.id===receiptId&&
    x.actorId===n.id&&x.status==='COMPLETED')||null;
  }
  function record(sim,n,{type='action',text='',receiptId=null,ref=null,
@@ -59,8 +69,7 @@
     (type==='action'||type==='inspection')?'observed':'reported',
    salience:Math.max(1,Math.min(5,Number(salience)||2)),
    location:{x:n.x,y:n.y,z:n.z||0}};
-  memory.episodes.push(entry);
-  memory.episodes=memory.episodes.slice(-MAX_EPISODES);
+  appendEpisode(memory,entry);
   if(fact&&typeof fact.key==='string'&&
    ['stock','condition','material','location'].includes(fact.key)&&
    typeof fact.value!=='object'){
@@ -74,8 +83,10 @@
   }
   return clone(entry);
  }
- function fromReceipt(sim,n,receipt){
-  if(!receipt||receipt.actorId!==n.id||receipt.status!=='COMPLETED')return null;
+ function fromReceipt(sim,n,candidate){
+  if(!candidate||candidate.actorId!==n.id||candidate.status!=='COMPLETED')return null;
+  const receipt=sourceReceipt(sim,n,candidate.id);
+  if(!receipt)return null;
   // Idempotency: replays or repeated hook execution cannot create evidence twice.
   if(state(n).episodes.some(e=>e.receiptId===receipt.id))return null;
   const action=String(receipt.action||'').slice(0,48);
@@ -124,7 +135,11 @@
     receipt.delta?.inventory?.some(x=>x.key==='flask'&&x.delta>0)===true;
    const trial={method:'flask',receiptId:receipt.id,sourceEpisodeId:entry.id,
     at:sim.clock,materialQuality:grade,heldWater};
-   m.trials.push(trial);m.trials=m.trials.slice(-80);
+   m.trials.push(trial);
+   if(m.trials.length>80){
+    const lost=m.trials.shift().receiptId;
+    m.comparisons=m.comparisons.filter(row=>!row.sourceReceiptIds.includes(lost));
+   }
    // Opposing results at two qualities support a *correlation*, not a
    // causal claim. A single leak still leaves the mechanism uncertain.
    if(heldWater){
@@ -171,7 +186,7 @@
    text:('Received tested flask-sealing instructions from '+teacher.name).slice(0,180),
    at:sim.clock,ref:teacher.id,receiptId:receipt.id,certainty:'reported',
    salience:4,location:{x:student.x,y:student.y,z:student.z||0}};
-  m.episodes.push(episode);m.episodes=m.episodes.slice(-MAX_EPISODES);
+  appendEpisode(m,episode);
   m.methods.push({method:'flask',sourceEpisodeId:episode.id,receiptId:receipt.id,
    at:sim.clock,provenance:'instruction',taughtBy:teacher.id});
   m.methods=m.methods.slice(-80);
@@ -187,10 +202,8 @@
     r.id===receipt.id&&r.actorId===n.id&&r.commandId===receipt.commandId&&
     r.clock===sim.clock&&r.status==='FAILED'&&r.action===receipt.action&&
     r.targetId===receipt.targetId))return 0;
-  const node=sim.world.nodes.find(x=>x.id===receipt.targetId&&
-   x.kind===kinds[receipt.action]);
-  if(!node||node.stock!==0||
-   root.Frontier.distance(sim.world,n,node)>1)return 0;
+  const node=root.Perception?.inspect(sim,n,receipt.targetId);
+  if(!node||node.kind!==kinds[receipt.action]||node.stock!==0)return 0;
   let count=0;
   for(const claim of state(n).claims){
    if(claim.status!=='unverified'||claim.sourceId!==node.id||
@@ -228,8 +241,7 @@
     certainty:'reported',salience:3,
     location:{x:n.x,y:n.y,z:n.z||0},
     utterances:clone(utterances)};
-   memory.episodes.push(entry);
-   memory.episodes=memory.episodes.slice(-MAX_EPISODES);
+   appendEpisode(memory,entry);
    return clone(entry);
   });
   // Explicit source tags are the ONLY typed claim channel in freeform speech.
@@ -292,7 +304,8 @@
   let count=0;
   // At most one factual, evidence-linked summary per elapsed day.
   const start=Math.max(m.lastDay,day-1)*1440;
-  const daily=m.episodes.filter(e=>e.at>=start&&e.at<day*1440&&e.receiptId);
+  const daily=m.episodes.filter(e=>e.at>=start&&e.at<day*1440&&
+   e.receiptId&&e.certainty==='observed');
   if(daily.length){
    const important=[...daily].sort((a,b)=>b.salience-a.salience||
     b.at-a.at).slice(0,4);
@@ -316,7 +329,8 @@
    const seen=new Set();
    for(const e of entries){
     if(!e||typeof e.id!=='string'||!/^ev_[1-9]\d*$/.test(e.id)||
-     seen.has(e.id)||!kinds.has(e.type)||typeof e.text!=='string'||
+     seen.has(e.id)||!Number.isSafeInteger(Number(e.id.slice(3)))||
+     !kinds.has(e.type)||typeof e.text!=='string'||
      !Number.isFinite(e.at)||e.at>clock||e.at<0||
      !['observed','reported'].includes(e.certainty))continue;
     seen.add(e.id);
@@ -335,12 +349,17 @@
    }
    result.sequence=Math.max(0,...result.episodes.map(e=>Number(e.id.slice(3))),
     Number.isSafeInteger(saved.sequence)?saved.sequence:0);
-   const episodeIds=new Set(result.episodes.map(e=>e.id));
+   const episodes=new Map(result.episodes.map(e=>[e.id,e]));
+   const episodeIds=new Set(episodes.keys());
    result.facts=(Array.isArray(saved.facts)?saved.facts:[]).filter(f=>
     f&&typeof f.id==='string'&&typeof f.entityId==='string'&&
     ['stock','condition','material','location'].includes(f.key)&&
-    typeof f.value==='string'&&episodeIds.has(f.sourceEpisodeId)&&
-    typeof f.receiptId==='string'&&Number.isFinite(f.at)&&f.at<=clock)
+    typeof f.value==='string'&&typeof f.receiptId==='string'&&
+    Number.isFinite(f.at)&&episodes.get(f.sourceEpisodeId)?.type==='inspection'&&
+    episodes.get(f.sourceEpisodeId).certainty==='observed'&&
+    episodes.get(f.sourceEpisodeId).ref===f.entityId&&
+    episodes.get(f.sourceEpisodeId).receiptId===f.receiptId&&
+    episodes.get(f.sourceEpisodeId).at===f.at)
     .slice(-MAX_FACTS).map(f=>({id:f.id,entityId:f.entityId.slice(0,100),
      key:f.key,value:f.value.slice(0,80),at:f.at,
      sourceEpisodeId:f.sourceEpisodeId,receiptId:f.receiptId,certainty:'observed'}));
@@ -372,7 +391,8 @@
     .filter(s=>s&&typeof s.id==='string'&&typeof s.text==='string'&&
      Number.isFinite(s.at)&&s.at<=clock&&Array.isArray(s.sourceEpisodeIds)&&
      s.sourceEpisodeIds.length>0&&
-     s.sourceEpisodeIds.every(id=>episodeIds.has(id)))
+     s.sourceEpisodeIds.every(id=>episodes.get(id)?.certainty==='observed'&&
+      episodes.get(id).receiptId))
     .slice(-MAX_SUMMARIES).map(s=>({id:s.id,at:s.at,
      text:s.text.slice(0,400),sourceEpisodeIds:s.sourceEpisodeIds.slice(0,4),
      certainty:'inferred'}));
