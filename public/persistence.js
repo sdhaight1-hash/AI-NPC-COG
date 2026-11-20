@@ -112,6 +112,17 @@ function restore(state,saved){
      typeof o.text==='string'&&Number.isFinite(o.at))
      .slice(-40).map(o=>({id:o.id,kind:String(o.kind||'').slice(0,30),
       at:o.at,text:o.text.slice(0,240)}));
+   // A visual sighting is a private coordinate memory, not a measurement of
+   // stock or a manufacturing method. Restore only real matching landmarks.
+   if(Array.isArray(old.knowledge?.sightings))
+    n.knowledge.sightings=old.knowledge.sightings.filter(o=>
+     o&&o.kind==='water'&&typeof o.id==='string'&&o.id.length<100&&
+     Number.isInteger(o.x)&&Number.isInteger(o.y)&&Number.isInteger(o.z)&&
+     Number.isFinite(o.at)&&o.at>=0&&o.at<=state.clock&&
+     state.world.nodes.some(node=>node.id===o.id&&node.kind==='water'&&
+      node.x===o.x&&node.y===o.y&&(node.z||0)===o.z))
+     .slice(-12).map(o=>({id:o.id,kind:'water',
+      x:o.x,y:o.y,z:o.z,at:o.at}));
    Cognition.restore(n,old.memories);
    Agency.restore(n,old.agency,state.clock);
    root.Projects?.restore(state,n,old.project);

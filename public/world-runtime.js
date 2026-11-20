@@ -85,6 +85,8 @@
     ['wood','collect_wood'],['stone','collect_stone'],['fiber','collect_fiber']];
    const avoided=new Set((n.agency?.beliefs||[]).filter(b=>
     (b.kind==='stone'&&b.status==='depleted')||
+    (b.kind==='water'&&b.status==='depleted'&&
+     state.clock-b.at>=0&&state.clock-b.at<60)||
     (b.status==='failed'&&state.clock-b.at>=0&&state.clock-b.at<60)).map(b=>b.ref));
    const canTake=(kind,action)=>action==='drink_source'||root.AgentWorld.roomFor(n,kind)>0;
    for(const [kind,key] of pairs){
@@ -123,6 +125,26 @@
      !reachability(state,n)(target))continue;
     scoped.push({key,when:'Investigate unverified '+claim.kind+' source reported by another resident',
      target,ref:target.id});
+   }
+  }
+  // Sight alone can locate a landmark without teaching its live stock.
+  // Offer the same physical return trip even if the last seen spring has
+  // since run dry; the authoritative harvest then provides the correction.
+  if(!scoped.some(o=>o.key==='fill_water')&&n.energy>=12&&
+   root.AgentWorld.vesselRoom(n)>0&&root.AgentWorld.roomFor(n,'water')>0){
+   for(const sight of (n.knowledge?.sightings||[]).slice().reverse()){
+    if(sight.kind!=='water'||sight.at>state.clock)continue;
+    // An actual failed visit beats an old sighting for a bounded interval.
+    // Later rain/groundwater replenishment may justify checking again.
+    if((n.agency?.beliefs||[]).some(b=>b.ref===sight.id&&b.kind==='water'&&
+     b.status==='depleted'&&state.clock-b.at>=0&&state.clock-b.at<60))continue;
+    const spring=state.world.nodes.find(x=>x.id===sight.id&&x.kind==='water'&&
+     x.x===sight.x&&x.y===sight.y&&(x.z||0)===(sight.z||0));
+    if(!spring||distance(state,n,spring)>18||!reachability(state,n)(spring))continue;
+    scoped.push({key:'fill_water',
+     when:'Return to a personally seen freshwater source; current supply unknown',
+     target:spring,ref:spring.id});
+    break;
    }
   }
   return scoped;
