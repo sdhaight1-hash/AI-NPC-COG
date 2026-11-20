@@ -287,7 +287,7 @@ async function readJson(req) {
   try { return JSON.parse(text); }
   catch { throw new Error('Expected JSON request body'); }
 }
-export function startServer(port = PORT, { worldDirectory = process.env.SIM_WORLD_DIR } = {}) {
+export function startServer(port = PORT, { worldDirectory, worldImport } = {}) {
   let worldReady;
   let worldFailure;
   const lane = createInferenceLane();
@@ -368,7 +368,9 @@ export function startServer(port = PORT, { worldDirectory = process.env.SIM_WORL
   server.listen(port, '127.0.0.1', () => {
     if (worldDirectory) {
       worldReady = import('./world-service.mjs').then(({ openWorld }) => {
-        const world = openWorld(resolve(ROOT, worldDirectory));
+        const world = openWorld(resolve(ROOT, worldDirectory), {
+          importFile: worldImport ? resolve(ROOT, worldImport) : undefined
+        });
         if (!server.listening) return world;
         const clock = setInterval(world.tick, 50);
         const checkpoints = setInterval(world.save, 5000);
@@ -389,7 +391,10 @@ export function startServer(port = PORT, { worldDirectory = process.env.SIM_WORL
   return server;
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  const server = startServer();
+  const server = startServer(PORT, {
+    worldDirectory: process.env.SIM_WORLD_DIR,
+    worldImport: process.env.SIM_WORLD_IMPORT
+  });
   if (process.env.SIM_WORLD_DIR) {
     process.once('SIGINT', () => server.close());
     process.once('SIGTERM', () => server.close());

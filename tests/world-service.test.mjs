@@ -12,7 +12,7 @@ import { startServer } from '../server.mjs';
 function temporaryWorld(t) {
   const directory = mkdtempSync(join(tmpdir(), 'npc-world-'));
   t.after(() => {
-    for (const file of ['world-a.json', 'world-b.json']) rmSync(join(directory, file), { force: true });
+    for (const file of ['world-a.json', 'world-b.json', 'browser-export.json']) rmSync(join(directory, file), { force: true });
     rmdirSync(directory);
   });
   return directory;
@@ -116,4 +116,35 @@ test('local HTTP observers share pause and speed without controlling tick progre
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
+});
+
+test('imports a browser export once, opens paused, and retains the original export', t => {
+  const directory = temporaryWorld(t);
+  const importFile = join(directory, 'browser-export.json');
+  const original = Simulation.initial(431117);
+  original.auto = false;
+  Simulation.advance(original, 25);
+  const raw = JSON.stringify(Persistence.save(original));
+  writeFileSync(importFile, raw);
+  const imported = openWorld(directory, { importFile });
+  assert.equal(imported.view().snapshot.clock, original.clock);
+  assert.equal(imported.view().snapshot.seed, 431117);
+  assert.equal(imported.view().paused, true);
+  assert.equal(readFileSync(importFile, 'utf8'), raw);
+  imported.control({ paused: false });
+  imported.advance(2);
+  imported.save();
+  const restarted = openWorld(directory, { importFile });
+  assert.equal(restarted.view().snapshot.clock, original.clock + 2);
+  assert.equal(restarted.view().paused, false);
+  assert.equal(readFileSync(importFile, 'utf8'), raw);
+});
+
+test('an incompatible browser export leaves the world directory without replacement checkpoints', t => {
+  const directory = temporaryWorld(t);
+  const importFile = join(directory, 'browser-export.json');
+  writeFileSync(importFile, '{"seed":379210,"version":2}');
+  assert.throws(() => openWorld(directory, { importFile }), /compatible v3/);
+  for (const name of ['world-a.json', 'world-b.json'])
+    assert.throws(() => readFileSync(join(directory, name)), { code: 'ENOENT' });
 });

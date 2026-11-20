@@ -39,7 +39,7 @@ function writeCheckpoint(file, data) {
   }
 }
 
-export function openWorld(directory, { seed = Frontier.DEFAULT_SEED } = {}) {
+export function openWorld(directory, { seed = Frontier.DEFAULT_SEED, importFile } = {}) {
   mkdirSync(directory, { recursive: true });
   const candidates = [];
   let damaged = false;
@@ -72,6 +72,16 @@ export function openWorld(directory, { seed = Frontier.DEFAULT_SEED } = {}) {
   }
   if (!state && (damaged || candidates.length))
     throw new Error('No readable world checkpoint. Both checkpoint files were preserved.');
+  if (!state && importFile) {
+    const checkpoint = JSON.parse(readFileSync(importFile, 'utf8'));
+    if (!Number.isInteger(checkpoint?.seed) || checkpoint.seed < 1 || checkpoint.seed > 2147483646)
+      throw new Error('Import requires a compatible v3 browser checkpoint');
+    const imported = Simulation.initial(checkpoint.seed);
+    if (!Persistence.restore(imported, checkpoint))
+      throw new Error('Import requires a compatible v3 browser checkpoint');
+    imported.paused = true;
+    state = imported;
+  }
   if (!state) {
     state = Simulation.initial(seed);
     for (const n of state.npcs) Frontier.reveal(state.world, n.x, n.y, 7);

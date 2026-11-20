@@ -849,6 +849,7 @@ function updateHUD(now){
   $('modelStatus').textContent='Offline simulation';
   const disabled=!serverLoaded||serverControlPending;
   $('pauseBtn').disabled=disabled;$('autoAI').disabled=disabled;
+  $('exportWorld').disabled=!serverLoaded;
   $('autoAI').checked=state.auto;
   for(const button of document.querySelectorAll('[data-speed]')){
    button.disabled=disabled;
@@ -939,6 +940,16 @@ for(const button of document.querySelectorAll('[data-speed]')){
  });
 }
 $('clearLog').addEventListener('click',()=>{state.events=[];renderEvents();});
+$('exportWorld').addEventListener('click',()=>{
+ if(state.saveLoadFailed||(serverMode&&!serverLoaded))return;
+ const blob=new Blob([JSON.stringify(Persistence.save(state))],{type:'application/json'});
+ const url=URL.createObjectURL(blob);
+ const link=document.createElement('a');
+ link.href=url;
+ link.download='ai-npc-cog-world-'+state.world.seed+'.json';
+ link.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
 $('resetBtn').addEventListener('click',()=>{
  if(serverMode||!window.confirm('Reset this simulated world and its history?'))return;
  localStorage.removeItem(STORE);window.location.reload();

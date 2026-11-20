@@ -53,10 +53,14 @@ An abrupt restart can lose progress since the last checkpoint. The server can
 recover the previous slot if the latest is damaged and preserves both files
 when neither can be read. The status displays checkpoint problems.
 
-Existing browser worlds stay in local storage. This pilot starts a separate
-world, with the normal browser startup still available when
-`SIM_WORLD_DIR` is unset. Reset and new-world controls are disabled in the
-shared viewer.
+Use **Export world** in the browser-owned observatory to copy an existing v3
+world. Set `SIM_WORLD_IMPORT` to the exported JSON path before starting Node
+with a fresh `SIM_WORLD_DIR`. The imported world opens paused. Once a server
+checkpoint exists, it takes precedence on restart. The export and browser save
+are retained.
+
+The normal browser startup is available when `SIM_WORLD_DIR` is unset.
+Reset and new-world controls are disabled in the shared viewer.
 
 ### Saving and migration
 
