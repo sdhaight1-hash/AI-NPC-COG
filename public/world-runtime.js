@@ -441,7 +441,7 @@
   if(!begin(state,n,result.option.key,'plan',null,hooks))
    finishPlan(state,n,'Subaction unavailable',hooks);
  }
- const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home']);
+ const RECOVERABLE_PROJECTS=new Set(['water_vessel','water_supply','home','campfire']);
  function advanceProject(state,n,hooks={}){
   if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
   const result=root.Projects.next(state,n,()=>available(state,n));
