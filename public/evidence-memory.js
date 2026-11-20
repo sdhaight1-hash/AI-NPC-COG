@@ -107,13 +107,39 @@
     receiptId:receipt.id,at:sim.clock});
   }
   m.methods=m.methods.slice(-80);
-  if(['share_food','socialize'].includes(action)&&
+  if(['share_food','socialize','teach_flask'].includes(action)&&
    typeof receipt.targetId==='string'){
    m.social.push({actorId:receipt.targetId,
     action,at:sim.clock,sourceEpisodeId:entry.id,receiptId:receipt.id});
    m.social=m.social.slice(-80);
   }
   return entry;
+ }
+ // Explicit instruction is a reported procedure, not firsthand proof that
+ // the pupil manufactured anything. Only a current, committed world receipt
+ // may authorize a new private method entry for the named receiving actor.
+ function fromInstruction(sim,teacher,student,receipt){
+  if(!teacher||!student||teacher===student||
+   !sim.npcs?.includes(teacher)||!sim.npcs.includes(student)||
+   !receipt||receipt.action!=='teach_flask'||receipt.status!=='COMPLETED'||
+   receipt.actorId!==teacher.id||receipt.targetId!==student.id||
+   receipt.clock!==sim.clock||
+   !sim.receipts?.some(r=>r===receipt)||!student.knowledge?.recipes?.includes('flask'))
+   return null;
+  const taught=receipt.delta?.otherActors?.find(x=>x.actorId===student.id);
+  if(!taught?.knowledge?.learnedMethods?.includes('flask'))return null;
+  const m=state(student);
+  if(m.episodes.some(x=>x.receiptId===receipt.id)||
+   m.methods.some(x=>x.method==='flask'))return null;
+  const episode={id:'ev_'+(++m.sequence),type:'interaction',
+   text:('Received tested flask-sealing instructions from '+teacher.name).slice(0,180),
+   at:sim.clock,ref:teacher.id,receiptId:receipt.id,certainty:'reported',
+   salience:4,location:{x:student.x,y:student.y,z:student.z||0}};
+  m.episodes.push(episode);m.episodes=m.episodes.slice(-MAX_EPISODES);
+  m.methods.push({method:'flask',sourceEpisodeId:episode.id,receiptId:receipt.id,
+   at:sim.clock,provenance:'instruction',taughtBy:teacher.id});
+  m.methods=m.methods.slice(-80);
+  return clone(episode);
  }
  // A failed command is evidence of depletion only if the actor actually
  // reached the same finite source. A route failure proves nothing about stock.
@@ -319,10 +345,12 @@
      typeof x.receiptId==='string'&&episodeIds.has(x.sourceEpisodeId)&&
      Number.isFinite(x.at)&&x.at<=clock)
     .slice(-80).map(x=>({method:x.method.slice(0,64),
-     sourceEpisodeId:x.sourceEpisodeId,receiptId:x.receiptId,at:x.at}));
+     sourceEpisodeId:x.sourceEpisodeId,receiptId:x.receiptId,at:x.at,
+     ...(x.provenance==='instruction'&&typeof x.taughtBy==='string'&&
+      x.taughtBy.length<=100?{provenance:'instruction',taughtBy:x.taughtBy}:{})}));
    result.social=(Array.isArray(saved.social)?saved.social:[])
     .filter(x=>x&&typeof x.actorId==='string'&&
-     ['share_food','socialize'].includes(x.action)&&
+     ['share_food','socialize','teach_flask'].includes(x.action)&&
      typeof x.receiptId==='string'&&episodeIds.has(x.sourceEpisodeId)&&
      Number.isFinite(x.at)&&x.at<=clock)
     .slice(-80).map(x=>({actorId:x.actorId.slice(0,100),
@@ -395,6 +423,6 @@
    remainingMinutes:n.currentActivity?
     Math.max(0,n.currentActivity.workRequired-n.currentActivity.workDone):null};
  }
- root.EvidenceMemory={state,record,fromReceipt,fromFailedReceipt,fromDialogue,recall,consolidate,restore,working,belief,speakerReliability,
+ root.EvidenceMemory={state,record,fromReceipt,fromInstruction,fromFailedReceipt,fromDialogue,recall,consolidate,restore,working,belief,speakerReliability,
   MAX_EPISODES,MAX_FACTS,MAX_SUMMARIES,MAX_CLAIMS};
 })(globalThis);

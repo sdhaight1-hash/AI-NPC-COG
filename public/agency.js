@@ -13,7 +13,7 @@
   collect_fiber:'craft',craft_stage:'craft',build_fire:'craft',
   build_shelter:'craft',build_cache:'craft',craft_hatchet:'craft',
   explore:'curiosity',inspect:'curiosity',socialize:'social',
-  share_food:'social',none:'idle'
+  share_food:'social',teach_flask:'social',none:'idle'
  };
  const category=k=>CATEGORIES[k]||(k.startsWith('craft_')||k.startsWith('experiment_')
   ||k.startsWith('stash_')||k.startsWith('withdraw_')?'craft':

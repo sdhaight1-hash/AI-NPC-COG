@@ -148,7 +148,8 @@
     add('unverified resource report',key,claim.sourceEpisodeId,claim.sourceId);
    }
    for(const method of m.methods)
-    add('method discovered','method:'+method.method,method.sourceEpisodeId,method.method);
+    add(method.provenance==='instruction'?'method taught':'method discovered',
+     'method:'+method.method,method.sourceEpisodeId,method.method);
    const cue=[...inbox.values()].sort((x,y)=>y.sequence-x.sequence)[0];
    if(cue)return cue;
   }
