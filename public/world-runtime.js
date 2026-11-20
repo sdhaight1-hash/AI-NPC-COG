@@ -385,15 +385,20 @@
   if(!begin(state,n,result.option.key,'plan',null,hooks))
    finishPlan(state,n,'Subaction unavailable',hooks);
  }
+ const RECOVERABLE_WATER_PROJECTS=new Set(['water_vessel','water_supply']);
  function advanceProject(state,n,hooks={}){
   if(!root.Projects||!n.project||n.task||n.plan||n.path?.length)return false;
   const result=root.Projects.next(state,n,available(state,n));
   if(result.status!=='action')return false;
   const ok=begin(state,n,result.action,'project',null,hooks);
   if(!ok){
-   n.project.status='BLOCKED';
-   n.project.blockedReason='ACTION_START_REJECTED:'+result.action;
-   n.project.nextAt=state.clock+5;
+   if(RECOVERABLE_WATER_PROJECTS.has(n.project.kind))
+    root.Projects.onOutcome(state,n,result.action,false);
+   else {
+    n.project.status='BLOCKED';
+    n.project.blockedReason='ACTION_START_REJECTED:'+result.action;
+    n.project.nextAt=state.clock+5;
+   }
   }
   return ok;
  }
@@ -442,7 +447,8 @@
   for(const n of state.npcs)survival(state,n,hooks);
   const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&
    (!n.project||n.project.status==='COMPLETED'||
-    (n.project.kind==='water_vessel'&&n.project.status==='BLOCKED'&&
+    (RECOVERABLE_WATER_PROJECTS.has(n.project.kind)&&
+     n.project.status==='BLOCKED'&&
      state.clock<(n.project.nextAt||0)))&&
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
@@ -457,7 +463,7 @@
    if(policy.projects!==false&&root.Projects?.maybeStart(state,n)){
     advanceProject(state,n,hooks);continue;
    }
-   const waiting=n.project?.kind==='water_vessel'&&
+   const waiting=RECOVERABLE_WATER_PROJECTS.has(n.project?.kind)&&
     n.project.status==='BLOCKED'&&state.clock<(n.project.nextAt||0);
    const suspended=n.suspendedActivities?.at(-1);
    const canResume=suspended&&(!waiting||WAITING_ACTIONS.has(suspended.key))&&
