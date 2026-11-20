@@ -249,28 +249,62 @@ async function checkModel(){
 // An unrelated global effect must not cancel somebody else's private choice.
 function modelDecisionBasis(n){
  const options=Perception.filterAffordances(state,n,availableActivities(n));
- const references=Object.fromEntries(options.map(o=>[o.key,o.ref??null]));
+ const references={none:null},physical={none:JSON.stringify({ref:null,stock:null,count:null,claims:[]})};
+ for(const option of options){
+  // WorldRuntime.begin commits the FIRST legal option for an action key.
+  // Record that exact target instead of accidentally tracking the last one.
+  if(Object.hasOwn(references,option.key))continue;
+  const ref=option.ref??null,target=option.target;
+  references[option.key]=ref;
+  // This is an INTERNAL commit guard, never a model-facing observation:
+  // the scene and available-action descriptions must not reveal live stock.
+  // A competing reservation or source depletion makes a pending choice stale.
+  const claims=ref?(state.reservations||[]).filter(r=>
+   r.status==='ACTIVE'&&r.id===ref&&
+   ['node','item','structure'].includes(r.type))
+   .map(r=>[r.type,r.kind,r.quantity,r.commandId]).sort((a,b)=>
+    JSON.stringify(a).localeCompare(JSON.stringify(b))):[];
+  physical[option.key]=JSON.stringify({ref,
+   stock:Number.isInteger(target?.stock)?target.stock:null,
+   count:Number.isInteger(target?.count)?target.count:null,
+   claims});
+ }
  const agency=n.agency?.goal,hydration=n.bio?.hydrationBudgetMl??2400;
  return {
+  actorId:n.id,issuedAt:state.clock,alive:n.alive!==false,
   action:n.action,task:n.task?.commandId??null,plan:n.plan?.key??null,
-  path:n.path?.length??0,project:n.project?.id??null,
+  path:n.path?.length??0,
+  project:JSON.stringify(n.project?{
+   kind:n.project.kind,status:n.project.status,
+   nextAt:n.project.nextAt,blockedReason:n.project.blockedReason,
+   completedActions:n.project.completedActions}:null),
   goalKey:agency?.key??null,goalStartedAt:agency?.startedAt??null,
   evidenceSequence:n.evidenceMemory?.sequence??0,
-  observations:n.knowledge?.observations?.length??0,
+  // An update to an existing belief/claim matters even when counts do not.
+  observations:JSON.stringify(n.knowledge?.observations||[]),
+  sightings:JSON.stringify(n.knowledge?.sightings||[]),
+  beliefs:JSON.stringify(n.agency?.beliefs||[]),
+  claims:JSON.stringify(n.evidenceMemory?.claims||[]),
   inventory:JSON.stringify(n.inventory||{}),
   urgency:Number(n.needs.thirst>=62||hydration<1200)+
    2*Number(n.needs.thirst>=90||hydration<200)+
    4*Number(n.needs.hunger>=85)+8*Number(n.needs.hunger>=95)+
-   16*Number(n.energy<18),
-  references
+   16*Number(n.energy<18)+32*Number(n.health<25),
+  references,physical
  };
 }
 function modelChoiceStillRelevant(n,original,choice){
+ if(!original||original.actorId!==n.id||n.alive===false||
+  !state.npcs.includes(n)||state.clock<original.issuedAt||
+  state.clock-original.issuedAt>45)return false;
  const current=modelDecisionBasis(n);
- for(const field of ['action','task','plan','path','project','goalKey',
-  'goalStartedAt','evidenceSequence','observations','inventory','urgency'])
+ for(const field of ['alive','action','task','plan','path','project','goalKey',
+  'goalStartedAt','evidenceSequence','observations','sightings','beliefs',
+  'claims','inventory','urgency'])
   if(original[field]!==current[field])return false;
- return (original.references[choice]??null)===(current.references[choice]??null);
+ return Object.hasOwn(original.references,choice)&&
+  original.references[choice]===current.references[choice]&&
+  original.physical[choice]===current.physical[choice];
 }
 async function deliberate(n,cue=null){
  if(!state.npcs.includes(n))return;

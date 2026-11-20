@@ -50,7 +50,7 @@ function makeBrowser(options={}){
  vm.runInNewContext(source+'\n'+
   'globalThis.exposed={state,step,pathfind,moveTo,position,setAction,completeActivity,'+
   'availableActivities,backgroundOptions,sceneFor,save,validSavedPath,drawWorld,drawConstructionProjection,'+
-  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity};',context);
+  'updateMovement,clientToTile,setZoom,setZ,peerExchange,renderChat,selectNpc,tick,scheduleIdleAgents,survivalReflex,deliberate,activity,modelDecisionBasis,modelChoiceStillRelevant,Reservations};',context);
  const launchedSpeed=context.exposed.state.speed;
  // Most tests explicitly exercise a one-minute-per-second physics fixture,
  // independently from the user-facing default playback preference.
@@ -725,6 +725,84 @@ test('crafting inspector shows the current operation and resident-specific seal 
 });
 
 
+test('a pending model selection becomes stale when its specific source stock is depleted',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0];
+ const food=b.state.world.nodes.find(x=>x.kind==='food'&&x.stock>=2);
+ assert.ok(food);
+ n.x=food.x;n.y=food.y;n.z=food.z||0;n.energy=100;
+ const before=b.modelDecisionBasis(n),ref=before.references.forage;
+ assert.ok(ref,'Foraging must be a currently legal, perceptible option');
+ assert.equal(b.modelChoiceStillRelevant(n,before,'forage'),true);
+ const actual=b.state.world.nodes.find(x=>x.id===ref);
+ assert.ok(actual);
+ actual.stock=0;
+ assert.equal(b.modelChoiceStillRelevant(n,before,'forage'),false,
+  'A source changed during inference must invalidate the stale command');
+});
+
+test('a rival reservation invalidates only the affected physical model affordance',()=>{
+ const b=makeBrowser(),[n,peer]=b.state.npcs;
+ const wood=b.state.world.nodes.find(x=>x.kind==='wood'&&x.stock>=2);
+ assert.ok(wood);
+ n.x=wood.x;n.y=wood.y;n.z=wood.z||0;n.energy=100;
+ const before=b.modelDecisionBasis(n),ref=before.references.collect_wood;
+ assert.ok(ref);
+ peer.inventory.stone=10;
+ assert.equal(b.modelChoiceStillRelevant(n,before,'collect_wood'),true,
+  'Unrelated private inventory changes are not a global world epoch');
+ const claim=b.Reservations.claim(b.state,peer.id,'cmd_900',
+  [{type:'node',id:ref,kind:'wood',quantity:1}]);
+ assert.equal(claim.ok,true);
+ assert.equal(b.modelChoiceStillRelevant(n,before,'collect_wood'),false,
+  'A concurrent hold on the same finite lot invalidates a pending choice');
+});
+
+test('a private belief correction and changed report invalidate only that actor decision',()=>{
+ const b=makeBrowser(),[n,other]=b.state.npcs;
+ n.agency.beliefs.push({ref:'node_1',kind:'water',x:n.x,y:n.y,
+  status:'available',at:b.state.clock,confidence:1,stock:2});
+ const original=b.modelDecisionBasis(n);
+ other.agency.beliefs.push({ref:'node_2',kind:'wood',x:other.x,y:other.y,
+  status:'depleted',at:b.state.clock,confidence:1,stock:0});
+ assert.equal(b.modelChoiceStillRelevant(n,original,'none'),true,
+  'Another resident\'s evidence is not this actor\'s evidence');
+ n.agency.beliefs[0].status='depleted';
+ assert.equal(b.modelChoiceStillRelevant(n,original,'none'),false);
+ const next=b.modelDecisionBasis(n);
+ n.evidenceMemory.claims.push({id:'claim_test',sourceId:'node_1',
+  speakerId:other.id,kind:'water',status:'contradicted',at:b.state.clock});
+ assert.equal(b.modelChoiceStillRelevant(n,next,'none'),false,
+  'A material reported claim revision must reject the old decision basis');
+});
+
+test('model responses expire in simulated time and never resurrect a dead actor',()=>{
+ const b=makeBrowser(),n=b.state.npcs[0],basis=b.modelDecisionBasis(n);
+ b.state.clock+=46;
+ assert.equal(b.modelChoiceStillRelevant(n,basis,'none'),false);
+ const fresh=b.modelDecisionBasis(n);
+ n.alive=false;
+ assert.equal(b.modelChoiceStillRelevant(n,fresh,'none'),false);
+});
+
+test('an urgent survival action wins over a slow outstanding model choice',async()=>{
+ let answer;
+ const fetch=async path=>path==='/api/decide'?
+  new Promise(resolve=>{answer=resolve;}):
+  {ok:true,json:async()=>({connected:true})};
+ const b=makeBrowser({fetch}),n=b.state.npcs[0];
+ b.state.connected=true;
+ n.task=null;n.plan=null;n.path=[];n.action='none';n.needs.thirst=30;
+ const pending=b.deliberate(n);
+ assert.equal(typeof answer,'function','Model response is held in flight');
+ n.needs.thirst=96;n.bio.hydrationBudgetMl=150;n.inventory.water=2;
+ assert.equal(b.survivalReflex(n),true);
+ assert.equal(n.task?.key,'drink');
+ answer({ok:true,json:async()=>({action:'none',source:'rein',scores:{none:1}})});
+ await pending;
+ assert.equal(n.task?.key,'drink','Stale model deliberation cannot displace urgent survival');
+ assert.ok(b.activity(n).rejected>=1);
+ assert.ok(b.state.receipts.some(x=>x.status==='REJECTED'&&x.source==='model'));
+});
 test('construction drawings are a pure overlay; built tiles and unfinished plans are distinguishable',()=>{
  const b=makeBrowser(),n=b.state.npcs[0],w=b.state.world;
  const point={x:n.x,y:n.y,z:n.z||0},other=b.pathfind(n,{
