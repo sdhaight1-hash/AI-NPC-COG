@@ -56,6 +56,7 @@ test('the project offers physical experiment only until the maker knows the meth
  assert.equal(choice.action,'craft_hollow_wood_trial');
  assert.equal(n.knowledge.recipes.includes('flask'),false);
  n.knowledge.recipes.push('flask');
+ s.clock++;s.world.now=s.clock; // Respect the existing project-action cooldown.
  choice=c.Projects.next(s,n,c.WorldRuntime.available(s,n));
  assert.equal(choice.action,'craft_flask',
   'Known procedure uses direct production, not a compulsory rediscovery');
