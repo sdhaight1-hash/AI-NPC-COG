@@ -13,6 +13,10 @@ function setup(){
  const [n,peer]=s.npcs;
  s.npcs=[n,peer];
  n.energy=100;
+ const spring=s.world.nodes.find(x=>x.kind==='water'&&x.stock>=3&&
+  k.Frontier.traversable(s.world,x.x,x.y,x.z||0));
+ assert.ok(spring,'Use generated finite freshwater for actual seal tests');
+ n.x=spring.x;n.y=spring.y;n.z=spring.z||0;n.path=[];
  n.inventory.wood=1;n.inventory.cord=1;n.inventory.blade=1;
  n.craftedItems=[
   {kind:'cord',quality:2,maker:n.id,craftedAt:s.clock,method:'cord',materialQuality:2},
