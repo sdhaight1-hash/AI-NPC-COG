@@ -37,6 +37,14 @@ test('portable-water need activates only from actor-private evidence and safe en
  assert.equal(n.inventory.flask,0);
  assert.equal(c.Projects.maybeStart(s,n).kind,'water_vessel');
  assert.equal(n.project.goal.includes('flask'),false,'Goal must describe a need, not a secret recipe');
+ const spring=s.world.nodes.find(x=>x.kind==='water');
+ const originalX=spring.x;
+ n.project=null;
+ spring.x=c.Frontier.wrap(n.x+20,s.world.width);
+ assert.equal(c.Perception.snapshot(s,n).objects.some(o=>o.kind==='water'),false);
+ assert.notEqual(c.Projects.maybeStart(s,n)?.kind,'water_vessel',
+  'An unseen source absent from personal memory cannot seed the water project');
+ spring.x=originalX;
  const newNpc=s.npcs[0];
  newNpc.project=null;newNpc.needs.thirst=95;
  assert.notEqual(c.Projects.maybeStart(s,newNpc)?.kind,'water_vessel',
