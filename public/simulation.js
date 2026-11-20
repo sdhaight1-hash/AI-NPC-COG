@@ -56,9 +56,10 @@
     else if(n.plan&&!n.task&&!n.path.length)plan?.(n);
    }
   }
+  ports.beforeProjects?.(state);
   if(root.Projects&&runtime){
    for(const n of state.npcs){
-    if(n.project&&!n.task&&!n.plan&&!n.path?.length)
+    if(n.project&&!n.task&&!n.plan&&!n.path?.length&&!n.peerPending&&!n.peerReservedFor)
      runtime.advanceProject(state,n);
    }
   }
