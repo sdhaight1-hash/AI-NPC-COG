@@ -108,3 +108,57 @@ test('interrupted trial and learned method survive checkpoint replay',()=>{
  assert.deepEqual(copy(terminal(fresh)),copy(terminal(a.s)));
  assert.equal(fresh.receipts.filter(x=>x.delta?.knowledge?.learnedMethods?.includes('flask')).length,1);
 });
+
+test('a weak physical binding leaks without unlocking a manufacturing method',()=>{
+ const {k,s,n}=setup();
+ n.craftedItems.find(x=>x.kind==='cord').quality=1;
+ assert.equal(k.Projects.create(s,n,'water_vessel').kind,'water_vessel');
+ assert.equal(k.WorldRuntime.advanceProject(s,n),true);
+ assert.equal(n.task.key,'craft_hollow_wood_trial');
+ k.Simulation.advance(s,45);
+ assert.equal(n.inventory.flask,0);
+ assert.equal(n.inventory.wood,0);
+ assert.equal(n.inventory.cord,0);
+ assert.equal(n.inventory.blade,1,'The reusable blade survives a failed seal');
+ assert.equal(n.workpiece,null);
+ assert.ok(!n.knowledge.recipes.includes('flask'));
+ assert.equal(k.Crafting.begin(n,s.world,'flask').ok,false);
+ const testResult=s.receipts.find(x=>x.status==='COMPLETED'&&
+  x.action==='craft_stage'&&x.delta?.workpiece?.before?.recipe==='hollow_wood_trial'&&
+  x.delta.workpiece.after===null);
+ assert.ok(testResult,'The finished physical trial earns a completed work receipt');
+ assert.equal(testResult.delta.knowledge?.learnedMethods?.length||0,0);
+ assert.equal(n.craftedItems.filter(x=>x.kind==='flask').length,0);
+ const episode=n.evidenceMemory.episodes.find(x=>x.receiptId===testResult.id);
+ assert.ok(episode);
+ assert.equal(episode.certainty,'observed');
+ assert.match(episode.text,/leak/i);
+ assert.equal(n.project.status,'BLOCKED');
+ assert.equal(n.project.blockedReason,'TRIAL_LEAKED');
+ assert.ok(n.project.nextAt>s.clock,'Do not immediately repeat the same material mistake');
+ assert.ok(n.memories.some(x=>x.kind==='failure'&&/seal leak/i.test(x.text)));
+ const before=copy(k.Persistence.save(s));
+ const restored=k.Simulation.initial(379210);restored.auto=false;
+ assert.equal(k.Persistence.restore(restored,before),true);
+ const maker=restored.npcs.find(x=>x.id===n.id);
+ assert.equal(maker.inventory.flask,0);
+ assert.equal(maker.project.blockedReason,'TRIAL_LEAKED');
+ assert.ok(maker.project.nextAt>=restored.clock);
+ assert.equal(maker.knowledge.recipes.includes('flask'),false);
+ assert.equal(maker.evidenceMemory.episodes.some(x=>x.receiptId===testResult.id&&
+  /leak/i.test(x.text)),true);
+});
+
+test('the same timed trial with a sound binding creates exactly one usable vessel',()=>{
+ const {k,s,n}=setup();
+ n.craftedItems.find(x=>x.kind==='cord').quality=2;
+ assert.equal(k.WorldRuntime.begin(s,n,'craft_hollow_wood_trial'),true);
+ k.Simulation.advance(s,52);
+ assert.equal(n.inventory.flask,1);
+ assert.equal(n.craftedItems.filter(x=>x.kind==='flask').length,1);
+ assert.equal(n.knowledge.recipes.filter(x=>x==='flask').length,1);
+ const final=s.receipts.find(x=>x.status==='COMPLETED'&&x.action==='craft_stage'&&
+  x.delta?.knowledge?.learnedMethods?.includes('flask'));
+ assert.ok(final);
+ assert.ok(n.evidenceMemory.episodes.some(x=>x.receiptId===final.id&&/held water/i.test(x.text)));
+});
