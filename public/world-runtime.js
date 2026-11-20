@@ -308,7 +308,7 @@
     state.clock+remaining};
    if(active)active.reservationIds=[...n.task.reservationIds];
    if(!active){
-    const activity=root.Activities.start(state,n,n.task,duration);
+    const activity=root.Activities.start(state,n,n.task,duration,hooks.decisionId);
     activity.reservationIds=[...n.task.reservationIds];
    }
    if(action==='socialize'&&option.target)option.target.peerReservedFor=n.id;
@@ -316,7 +316,7 @@
   }
   root.Agency.begin(n,action,state.clock,source);
   if(source==='project'&&n.project)n.goal='Pursuing '+n.project.goal;
-  if(!resumed)root.WorldReceipts.accept(state,n,action,commandId,option.ref,source);
+  if(!resumed)root.WorldReceipts.accept(state,n,action,commandId,option.ref,source,hooks.decisionId);
   if(action!=='none'&&source==='plan'&&n.plan)
    n.goal='Pursuing '+n.plan.key+' · '+action.replaceAll('_',' ');
   if(action==='none'){

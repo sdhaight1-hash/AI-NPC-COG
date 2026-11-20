@@ -20,10 +20,11 @@
   }
   return a;
  }
- function start(state,n,task,minutes){
+ function start(state,n,task,minutes,decisionId){
   const a={id:'act_'+task.commandId,commandId:task.commandId,key:task.key,
    ref:task.ref??null,state:'RUNNING',workRequired:minutes,workDone:0,
    startedAt:state.clock,lastTick:state.clock,reason:null,
+   ...(root.WorldReceipts.validDecisionId(decisionId)?{decisionId}:{}),
    workpieceRecipe:n.workpiece?.recipe??null,
    workpieceStage:n.workpiece?.stage??null,reservationIds:[]};
   n.currentActivity=a;
@@ -107,6 +108,7 @@
    lastTick:clock,reason:typeof a.reason==='string'?a.reason.slice(0,48):null,
    workpieceRecipe:typeof a.workpieceRecipe==='string'?a.workpieceRecipe:null,
    workpieceStage:Number.isInteger(a.workpieceStage)?a.workpieceStage:null,
+   ...(root.WorldReceipts.validDecisionId(a.decisionId)?{decisionId:a.decisionId}:{}),
    reservationIds:Array.isArray(a.reservationIds)?a.reservationIds.filter(x=>
     typeof x==='string'&&/^res_[1-9]\d*$/.test(x)).slice(0,40):[]
   });

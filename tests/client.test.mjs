@@ -935,6 +935,10 @@ test('a pending personal review gives a founder with no model request priority o
  reply({ok:true,json:async()=>({action:'not_offered',source:'rein'})});
  await new Promise(resolve=>setImmediate(resolve));
  assert.equal(b.activity(first).modelRefused,1);
+ const replyTrace=s.receipts.find(r=>r.actorId===first.id&&r.status==='DECIDED');
+ assert.equal(replyTrace?.action,'invalid_selection');
+ assert.ok(s.receipts.some(r=>r.status==='REJECTED'&&r.context?.decisionId===replyTrace.id));
+ assert.equal(s.receipts.some(r=>r.action==='not_offered'),false);
  assert.equal(b.activity(first).modelStale,0);
  assert.equal(first.attention.reviewedAt,null);
  b.save();
@@ -959,6 +963,17 @@ test('a legal model action is counted only after it starts through the world run
  assert.equal(b.activity(n).decisions,1);
  assert.equal(n.task?.key,'forage');
  assert.equal(source.stock,initial,'An accepted model decision has not executed its physical effects');
+ const decision=s.receipts.find(r=>r.actorId===n.id&&r.action==='forage'&&r.status==='DECIDED');
+ const command=n.task.commandId;
+ assert.ok(decision);
+ assert.equal(s.receipts.find(r=>r.commandId===command&&r.status==='ACCEPTED')?.context.decisionId,decision.id);
+ b.save();
+ const restored=makeBrowser({saved:b.saved});
+ restored.state.auto=false;
+ restored.step(2);
+ const result=restored.state.receipts.find(r=>r.commandId===command&&r.status==='COMPLETED');
+ assert.equal(result?.context.decisionId,decision.id);
+ assert.ok(result.delta.nodeStock.some(change=>change.key===source.id&&change.delta<0));
 });
 
 test('a blocked water project leaves the resident free to forage in both browser modes',async()=>{
