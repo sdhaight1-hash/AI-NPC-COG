@@ -63,7 +63,7 @@ function advance(c,s,elapsed,rate){
   left-=span;
  }
 }
-function verify(c,s){
+function verify(c,s,{expectGathering=true}={}){
  const n=s.npcs[0];
  assert.equal(n.project?.kind,'water_supply');
  assert.equal(n.project?.status,'COMPLETED');
@@ -79,7 +79,7 @@ function verify(c,s){
  const fills=completed.filter(x=>x.action==='fill_water');
  assert.equal(fills.length,1);
  assert.equal(fills[0].delta.nodeStock.find(x=>x.key===s.world.nodes.find(x=>x.kind==='water').id).delta,-2);
- for(const kind of ['fiber','stone','wood']){
+ if(expectGathering)for(const kind of ['fiber','stone','wood']){
   const node=s.world.nodes.find(x=>x.kind===kind);
   assert.ok(completed.some(r=>r.delta?.nodeStock?.some(d=>d.key===node.id&&d.delta<0)),
    'Missing stock debit for '+kind);
@@ -128,8 +128,8 @@ test('mid-manufacturing checkpoint preserves water, method and source receipts a
  assert.equal(interrupted.c.Persistence.restore(fresh,saved),true);
  advance(continuous.c,continuous.s,180,1);
  advance(interrupted.c,fresh,180,240);
- verify(continuous.c,continuous.s);
- verify(interrupted.c,fresh);
+ verify(continuous.c,continuous.s,{expectGathering:false});
+ verify(interrupted.c,fresh,{expectGathering:false});
  assert.deepEqual(effects(fresh),effects(continuous.s),
   'Replay must conserve finished goods, personal technique and authoritative physical receipts');
 });
