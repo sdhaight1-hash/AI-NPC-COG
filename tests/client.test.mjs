@@ -758,6 +758,31 @@ test('crafting inspector shows the current operation and resident-specific seal 
 });
 
 
+test('the private model menu can verify a reported spring without exposing its stock',()=>{
+ const b=makeBrowser(),s=b.state,[n,peer]=s.npcs;
+ const gap=(a,v,size)=>Math.min(Math.abs(a-v),size-Math.abs(a-v));
+ const spring=s.world.nodes.find(o=>o.kind==='water'&&o.stock>0&&
+  gap(n.x,o.x,s.world.width)+gap(n.y,o.y,s.world.height)>=4&&
+  gap(n.x,o.x,s.world.width)+gap(n.y,o.y,s.world.height)<=12&&
+  b.pathfind(n,o).length>0);
+ assert.ok(spring);
+ s.world.nodes=[spring];s.clock=23*60;s.world.now=s.clock;
+ Object.assign(peer,{x:n.x,y:n.y,z:n.z});
+ n.energy=100;n.needs.thirst=80;peer.energy=100;peer.needs.thirst=80;
+ n.evidenceMemory.claims.push({sourceId:spring.id,kind:'water',speakerId:peer.id,
+  x:spring.x,y:spring.y,z:spring.z||0,at:s.clock,status:'unverified'});
+ const option=b.backgroundOptions(n).find(o=>o.key==='drink_source');
+ assert.ok(option,'A firsthand-or-reported route from the world runtime stays on the model menu');
+ assert.match(option.when,/unverified/);
+ assert.doesNotMatch(option.when,/remaining|stock/);
+ assert.equal(b.backgroundOptions(peer).some(o=>o.key==='drink_source'),false);
+ const before=b.modelDecisionBasis(n);
+ assert.equal(before.references.drink_source,spring.id);
+ assert.equal(b.modelChoiceStillRelevant(n,before,'drink_source'),true);
+ spring.stock=0;
+ assert.equal(b.modelChoiceStillRelevant(n,before,'drink_source'),false);
+});
+
 test('a pending model selection becomes stale when its specific source stock is depleted',()=>{
  const b=makeBrowser(),n=b.state.npcs[0];
  const food=b.state.world.nodes.find(x=>x.kind==='food'&&x.stock>=2);

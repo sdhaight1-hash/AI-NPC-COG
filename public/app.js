@@ -110,8 +110,7 @@ function sceneFor(n,attentionSubject=''){
 function backgroundOptions(n){
  // The same legal affordances serve the model and the autonomous executor.
  // Personal need, traits, remembered outcomes and ongoing goals order them.
- const sensedOptions=Perception.filterAffordances(state,n,availableActivities(n));
- const choices=Agency.ranked(n,sensedOptions.filter(o=>o.key!=='none'),
+ const choices=Agency.ranked(n,availableActivities(n).filter(o=>o.key!=='none'),
   state.world,state.clock).slice(0,9);
  choices.push({key:'none',when:'Observe surroundings before deciding'});
  return choices.map(({key,when})=>({key,when}));
@@ -254,7 +253,7 @@ async function checkModel(){
 // Bind each asynchronous decision to actor-local evidence, work and resources.
 // An unrelated global effect must not cancel somebody else's private choice.
 function modelDecisionBasis(n){
- const options=Perception.filterAffordances(state,n,availableActivities(n));
+ const options=availableActivities(n);
  const references={none:null},physical={none:JSON.stringify({ref:null,stock:null,count:null,claims:[]})};
  for(const option of options){
   // WorldRuntime.begin commits the FIRST legal option for an action key.

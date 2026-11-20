@@ -24,7 +24,7 @@ An accepted timed model action carries the ID of its decision receipt into the a
 
 ## Report and evidence integrity
 
-A resource report queues a cue from the listener’s own recorded speech episode. The prompt identifies the relevant source while preserving the report’s uncertainty. A physical-work summary uses witnessed receipts. When a bounded episode expires, its dependent records expire during simulation so checkpoint reload preserves the same usable evidence.
+A resource report queues a cue from the listener’s own recorded speech episode. The model uses the world runtime’s private menu, including legal trips to investigate an unverified report. The prompt identifies the relevant source while preserving the report’s uncertainty. A physical-work summary uses witnessed receipts. When a bounded episode expires, its dependent records expire during simulation so checkpoint reload preserves the same usable evidence.
 
 A failed model request can start offline routine work only if the resident remains idle and eligible. Emergency rest, active plans, travel, and peer commitments can start while inference is pending and keep control when it fails.
 
