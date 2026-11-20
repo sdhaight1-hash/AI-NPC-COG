@@ -125,6 +125,22 @@
      target,ref:target.id});
    }
   }
+  // Sight alone can locate a landmark without teaching its live stock.
+  // Offer the same physical return trip even if the last seen spring has
+  // since run dry; the authoritative harvest then provides the correction.
+  if(!scoped.some(o=>o.key==='fill_water')&&n.energy>=12&&
+   root.AgentWorld.vesselRoom(n)>0&&root.AgentWorld.roomFor(n,'water')>0){
+   for(const sight of (n.knowledge?.sightings||[]).slice().reverse()){
+    if(sight.kind!=='water'||sight.at>state.clock)continue;
+    const spring=state.world.nodes.find(x=>x.id===sight.id&&x.kind==='water'&&
+     x.x===sight.x&&x.y===sight.y&&(x.z||0)===(sight.z||0));
+    if(!spring||distance(state,n,spring)>18||!reachability(state,n)(spring))continue;
+    scoped.push({key:'fill_water',
+     when:'Return to a personally seen freshwater source; current supply unknown',
+     target:spring,ref:spring.id});
+    break;
+   }
+  }
   return scoped;
  }
  function moveTo(state,n,target){
