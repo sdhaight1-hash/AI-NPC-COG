@@ -99,9 +99,16 @@ test('resident autonomously obtains real wood and fiber and builds an enclosed r
  assert.equal(finished,true,n.project?.blockedReason||'Autonomous home did not complete');
  assert.equal(s.world.construction.tiles.length,6);
  assert.equal(k.Construction.sheltered(s.world,n.project.homeSite),true);
- assert.equal(n.inventory.wood,0);
- assert.equal(n.inventory.fiber,0);
  assert.equal(receiptCounts(s).length,6);
+ for(const kind of ['wood','fiber']){
+  const collected=s.receipts.filter(r=>r.status==='COMPLETED'&&
+   r.action==='collect_'+kind).flatMap(r=>r.delta.inventory||[])
+   .filter(d=>d.key===kind&&d.delta>0).reduce((sum,d)=>sum+d.delta,0);
+  const spent=receiptCounts(s).flatMap(r=>r.delta.inventory||[])
+   .filter(d=>d.key===kind&&d.delta<0).reduce((sum,d)=>sum-d.delta,0);
+  assert.equal(n.inventory[kind],collected-spent,
+   'Surplus '+kind+' harvested in finite batches must remain carried');
+ }
  const design=s.receipts.find(r=>r.action==='design_home'&&r.status==='COMPLETED');
  assert.ok(design);
  assert.equal(design.delta.collections.constructionBlueprints.added.length,6);
