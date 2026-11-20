@@ -85,6 +85,8 @@
     ['wood','collect_wood'],['stone','collect_stone'],['fiber','collect_fiber']];
    const avoided=new Set((n.agency?.beliefs||[]).filter(b=>
     (b.kind==='stone'&&b.status==='depleted')||
+    (b.kind==='water'&&b.status==='depleted'&&
+     state.clock-b.at>=0&&state.clock-b.at<60)||
     (b.status==='failed'&&state.clock-b.at>=0&&state.clock-b.at<60)).map(b=>b.ref));
    const canTake=(kind,action)=>action==='drink_source'||root.AgentWorld.roomFor(n,kind)>0;
    for(const [kind,key] of pairs){
@@ -132,6 +134,10 @@
    root.AgentWorld.vesselRoom(n)>0&&root.AgentWorld.roomFor(n,'water')>0){
    for(const sight of (n.knowledge?.sightings||[]).slice().reverse()){
     if(sight.kind!=='water'||sight.at>state.clock)continue;
+    // An actual failed visit beats an old sighting for a bounded interval.
+    // Later rain/groundwater replenishment may justify checking again.
+    if((n.agency?.beliefs||[]).some(b=>b.ref===sight.id&&b.kind==='water'&&
+     b.status==='depleted'&&state.clock-b.at>=0&&state.clock-b.at<60))continue;
     const spring=state.world.nodes.find(x=>x.id===sight.id&&x.kind==='water'&&
      x.x===sight.x&&x.y===sight.y&&(x.z||0)===(sight.z||0));
     if(!spring||distance(state,n,spring)>18||!reachability(state,n)(spring))continue;
