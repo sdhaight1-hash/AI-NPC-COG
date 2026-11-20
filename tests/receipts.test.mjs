@@ -27,6 +27,9 @@ test('finite harvest yields exact world-node and carried-inventory deltas',()=>{
  const accepted=s.receipts.at(-1);
  assert.equal(accepted.status,'ACCEPTED');
  assert.equal(accepted.commandId,id);
+ assert.equal(accepted.context.activityId,'act_'+id);
+ assert.ok(accepted.context.reservationIds.length>0);
+ assert.equal(accepted.context.position.z,0);
  c.Simulation.advance(s,5);
  const receipt=s.receipts.find(x=>x.commandId===id&&x.status==='COMPLETED');
  assert.ok(receipt);
@@ -214,4 +217,20 @@ test('freshwater and raw goods cannot be reached through another z level',()=>{
  assert.equal(s.receipts.at(-1).status,'FAILED');
  assert.equal(spring.stock,before);
  assert.equal(n.bio.hydrationBudgetMl,hydration);
+});
+
+test('an abandoned timed command has one terminal receipt and survives a checkpoint',()=>{
+ const c=load(),s=c.Simulation.initial(379210),n=s.npcs[0];
+ n.inventory.wood=2;n.inventory.stone=1;n.knowledge.recipes.push('campfire');
+ assert.equal(c.WorldRuntime.begin(s,n,'build_fire'),true);
+ const commandId=n.task.commandId;
+ assert.equal(c.Civilization.die(s,n,'test'),true);
+ const terminal=s.receipts.filter(r=>r.commandId===commandId&&r.status==='ABANDONED');
+ assert.equal(terminal.length,1);
+ assert.equal(terminal[0].reason,'ACTOR_DEAD');
+ assert.equal(s.world.remains[0].inventory.wood,2);
+ assert.equal(c.Activities.finish(s,n,false,'retry'),null);
+ const restored=c.Simulation.initial(379210);
+ assert.equal(c.Persistence.restore(restored,JSON.parse(JSON.stringify(c.Persistence.save(s)))),true);
+ assert.equal(c.WorldReceipts.committed(restored,commandId).status,'ABANDONED');
 });

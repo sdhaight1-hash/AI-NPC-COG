@@ -534,8 +534,9 @@ function updateInspector(){
  $('npcActivity').textContent=a.decisions+' model decisions · '+a.started+
   ' actions started · '+a.completed+' completed · '+a.none+' no-ops';
  $('npcActivityFailures').textContent=(a.rejected+a.failed+a.blocked)+
-  ' rejected/failed/blocked · '+a.errors+' model errors';
- $('npcActivityLast').textContent=a.last;
+  ' rejected/failed/blocked · '+(a.abandoned||0)+' abandoned · '+a.errors+' model errors';
+ $('npcActivityLast').textContent=a.last+' · '+(n.agency?.completedGoals||0)+
+  ' goals finished · '+(n.agency?.failedGoals||0)+' goals failed';
  const receipts=(state.receipts||[]).filter(r=>r.actorId===n.id&&
   (r.status==='COMPLETED'||r.status==='FAILED')).slice(-6).reverse();
  $('npcWorldReceipts').textContent=receipts.map(r=>{

@@ -88,27 +88,37 @@
    source:input.source??null,
    inferenceMs:Number.isFinite(input.inferenceMs)&&input.inferenceMs>=0?
     Math.min(60000,input.inferenceMs):null,
-   effectRevision:state.effectRevision||0,delta:input.delta||{}};
+   effectRevision:state.effectRevision||0,delta:input.delta||{},
+   ...(input.context?{context:input.context}:{})};
   state.receipts.push(receipt);
   if(state.receipts.length>MAX)state.receipts.splice(0,state.receipts.length-MAX);
   return receipt;
  }
+ function contextFor(n,commandId){
+  const activity=n.currentActivity?.commandId===commandId?n.currentActivity:null;
+  const goal=n.agency?.goal;
+  return {activityId:activity?.id??null,goalKey:goal?.key??null,
+   goalStartedAt:goal?.startedAt??null,projectId:n.project?.id??null,
+   position:{x:n.x,y:n.y,z:n.z||0},
+   reservationIds:activity?.reservationIds?.slice(0,40)||[]};
+ }
  function accept(state,n,action,commandId,ref=null,source='simulation'){
   return append(state,{actorId:n.id,commandId,action,targetId:ref,
-   status:'ACCEPTED',source:String(source).slice(0,32)});
+   status:'ACCEPTED',source:String(source).slice(0,32),context:contextFor(n,commandId)});
  }
  function decision(state,n,action,source,status='DECIDED',reason=null,inferenceMs=null){
   return append(state,{actorId:n.id,commandId:null,action,
    source:String(source).slice(0,32),status,reason,inferenceMs});
  }
  function lifecycle(state,n,activity,status,reason=null){
-  if(!['INTERRUPTED','RESUMED'].includes(status))throw Error('Invalid lifecycle status');
+  if(!['INTERRUPTED','RESUMED','ABANDONED'].includes(status))throw Error('Invalid lifecycle status');
   return append(state,{actorId:n.id,commandId:activity.commandId,
-   action:activity.key,targetId:activity.ref,status,reason});
+   action:activity.key,targetId:activity.ref,status,reason,
+   context:{...contextFor(n,activity.commandId),activityId:activity.id}});
  }
  function committed(state,commandId){
   return state.receipts?.find(r=>r.commandId===commandId&&
-   (r.status==='COMPLETED'||r.status==='FAILED'))||null;
+   (['COMPLETED','FAILED','ABANDONED'].includes(r.status)))||null;
  }
  function execute(state,n,task,apply){
   if(typeof apply!=='function')throw Error('World effect callback is required');
@@ -124,6 +134,7 @@
   const previous=committed(state,task.commandId);
   if(previous)return {ok:false,message:'Duplicate command; already resolved',
    duplicate:true,receipt:previous};
+  const context=contextFor(n,task.commandId);
   const before=snapshot(state,n),revision=state.effectRevision||0;
   const outcome=apply();
   if(!outcome||typeof outcome.ok!=='boolean')throw Error('Invalid world result');
@@ -134,7 +145,7 @@
   const receipt=append(state,{actorId:n.id,commandId:task.commandId,
    action:task.key,targetId:task.ref,status:outcome.ok?'COMPLETED':'FAILED',
    reason:outcome.ok?null:String(outcome.message||'Action rejected').slice(0,160),
-   delta});
+   delta,context});
   if(outcome.ok)root.EvidenceMemory?.fromReceipt(state,n,receipt);
   else root.EvidenceMemory?.fromFailedReceipt(state,n,receipt);
   return {...outcome,receipt};

@@ -47,6 +47,11 @@
   root.WorldReceipts.lifecycle(state,n,a,'RESUMED');
   return a;
  }
+ function abandon(state,n,activity,reason){
+  const stats=root.WorldRuntime?.stats(n);
+  if(stats)stats.abandoned=(stats.abandoned||0)+1;
+  root.WorldReceipts.lifecycle(state,n,activity,'ABANDONED',reason);
+ }
  function interrupt(state,n,reason='INTERRUPTED'){
   const a=progress(state,n);
   if(!a)return null;
@@ -58,6 +63,7 @@
   if(stack.length>MAX_SUSPENDED){
    const expired=stack.shift();
    root.Reservations?.releaseCommand(state,expired.commandId,'ACTIVITY_EVICTED');
+   abandon(state,n,expired,'ACTIVITY_EVICTED');
   }
   n.currentActivity=null;
   root.WorldReceipts.lifecycle(state,n,a,'INTERRUPTED',a.reason);
@@ -73,6 +79,8 @@
   n.lastActivity={id:a.id,key:a.key,state:a.state,workDone:a.workDone,
    workRequired:a.workRequired,reason:a.reason};
   n.currentActivity=null;
+  if(!success&&!root.WorldReceipts.committed(state,a.commandId))
+   abandon(state,n,a,a.reason);
   return a;
  }
  function restore(n,source,clock){
