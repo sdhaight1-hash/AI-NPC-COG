@@ -182,7 +182,7 @@
   // Neither hidden world deposits nor the existence of a recipe is evidence.
   const hasWaterEvidence=root.Perception?.snapshot(state,n).objects.some(o=>
    o.kind==='water')||(n.knowledge?.observations||[]).some(o=>o.kind==='water');
-  if((n.inventory.flask||0)===0&&n.needs.thirst>=38&&n.needs.thirst<85&&
+  if((n.inventory.flask||0)===0&&n.needs.thirst>=45&&n.needs.thirst<85&&
    (n.bio?.hydrationBudgetMl||0)>=1400&&n.energy>=25&&
    n.needs.hunger<85&&hasWaterEvidence)return 'water_vessel';
   // Needs and temperament choose priority, not permission to bypass the world.
