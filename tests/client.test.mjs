@@ -221,6 +221,67 @@ test('NPC-to-NPC dialogue is witnessed and committed only after a complete valid
  assert.equal(a.relationships[c.id],undefined,
   'Speech alone never creates an automatic friendship');
 });
+test('an isolated eager resident cannot starve an available conversation pair',()=>{
+ const b=makeBrowser(),s=b.state,[isolated,a,other]=s.npcs;
+ s.npcs=[isolated,a,other];s.connected=true;
+ Object.assign(other,{x:a.x,y:a.y,z:a.z});
+ isolated.x=(a.x+20)%s.world.width;isolated.y=a.y;
+ for(const [n,liveness] of [[isolated,99],[a,80],[other,65]]){
+  n.needs.social=liveness;n.thoughtAt=s.clock;
+ }
+ b.scheduleIdleAgents();
+ assert.equal(a.task?.key,'socialize');
+ assert.equal(other.peerReservedFor,a.id);
+ assert.notEqual(isolated.task?.key,'socialize');
+});
+
+test('nearby willing residents talk between project actions before loneliness becomes urgent',async()=>{
+ let requests=0;
+ const b=makeBrowser({fetch:async url=>({ok:true,json:async()=>{
+  if(url==='/api/peer-exchange'){requests++;return {first:'Taking a break?',second:'For a moment.'};}
+  return {connected:true};
+ }})});
+ await new Promise(resolve=>setImmediate(resolve));
+ const s=b.state,[a,other]=s.npcs;s.npcs=[a,other];
+ Object.assign(other,{x:a.x,y:a.y,z:a.z});
+ for(const n of [a,other]){
+  n.needs.social=30;n.traits={socialApproach:.8,solitudePreference:.2};
+  n.thoughtAt=s.clock+2;
+ }
+ assert.ok(b.Projects.create(s,a,'campfire'));
+ a.lastActivity={state:'COMPLETED'};
+ b.step(.25);
+ assert.equal(a.task?.key,'socialize');
+ assert.equal(other.peerReservedFor,a.id);
+ assert.equal(a.project.status,'ACTIVE');
+ b.step(4);
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(requests,1);
+ assert.equal(a.peerLog.length,1);
+ assert.equal(other.peerLog.length,1);
+ assert.equal(s.receipts.filter(r=>r.action==='socialize'&&r.context?.speech&&
+  r.status==='COMPLETED').length,1);
+});
+
+test('a valid fifteen-second exchange can finish at default playback speed',async()=>{
+ let answer;
+ const b=makeBrowser({fixtureSpeed:240,fetch:async url=>url==='/api/peer-exchange'?
+  new Promise(resolve=>{answer=resolve;}):
+  {ok:true,json:async()=>({connected:true})}});
+ const s=b.state,[a,other]=s.npcs;s.npcs=[a,other];
+ Object.assign(other,{x:a.x,y:a.y,z:a.z});
+ a.needs.social=90;other.needs.social=90;
+ assert.equal(b.setAction(a,'socialize','social initiative'),true);
+ s.clock=a.task.readyAt;s.world.now=s.clock;
+ const pending=b.peerExchange(a,other);
+ assert.equal(typeof answer,'function');
+ s.clock+=60;s.world.now=s.clock;
+ answer({ok:true,json:async()=>({first:'I found a trail',second:'Which way?'})});
+ await pending;
+ assert.equal(a.peerLog.length,1);
+ assert.equal(other.peerLog.length,1);
+});
+
 test('a listener can break a pending conversation for water and late dialogue has no effect',async()=>{
  let answer;
  const b=makeBrowser({fetch:async url=>url==='/api/peer-exchange'?

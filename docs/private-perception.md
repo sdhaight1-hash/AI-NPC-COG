@@ -21,7 +21,9 @@ The shared physical runtime now filters world-affordance candidates by what the 
 
 ## Social contact and consequences
 
-Companionship requires a willing, reachable resident on the same level and a clear line of contact at completion. A connected exchange also checks the original command, both positions and the partner reservation before committing speech. It expires after 45 simulated minutes or 24 real seconds once the model request starts. An urgent bodily need lets either participant withdraw and start a survival action.
+Companionship requires a willing, reachable resident on the same level and a clear line of contact at completion. A connected exchange also checks the original command, both positions and the partner reservation before committing speech. It expires after 45 to 90 simulated minutes, depending on playback speed, or 24 real seconds once the model request starts. An urgent bodily need lets either participant withdraw and start a survival action.
+
+A connected resident can also start a short conversation with someone already nearby, including between project actions. Temperament affects willingness, and a longer cooldown applies to casual chats. The scheduler looks for an actual available pair before starting a social approach. Shared-world and disconnected simulation retain silent companionship.
 
 Speech comes from a committed dialogue receipt at the encounter location. Silent companionship and material transfers do not create audible words. Overhearing reveals only the anonymous sound. The two participants keep their own attributed, reported dialogue and separately verify resource claims. Each model call receives a compact private scene with personally inspected source citations. A disconnected browser aborts the upstream peer request.
 

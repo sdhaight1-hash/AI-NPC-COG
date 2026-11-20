@@ -200,6 +200,20 @@
     return !!b&&a!==b&&sameLevel(a,b)&&distance(a,b)<=2&&
       (!root.Perception||root.Perception.line(world,a,b));
   }
+  function socialOpportunity(world,n,other){
+    if(!socialReady(n)||!socialReady(other)||!sameLevel(n,other)||distance(n,other)>8||
+      (root.Agency?.relationship(other,n.id,world.now).tension??0)>=3)return false;
+    if(n.needs.social>=50&&other.needs.social>=45)return true;
+    if(distance(n,other)>4||
+      (root.Perception&&!root.Perception.canSee({world,clock:world.now},n,other)))return false;
+    const open=actor=>world.now-(actor.lastPeerAt??-100000)>=180&&
+      actor.energy>=25&&actor.needs.thirst<80&&actor.needs.hunger<80&&
+      (actor.bio?.hydrationBudgetMl??2400)>=450&&
+      actor.needs.social>=25+12*(actor.traits?.solitudePreference??.5)-
+       12*(actor.traits?.socialApproach??.5);
+    return open(n)&&open(other)&&
+      (root.Agency?.relationship(n,other.id,world.now).tension??0)<3;
+  }
   function witnessedHomeWork(n,builder,world){
     const project=builder.project,site=project?.homeSite;
     if(!site||project.kind!=='home'||!['ACTIVE','BLOCKED'].includes(project.status)||
@@ -282,11 +296,13 @@
           ' to support visible unfinished building by '+builder.name,builder,builder.id);
       }
     }
-    const other=nearestResident(n,residents,p=>socialReady(p)&&p.needs.social>=45&&
-      (root.Agency?.relationship(p,n.id,world.now).tension??0)<3&&
-      visiblePeer(p)&&!p.task&&!p.plan&&
-      !p.path?.length&&!p.peerPending&&!p.peerReservedFor);
-    if(other && socialReady(n)&&world.now-(n.lastPeerAt ?? -100000)>=90)
+    const eligiblePeer=p=>!p.task&&!p.plan&&!p.path?.length&&!p.peerPending&&
+      !p.peerReservedFor&&socialOpportunity(world,n,p)&&visiblePeer(p);
+    const offCooldown=world.now-(n.lastPeerAt??-100000)>=90;
+    const other=offCooldown&&(nearestResident(n,residents,p=>
+      n.needs.social>=50&&p.needs.social>=45&&eligiblePeer(p))||
+      nearestResident(n,residents,eligiblePeer));
+    if(other)
       add('socialize','Seek out '+other.name+' and initiate a real conversation',other,other.id);
     if(n.energy>=20&&!n.workpiece&&!n.task&&!n.plan&&canTeachFlask(n)){
       const student=nearestResident(n,residents,p=>visiblePeer(p)&&socialReady(p)&&
@@ -857,5 +873,5 @@
   }
   root.AgentWorld={KEYS,HARVEST_KINDS,GROUND_KINDS,INVENTORY_KINDS:Object.freeze(Object.keys(ITEM_LOAD)),newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
     validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById,harvestAmount,
-    socialReady,socialContact};
+    socialReady,socialContact,socialOpportunity};
 })(globalThis);

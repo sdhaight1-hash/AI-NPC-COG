@@ -387,7 +387,8 @@
    n.task?.key==='socialize'&&n.task.ref===other.id&&other.peerReservedFor===n.id&&
    Number.isFinite(n.task.readyAt)&&n.task.readyAt<=state.clock&&!n.path.length&&
    root.AgentWorld.socialReady(n)&&root.AgentWorld.socialReady(other)&&
-   other.needs.social>=45&&root.Agency.relationship(other,n.id,state.clock).tension<3&&
+   root.AgentWorld.socialOpportunity(state.world,n,other)&&
+   (n.source!=='offline routine'||other.needs.social>=45)&&
    !other.task&&!other.plan&&!other.path?.length&&
    root.AgentWorld.socialContact(state.world,n,other);
  }

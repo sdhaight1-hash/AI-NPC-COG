@@ -139,26 +139,32 @@ function autonomousPurpose(n){
  const selected=Agency.choose(n,options,state.world,state.clock);
  return selected?setAction(n,selected.key,'self-directed goal'):false;
 }
-function socialInitiative(n){
- if(!state.connected||n.needs.social<50||n.energy<25||
-  n.task||n.plan||n.path.length||n.peerPending||n.peerReservedFor||
-  state.clock<(n.lastPeerAt??-100000)+90)return false;
- return setAction(n,'socialize','social initiative');
+function socialCandidate(n){
+ return !n.task&&!n.plan&&!n.path.length&&!n.peerReservedFor&&!n.peerPending&&
+  AgentWorld.socialReady(n);
 }
-function scheduleIdleAgents(){
+function scheduleSocial(atProjectBoundary=false){
+ if(!state.auto||state.paused||!state.connected||state.backgroundBusy||state.conversationBusy||
+  state.npcs.some(n=>n.task?.key==='socialize'))return;
+ const candidates=state.npcs.filter(socialCandidate);
+ const due=candidates.filter(n=>(state.clock>=n.thoughtAt||
+  (atProjectBoundary&&n.project?.status==='ACTIVE'&&n.lastActivity?.state==='COMPLETED'&&
+   state.clock+2>=n.thoughtAt))&&state.clock-(n.lastPeerAt??-100000)>=90)
+  .sort((a,b)=>b.needs.social-a.needs.social||a.thoughtAt-b.thoughtAt);
+ for(const n of due){
+  if(!candidates.some(peer=>peer!==n&&AgentWorld.socialOpportunity(state.world,n,peer)))continue;
+  if(availableActivities(n).some(o=>o.key==='socialize')&&
+   setAction(n,'socialize','social initiative'))return;
+ }
+}
+function scheduleIdleAgents(offerSocial=true){
  if(!state.auto||state.paused)return;
  // Physiology remains authoritative even while connected dialogue is pending.
  for(const n of state.npcs)survivalReflex(n);
  if(state.peerExchange&&!peerExchangeValid(state.peerExchange))
   stopPeerExchange(state.peerExchange,'SOCIAL_CONTEXT_CHANGED');
  if(state.conversationBusy)return;
- // A social need can initiate a meeting, never fabricate dialogue.
- if(state.connected&&!state.backgroundBusy){
-  const initiator=state.npcs.find(n=>n.needs.social>=50&&
-   !n.task&&!n.plan&&!n.path.length&&!n.peerReservedFor&&!n.peerPending&&
-   state.clock>=n.thoughtAt);
-  if(initiator)socialInitiative(initiator);
- }
+ if(offerSocial)scheduleSocial();
  const due=state.npcs.filter(n=>!n.task&&!n.plan&&!n.path.length&&!n.peerPending&&!n.peerReservedFor&&
   (!n.project||n.project.status==='COMPLETED'||WorldRuntime.projectWaiting(state,n))&&
   n.action!=='rest'&&state.clock>=n.thoughtAt)
@@ -257,7 +263,7 @@ async function checkModel(){
  const tag=$('modelStatus');tag.className='chip '+(state.connected?'online':'offline');
  tag.replaceChildren();
   const dot=document.createElement('i');dot.className='status-dot';
-  tag.append(dot,document.createTextNode(' '+(state.connected?state.modelLabel+' connected':'Offline · basic survival routines')));
+  tag.append(dot,document.createTextNode(' '+(state.connected?state.modelLabel+' connected':'Offline · NPC dialogue unavailable')));
   $('modelName').textContent=state.modelLabel;
 }
 // Bind each asynchronous decision to actor-local evidence, work and resources.
@@ -399,9 +405,9 @@ function peerSceneFor(n,other){
   '. Treat what they say as a report and speak only for yourself.';
 }
 function peerExchangeValid(session){
- const {n,other,task,locA,locB,startedAt}=session;
+ const {n,other,task,locA,locB,expiresAt}=session;
  return state.peerExchange===session&&!state.paused&&
-  n.task===task&&key(n)===locA&&key(other)===locB&&state.clock-startedAt<45&&
+  n.task===task&&key(n)===locA&&key(other)===locB&&state.clock<expiresAt&&
   WorldRuntime.socialMeeting(state,n,other);
 }
 function stopPeerExchange(session,reason=null){
@@ -418,7 +424,8 @@ async function peerExchange(n,other){
  if(n.peerPending||other?.peerPending||state.backgroundBusy||state.paused||
   state.conversationBusy||!WorldRuntime.socialMeeting(state,n,other))return;
  const controller=typeof AbortController==='undefined'?null:new AbortController();
- const session={n,other,task:n.task,locA:key(n),locB:key(other),startedAt:state.clock,controller};
+ const expiresAt=state.clock+Math.min(90,Math.max(45,state.speed*24/60));
+ const session={n,other,task:n.task,locA:key(n),locB:key(other),expiresAt,controller};
  state.peerExchange=session;
  n.peerPending=true;other.peerPending=true;state.backgroundBusy=true;
  try{
@@ -861,12 +868,13 @@ function step(dt){
   onDeath:(n,death)=>record(n.name+' died of '+death,'warning'),
   complete:completeActivity,
   advancePlan,
+  beforeProjects:()=>scheduleSocial(true),
   afterActors:()=>{
    if(!state.npcs.some(n=>n.id===state.selected)){
     state.selected=state.npcs[0]?.id||null;renderResidents();
    }
   },
-  schedule:scheduleIdleAgents
+  schedule:()=>scheduleIdleAgents(false)
  });
 }
 function drawMinimap(){
@@ -903,7 +911,7 @@ function updateHUD(now){
   $('worldStatus').textContent=serverError?'Server world unavailable · '+serverError:
    serverWarning||(!serverLoaded?'Connecting to server world':state.paused?'Server world paused':'Server world running');
   $('footerNote').textContent='Shared server world · offline resident decisions';
-  $('modelStatus').textContent='Offline simulation';
+  $('modelStatus').textContent='Shared world · NPC dialogue unavailable';
   const disabled=!serverLoaded||serverControlPending;
   $('pauseBtn').disabled=disabled;$('autoAI').disabled=disabled;
   $('exportWorld').disabled=!serverLoaded;
