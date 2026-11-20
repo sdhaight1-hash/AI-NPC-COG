@@ -344,14 +344,33 @@
       rect(ctx,'#514838',x*16+4,y*16,10,2);
     }
   }
-  function createSprite(id, facing, stride){
+  const skinTones=[
+    ['#f2c7a7','#c28e74'],['#edb491','#b17b5f'],['#dca584','#a27058'],
+    ['#cf946d','#966045'],['#b87850','#85543e'],['#a9694b','#734631'],
+    ['#92573d','#623c2e'],['#774630','#4d3026'],['#5d382b','#39261e']
+  ];
+  const hairTones=['#282421','#473229','#64422c','#8e542d','#a47549',
+    '#d1a96a','#a43228','#a9a39d'];
+  const eyeTones=['#3c2d29','#6a452d','#77643e','#426252','#425c75','#5b6170'];
+  const clothing=[
+    ['#b87358','#775044','#f3c092'],['#618a98','#3c5d70','#bcd9d8'],
+    ['#8c6b9f','#543e68','#d5acd7'],['#6e8d62','#475f47','#bed19e'],
+    ['#b19854','#745d39','#ecce82'],['#a35e75','#6d4052','#e9a9b1'],
+    ['#998668','#625641','#ded3a9'],['#607e9b','#43526f','#a9c7e6'],
+    ['#b87545','#784a35','#edba80'],['#8b6b75','#594754','#d7b0be']
+  ];
+  function createSprite(id, facing, stride, appearance){
     const el=document.createElement('canvas');el.width=16;el.height=24;
     const c=el.getContext('2d');
     const index=Number(/^person_(\d+)$/.exec(id)?.[1]||1);
     const personalities=['mara','jonas','asha','rowan','lina','nico'];
-    const p=outfit[id]||outfit[personalities[(index-1)%personalities.length]];
-    const skin=['#edc29d','#c28c66','#d9a18b','#b68e72','#e1ac87','#a97b62'][(index-1)%6];
-    const skinShade=['#b98e73','#916849','#a57967','#87634f','#a57c5d','#765843'][(index-1)%6];
+    const fallback=outfit[id]||outfit[personalities[(index-1)%personalities.length]];
+    const palette=clothing[appearance?.outfit];
+    const p=palette?{shirt:palette[0],shade:palette[1],accent:palette[2],
+      hair:hairTones[appearance.hair],pants:'#384052'}:fallback;
+    const [skin,skinShade]=skinTones[appearance?.skin??((index-1)%6)]||skinTones[2];
+    const eyes=eyeTones[appearance?.eyes]||'#383339';
+    const build=(appearance?.build??1)-1;
     // Feet anchor: bottom row 23; forward walking alternates legs.
     const legA=[20,22,20,19][stride%4],legB=[20,19,20,22][stride%4];
     rect(c,'#293143',4,legA,4,3);rect(c,'#293143',9,legB,3,3);
@@ -360,9 +379,12 @@
     // Arms, shirt, and shading.
     rect(c,skinShade,2,12,3,7);rect(c,skin,2,12,2,5);
     rect(c,skinShade,12,12,3,7);rect(c,skin,13,12,2,5);
-    rect(c,p.shade,4,11,9,9);
-    rect(c,p.shirt,5,11,7,8);
+    rect(c,p.shade,4-build,11,9+build*2,9);
+    rect(c,p.shirt,5-build,11,7+build*2,8);
     rect(c,p.accent,6,13,4,2);
+    if(appearance?.garment===1)rect(c,p.accent,4-build,12,9+build*2,1);
+    if(appearance?.garment===2)rect(c,p.shade,8,12,1,7);
+    if(appearance?.garment===3){rect(c,p.accent,6,15,1,4);rect(c,p.accent,10,15,1,4);}
     if(id==='mara') {rect(c,'#f5e3bf',6,14,5,5);rect(c,'#af614c',8,16,1,3);}
     if(id==='jonas') {rect(c,'#c0a16e',5,13,1,6);rect(c,'#c0a16e',10,13,1,6);}
     if(id==='asha') {rect(c,'#e7cf94',5,12,7,2);rect(c,'#f4e6bc',4,17,2,3);}
@@ -370,28 +392,43 @@
     if(id==='lina') {rect(c,'#85543a',12,13,4,5);rect(c,'#dcaa67',13,14,3,3);}
     if(id==='nico') {rect(c,'#c7a47e',11,12,4,6);rect(c,'#78593b',13,13,2,4);}
     // Hair and head with four face directions.
-    rect(c,skinShade,5,4,7,8);
+    const face=appearance?.face??1;
+    rect(c,skinShade,5,4,7,face===2?9:8);
     rect(c,skin,5,4,6,7);
+    if(face===0)rect(c,skin,6,10,5,1);
+    const style=appearance?.hairStyle??1;
+    if(style===3||style===4){
+      rect(c,p.hair,4,6,2,9);rect(c,p.hair,11,6,2,9);
+    }
     if(facing==='up'){
-      rect(c,p.hair,4,3,9,9);
-      rect(c,p.hair,5,2,7,2);
+      rect(c,p.hair,4,3,9,style===5?4:9);
+      if(style!==5)rect(c,p.hair,5,2,7,2);
+      if(style===4)rect(c,p.hair,7,11,3,5);
       rect(c,'#957861',8,11,2,1);
     } else {
-      rect(c,p.hair,4,3,9,4);
-      rect(c,p.hair,4,6,2,5);
-      rect(c,p.hair,11,6,2,5);
-      rect(c,p.hair,6,2,6,2);
+      rect(c,p.hair,4,3,9,style===5?2:4);
+      if(style!==5){
+        rect(c,p.hair,4,6,2,style===0?2:5);
+        rect(c,p.hair,11,6,2,style===0?2:5);
+        rect(c,p.hair,6,2,6,2);
+      }
+      if(style===2){rect(c,p.hair,4,2,3,3);rect(c,p.hair,9,1,3,3);}
+      if(style===6)rect(c,p.hair,5,5,4,3);
       if(facing==='down'){
-        rect(c,'#383339',7,8,1,1);
-        rect(c,'#383339',10,8,1,1);
+        rect(c,eyes,7,8,1,1);
+        rect(c,eyes,10,8,1,1);
         rect(c,skinShade,8,10,2,1);
+        if(appearance?.detail===1)rect(c,p.hair,6,10,5,2);
+        if(appearance?.detail===2){rect(c,skinShade,6,9);rect(c,skinShade,10,9);}
+        if(appearance?.detail===3)rect(c,p.accent,11,9,1,2);
+        if(appearance?.detail===4)rect(c,p.accent,5,5,7,1);
       }else if(facing==='left'){
         rect(c,p.hair,4,5,3,7);
-        rect(c,'#383339',6,8,1,1);
+        rect(c,eyes,6,8,1,1);
         rect(c,skinShade,5,10,2,1);
       }else{
         rect(c,p.hair,11,5,3,7);
-        rect(c,'#383339',10,8,1,1);
+        rect(c,eyes,10,8,1,1);
         rect(c,skinShade,11,10,2,1);
       }
     }
@@ -403,13 +440,27 @@
     if(id==='nico') {rect(c,'#373549',4,3,8,4);rect(c,'#df9e7e',11,7,2,3);}
     return el;
   }
+  function sprite(id,facing,stride,appearance){
+    const key=(appearance?JSON.stringify(appearance):id)+':'+facing+':'+stride;
+    if(!sprites.has(key)){
+      if(sprites.size>=768)sprites.delete(sprites.keys().next().value);
+      sprites.set(key,createSprite(id,facing,stride,appearance));
+    }
+    return sprites.get(key);
+  }
+  function drawPortrait(canvas,person){
+    const ctx=canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=false;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(sprite(person.id,'down',0,person.appearance),2,0,12,14,
+      0,0,canvas.width,canvas.height);
+  }
   function actor(ctx,person,isPlayer,p,selected,clockMs){
     const id=isPlayer?'player':person.id;
     const facing=['up','down','left','right'].includes(person.facing)?person.facing:'down';
     const moving=(person.motion||0)>.14 || !!person.path?.length;
     const stride=moving?Math.floor(clockMs/135)%4:0;
-    const key=id+':'+facing+':'+stride;
-    if(!sprites.has(key))sprites.set(key,createSprite(id,facing,stride));
+    const frame=sprite(id,facing,stride,person.appearance);
     const px=Math.round((p.x+.5)*TILE),py=Math.round((p.y+1)*TILE);
     rect(ctx,'#2c483c',px-6,py-3,13,3);
     if(selected){
@@ -419,7 +470,7 @@
       rect(ctx,'#ffe5a4',px-9,py-3,2,3);
       rect(ctx,'#ffe5a4',px+7,py-3,2,3);
     }
-    ctx.drawImage(sprites.get(key),px-8,py-24);
+    ctx.drawImage(frame,px-8,py-24);
     // Draw what an inhabitant is actually doing, not only their last receipt.
     // This is a visual projection of an authoritative, time-costed activity.
     const work=person.task?.key||(person.action==='rest'?'rest':null);
@@ -606,5 +657,5 @@
     rect(ctx,'#ba9463',x+6,y+7,5,6);
     rect(ctx,'#dfbc84',x+7,y+5,3,2);
   }
-  root.VillageArt={ TILE,drawGroundFlask, drawWorld, drawWorldObjects, drawAmbient, drawActor:actor, hash, setAtlas };
+  root.VillageArt={ TILE,drawGroundFlask, drawWorld, drawWorldObjects, drawAmbient, drawActor:actor,drawPortrait,hash,setAtlas };
 })(globalThis);

@@ -26,10 +26,10 @@ test('rejects cyclic, missing and self-referential prerequisites',()=>{
 });
 test('personality changes durable long-term intentions',()=>{
  const {c,s,n}=setup();
- n.personality='patient and cautious';
+ n.traits.fieldInitiative=.2;
  assert.equal(c.Projects.maybeStart(s,n).kind,'shelter');
  const other=s.npcs[1];
- other.personality='curious and adventurous';
+ other.traits.fieldInitiative=.95;
  assert.equal(c.Projects.maybeStart(s,other).kind,'campfire');
  assert.notEqual(n.project.kind,other.project.kind);
 });
@@ -210,7 +210,7 @@ test('a lost manufactured tool is replaced and the earlier workbench is preserve
 
 test('completed projects are archived before an NPC chooses a different ambition',()=>{
  const {c,s,n}=setup();
- n.personality='curious and adventurous';
+ n.traits.fieldInitiative=.95;
  assert.equal(c.Projects.maybeStart(s,n).kind,'campfire');
  s.world.structures.push({id:'test_fire',type:'campfire',maker:n.id,x:n.x,y:n.y});
  c.Projects.sync(s,n);

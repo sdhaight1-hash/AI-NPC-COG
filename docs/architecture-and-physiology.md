@@ -225,3 +225,11 @@ relationships, norms, cooperation, conflict and rule formation.
 
 The goal is a testable living-world simulation with autonomous cognition,
 not a game where the LLM writes every physical consequence.
+
+## Procedural resident profiles
+
+Founders and arrivals use the same generator. World seed, resident ID, and stable per-field salts produce the original identity plus a versioned appearance and 35 numeric traits. The map and inspector render the same layered skin, hair, face, eyes, clothing, build, and detail profile. Appearance never enters decision scoring.
+
+Temperament covers exploration, work habits, social style, cooperation, emotional regulation, learning, and priorities. Orientation values set broad tendencies. Individual facets refine action scores, affect social willingness, and change how quickly emotional state recovers. Existing physiological urgency, private evidence, and legal affordances still govern what a resident can do.
+
+Joy, calm, concern, and frustration have personal baselines. Bodily strain shifts the current values, and each resident recovers at a trait-dependent rate. Actual help and material competition can cause brief emotional changes. The inspector shows both current values and the baseline. A version 3 checkpoint preserves supported visual and trait fields and current emotions. Missing or invalid fields are regenerated or reset individually.

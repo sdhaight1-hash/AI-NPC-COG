@@ -20,14 +20,23 @@
  const category=k=>CATEGORIES[k]||(k.startsWith('craft_')||k.startsWith('experiment_')
   ||k.startsWith('stash_')||k.startsWith('withdraw_')?'craft':
   k==='pickup_item'||k.startsWith('drop_')?'craft':'curiosity');
- const personalityBias=(n,kind)=>{
-  const p=String(n.personality||'').toLowerCase();
-  if(kind==='social')return /expressive|gentle/.test(p)?16:/reserved|independent/.test(p)?-10:0;
-  if(kind==='curiosity')return /curious|adventurous/.test(p)?17:/cautious|reserved/.test(p)?-7:0;
-  if(kind==='security')return /cautious|patient|pragmatic/.test(p)?13:/adventurous/.test(p)?-5:0;
-  if(kind==='craft')return /patient|pragmatic|independent/.test(p)?12:0;
-  return 0;
+ const FACET_WEIGHTS={
+  social:['socialOrientation',40,['socialApproach','expressiveness','assertiveness','playfulness',
+   'empathy','generosity','cooperativeness','trustInclination']],
+  curiosity:['exploratoryOrientation',34,['noveltySeeking','inquisitiveness','openMindedness',
+   'imagination','riskTolerance','evidenceSkepticism']],
+  security:['securityOrientation',26,['foresight','orderliness','threatSensitivity']],
+  craft:['workOrientation',24,['persistence','patience','adaptability',
+   'attentionalFocus','practicalOrientation','teachingInclination']]
  };
+ function personalityBias(n,kind){
+  const profile=FACET_WEIGHTS[kind];
+  if(!profile)return 0;
+  const [orientation,weight,facets]=profile;
+  const read=key=>root.Civilization?.trait(n,key)??.5;
+  const nuance=facets.reduce((total,key)=>total+read(key)-.5,0)/facets.length;
+  return (read(orientation)-.5)*weight+nuance*2;
+ }
  const defaultAgency=()=>({goal:null,beliefs:[],practice:{safety:0,security:0,
   craft:0,curiosity:0,social:0},completedGoals:0,failedGoals:0});
  function state(n){return n.agency ||= defaultAgency();}
@@ -67,6 +76,7 @@
   n.relationships[id]={cooperation:clamp(now.cooperation+(HELP.has(action)?1:0),0,8),
    tension:clamp(now.tension+(HELP.has(action)?-1:1),0,6),at:clock,action};
   if(Number.isFinite(n.mood))n.mood=clamp(n.mood+(HELP.has(action)?2:-1),0,100);
+  root.Civilization?.socialAffect(n,HELP.has(action));
   const keys=Object.keys(n.relationships);
   if(keys.length>24){
    const oldest=keys.sort((a,b)=>n.relationships[a].at-n.relationships[b].at)[0];

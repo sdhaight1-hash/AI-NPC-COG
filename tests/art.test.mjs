@@ -44,6 +44,31 @@ test('lighting and campfire effects support dusk, dawn and daytime without chang
  assert.equal(JSON.stringify(world),before,'Rendering cannot mutate world state');
 });
 
+test('generated map sprites and portraits share appearance with a bounded canvas draw',()=>{
+ const frames=[];
+ const sandbox={document:{createElement:()=>{
+  const pixels=[];
+  const ctx={fillStyle:null,fillRect(...box){pixels.push([this.fillStyle,...box]);}};
+  return {getContext:()=>ctx,pixels};
+ }}};
+ vm.runInNewContext(readFileSync(new URL('../public/pixel-art.js',import.meta.url),'utf8'),sandbox);
+ const {canvas:map,drawn}=context();
+ const portrait={width:48,height:56,getContext:()=>({
+  clearRect(){},drawImage(...args){frames.push(args);}
+ })};
+ const resident={id:'person_1',name:'Resident',appearance:{version:1,
+  skin:7,hair:2,eyes:3,hairStyle:3,face:2,build:2,garment:1,outfit:4,detail:3}};
+ const before=JSON.stringify(resident),art=sandbox.VillageArt;
+ art.drawActor(map,resident,false,{x:2,y:2},false,0);
+ art.drawPortrait(portrait,resident);
+ assert.equal(drawn[0][0],frames[0][0],'The portrait uses the map sprite for that appearance');
+ assert.deepEqual(frames[0].slice(-4),[0,0,48,56]);
+ assert.equal(JSON.stringify(resident),before);
+ const variant={...resident,appearance:{...resident.appearance,skin:0,hairStyle:5,outfit:1}};
+ art.drawPortrait(portrait,variant);
+ assert.notDeepEqual(frames[0][0].pixels,frames[1][0].pixels);
+});
+
 test('residents show authoritative timed work and visible rest without changing state',()=>{
  const labels=[],rects=[];
  const canvas=new Proxy({measureText:t=>({width:String(t).length*5}),

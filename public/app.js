@@ -94,6 +94,7 @@ function sceneFor(n,attentionSubject=''){
   ', hunger '+Math.round(n.needs.hunger)+', thirst '+Math.round(n.needs.thirst)+
   ', loneliness '+Math.round(n.needs.social)+', mood '+Math.round(n.mood)+
   '. Bodily sensations: '+sensations+
+  '. Temperament: '+Civilization.traitSummary(n)+'. Current emotions: '+describeAffect(n.affect)+
   '. Personal drives: '+Object.entries(motives).map(([k,v])=>k+' '+Math.round(v)).join(', ')+
   '. Current intention: '+(a.goal?.key||n.plan?.key||'undecided')+
   '. My witnessed beliefs: '+beliefs+'. My relationships: '+relationships+
@@ -386,6 +387,9 @@ async function deliberate(n,cue=null){
   state.lastDecisionMs=performance.now();
  }
 }
+function describeAffect(affect){
+ return Object.entries(affect||{}).map(([key,value])=>key+' '+Math.round(value)).join(', ');
+}
 function peerSceneFor(n,other){
  const relation=Agency.relationship(n,other.id,state.clock);
  const seen=new Set(),sources=[];
@@ -401,7 +405,7 @@ function peerSceneFor(n,other){
  return 'You are '+n.name+' speaking with '+other.name+'. '+
   'Sources you personally inspected, current supply unknown: '+(sources.join(', ')||'none')+'. '+
   'Help received from this resident '+relation.cooperation+', tension '+relation.tension+
-  ', mood '+Math.round(n.mood)+'. '+Biology.sensation(n.bio,n.needs)+
+  ', mood '+Math.round(n.mood)+'. '+describeAffect(n.affect)+'. '+Biology.sensation(n.bio,n.needs)+
   '. Treat what they say as a report and speak only for yourself.';
 }
 function peerExchangeValid(session){
@@ -671,15 +675,26 @@ function renderResidents(){
   btn.addEventListener('click',()=>selectNpc(n.id));area.append(btn);
  }
 }
+let portraitKey=null;
 function updateInspector(){
  const n=selectedNpc();
  $('npcCount').textContent=state.npcs.length+' alive · '+state.dead.length+' dead';
  if(!n){
   $('npcName').textContent='No living inhabitants';
   $('npcMeta').textContent='The next monthly arrival may repopulate the world.';
+  if(portraitKey!==null){
+   const portrait=$('npcPortrait');
+   portrait.getContext('2d').clearRect(0,0,portrait.width,portrait.height);
+   portraitKey=null;
+  }
   return;
  }
- $('npcPortrait').textContent=n.name[0];$('npcPortrait').style.background=n.color+'44';
+ const portrait=$('npcPortrait'),look=n.id+':'+JSON.stringify(n.appearance);
+ if(look!==portraitKey){
+  VillageArt.drawPortrait(portrait,n);
+  portrait.style.background=n.color+'44';
+  portraitKey=look;
+ }
  $('npcName').textContent=n.name;
  $('npcMeta').textContent='Age '+Math.floor(Civilization.age(n,state.clock))+
   ' · Y'+Civilization.stamp(state.clock).year+' · '+AgentWorld.focus(n);
@@ -715,6 +730,11 @@ function updateInspector(){
  $('npcBeliefs').textContent=(n.agency?.beliefs||[]).slice(-3).map(b=>
   b.kind+' '+b.status+' at '+b.x+','+b.y).join(' · ')||'No personal evidence yet';
  $('npcMood').textContent=Math.round(n.mood)+'/100';
+ $('npcAffect').textContent=describeAffect(n.affect);
+ $('npcAffectBaseline').textContent=describeAffect(n.affectBaseline);
+ $('npcTraits').textContent=Object.entries(Civilization.TRAIT_GROUPS).map(([group,facets])=>
+  group+'\n'+facets.map(key=>Civilization.traitLabel(key)+' '+
+   Math.round(Civilization.trait(n,key)*100)).join(' · ')).join('\n\n');
  $('npcRelationships').textContent=Object.keys(n.relationships||{}).slice(-4).map(id=>{
   const name=state.npcs.find(peer=>peer.id===id)?.name||id;
   const r=Agency.relationship(n,id,state.clock);
