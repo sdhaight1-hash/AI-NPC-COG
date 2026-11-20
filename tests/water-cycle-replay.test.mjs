@@ -32,7 +32,7 @@ function setup(relocate=true){
  // Reposition the already-existing finite nodes; do not mint any stock.
  const kinds=['water','fiber','stone','wood'];
  const nodes=kinds.map(kind=>{
-  const min=kind==='fiber'?3:kind==='stone'||kind==='water'?2:1;
+  const min=kind==='fiber'?3:kind==='water'?4:kind==='stone'?2:1;
   const node=s.world.nodes.find(x=>x.kind===kind&&x.stock>=min);
   assert.ok(node,'Missing actual source: '+kind);
   return node;

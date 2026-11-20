@@ -344,7 +344,7 @@
       root.Crafting.getRecipe(task.key.slice(6)))){
       let outcome;
       if(task.key==='craft_stage'){
-        outcome=root.Crafting.advance(n,world);
+        outcome=root.Crafting.advance(n,world,task.ref);
       }else{
         const id=task.key.slice(6);
         outcome=root.Crafting.begin(n,world,id,task.ref);

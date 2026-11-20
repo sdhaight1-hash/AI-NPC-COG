@@ -35,7 +35,7 @@
   flask:{name:'Carved wooden water flask',knowledge:'flask',inputs:{wood:1,cord:1},tool:'blade',stages:[
    {name:'Choose and hollow solid seasoned timber',minutes:8},
    {name:'Fit a snug wooden stopper and seal the joint',minutes:9},
-   {name:'Bind the stopper and test for leaks',minutes:6}
+   {name:'Test stopper using one measured freshwater unit',minutes:6}
   ],output:{kind:'flask',count:1}},
   // A novice can try physical operations without knowing the finished product
   // or receiving the deliberate flask recipe from the global catalog.
@@ -43,7 +43,7 @@
    inputs:{wood:1,cord:1},tool:'blade',stages:[
     {name:'Inspect grain and choose a hollowing direction',minutes:8},
     {name:'Carve a cavity and bind a trial stopper',minutes:10},
-    {name:'Fill, tilt and test the seal',minutes:8}
+    {name:'Tilt-test seal using one measured freshwater unit',minutes:8}
    ],output:{kind:'flask',count:1}}
  });
  const MATERIALS=Object.freeze({
@@ -145,6 +145,31 @@
   return world.structures.find(s=>s.type===type&&
    (root.Frontier.distance(world,npc,s)<=range||s.maker===npc.id))||null;
  }
+ function wetSealPending(npc){
+  const part=npc.workpiece,recipe=RECIPES[part?.recipe];
+  return (part?.recipe==='flask'||part?.recipe==='hollow_wood_trial')&&
+   part.stage===recipe.stages.length-1;
+ }
+ function sealSource(npc,world){
+  // Personal location evidence authorizes navigation, never grants live stock.
+  const inspected=new Set((npc.knowledge?.observations||[]).map(x=>x.id));
+  const sightings=new Map((npc.knowledge?.sightings||[])
+   .filter(x=>x.kind==='water'&&x.at<=world.now).map(x=>[x.id,x]));
+  const recentDry=new Set((npc.agency?.beliefs||[])
+   .filter(b=>b.kind==='water'&&b.status==='depleted'&&
+    world.now-b.at>=0&&world.now-b.at<60).map(b=>b.ref));
+  const candidates=world.nodes.filter(x=>x.kind==='water'&&
+   !recentDry.has(x.id)&&(npc.z||0)===(x.z||0)&&
+   root.Frontier.distance(world,npc,x)<=18&&
+   (inspected.has(x.id)||(
+    sightings.has(x.id)&&sightings.get(x.id).x===x.x&&
+    sightings.get(x.id).y===x.y&&(sightings.get(x.id).z||0)===(x.z||0))||
+    (root.Perception?.canSee?
+     root.Perception.canSee({world,clock:world.now},npc,x):
+     root.Frontier.distance(world,npc,x)<=1)));
+  return candidates.sort((a,b)=>root.Frontier.distance(world,npc,a)-
+   root.Frontier.distance(world,npc,b)||a.id.localeCompare(b.id))[0]||null;
+ }
  function options(npc,world){
   if(npc.workpiece){
    const spec=RECIPES[npc.workpiece.recipe];
@@ -152,9 +177,12 @@
    if(!step)return [];
    const station=npc.workpiece.station?
     world.structures.find(s=>s.id===npc.workpiece.station):null;
+   const wet=wetSealPending(npc),source=wet?sealSource(npc,world):null;
+   if(wet&&!source)return []; // No wet experiment absent firsthand water evidence.
    return [{key:'craft_stage',when:'Continue '+spec.name+': '+step.name+
-    ' ('+(npc.workpiece.stage+1)+'/'+spec.stages.length+' stages)',
-    target:station||null,ref:station?.id||null}];
+    ' ('+(npc.workpiece.stage+1)+'/'+spec.stages.length+' stages)'+
+    (wet?'; needs one finite freshwater unit (current stock unknown)':''),
+    target:source||station||null,ref:source?.id||station?.id||null}];
   }
   const work=Object.entries(RECIPES).flatMap(([id,spec])=>{
    if(!hasInputs(npc,spec)||npc.energy<18||knowinglyWeakBinding(npc,id)||
@@ -240,7 +268,7 @@
    station:station?.id||null,x:npc.x,y:npc.y,startedAt:world.now};
   return {ok:true,message:'Started '+spec.name+': '+spec.stages[0].name};
  }
- function advance(npc,world){
+ function advance(npc,world,waterSourceId=null){
   const part=npc.workpiece;
   if(!part||!RECIPES[part.recipe])return {ok:false,message:'No active workpiece'};
   const spec=RECIPES[part.recipe],step=spec.stages[part.stage];
@@ -261,6 +289,15 @@
   if(part.stage===spec.stages.length-1&&spec.output.kind&&
      (root.AgentWorld?.roomFor(npc,spec.output.kind)??1000)<spec.output.count)
     return {ok:false,message:'CARRYING_CAPACITY: no space for finished product'};
+  // The final wet proof consumes a source unit even when the seal leaks.
+  // A rejected or dry proof must not advance skill, workpiece or materials.
+  let testWater=null;
+  if(wetSealPending(npc)){
+   testWater=world.nodes.find(x=>x.id===waterSourceId&&x.kind==='water');
+   if(!testWater||testWater.stock<1||(npc.z||0)!==(testWater.z||0)||
+    root.Frontier.distance(world,npc,testWater)>1)
+    return {ok:false,message:'WET_TEST_WATER_UNAVAILABLE: one real freshwater unit required'};
+  }
   const practiced=npc.skills.crafting||0;
   const workshop=part.station?
    world.structures.find(s=>s.id===part.station):null;
@@ -270,6 +307,7 @@
   npc.energy=Math.max(0,npc.energy-4);
   npc.skills.crafting=practiced+1;
   part.stage++;
+  if(testWater)testWater.stock--; // One test unit is poured away, not carried.
   if(part.stage<spec.stages.length)
    return {ok:true,message:'Completed '+step.name+'; next: '+
     spec.stages[part.stage].name};
@@ -385,6 +423,6 @@
     materialQuality:p.materialQuality,station:typeof p.station==='string'?p.station:null,
     x:npc.x,y:npc.y,startedAt:p.startedAt}:null;
  }
- root.Crafting={RECIPES,MATERIALS,KINDS,FLASK_CAPACITY,options,getRecipe,begin,advance,interact,restore,
+ root.Crafting={RECIPES,MATERIALS,KINDS,FLASK_CAPACITY,options,getRecipe,begin,advance,wetSealPending,interact,restore,
   flaskFields,vesselRoom,fillFlask,takeWater,removeFlask,receiveFlask};
 })(globalThis);

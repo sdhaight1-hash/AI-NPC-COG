@@ -137,6 +137,7 @@
   const visible=new Set([...packet.people,...packet.objects].map(o=>o.id));
   const witnessed=new Set([
    ...(n.knowledge?.observations||[]).map(o=>o.id),
+   ...(n.knowledge?.sightings||[]).map(o=>o.id),
    ...(n.agency?.beliefs||[]).map(o=>o.ref)
   ]);
   // The actor can recall the existence of infrastructure they themselves

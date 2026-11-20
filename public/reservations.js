@@ -43,6 +43,9 @@
    return b&&input?[npc(input.kind,input.quantity),
     {type:'blueprint',id:ref,kind:'tile',quantity:1}]:[];
   }
+  // Final wet seal trial claims exactly one existing physical freshwater unit.
+  if(action==='craft_stage'&&root.Crafting?.wetSealPending(n))
+   return typeof ref==='string'?[node('water',1)]:[];
   const harvestKind=root.AgentWorld?.HARVEST_KINDS?.[action];
   if(action==='drink_source'){
    const spring=state.world.nodes.find(x=>x.id===ref&&x.kind==='water');
