@@ -184,3 +184,79 @@ test('seal water debits remain identical under one-minute versus batched simulat
  assert.equal(fine.k.Simulation.canonical(fine.k.Persistence.save(fine.s)),
   batch.k.Simulation.canonical(batch.k.Persistence.save(batch.s)));
 });
+
+
+test('critical thirst interrupts wet work, drinks separately, then resumes one held test unit',()=>{
+ const run=setup(),{k,s,n,spring}=run;
+ finalStage(run);
+ const originalStock=spring.stock;
+ assert.equal(k.WorldRuntime.begin(s,n,'craft_stage'),true);
+ const command=n.task.commandId;
+ k.Simulation.advance(s,3);
+ assert.equal(n.currentActivity.workDone,3);
+ assert.equal(spring.stock,originalStock);
+ n.needs.thirst=96;n.bio.hydrationBudgetMl=100;
+ assert.equal(k.WorldRuntime.survival(s,n),true);
+ assert.equal(n.task?.key,'drink_source');
+ assert.ok(n.suspendedActivities.some(a=>a.commandId===command&&a.workDone===3));
+ assert.equal(k.Reservations.active(s).filter(x=>x.commandId===command&&
+  x.kind==='water').length,1,'Interrupted unfinished wet stage still owns one source unit');
+ const drinkId=n.task.commandId;
+ assert.notEqual(drinkId,command);
+ k.Simulation.advance(s,1);
+ assert.equal(spring.stock,originalStock-1,'Emergency direct drinking is a distinct debit');
+ assert.equal(n.inventory.flask,0,'Interrupted test cannot create a vessel');
+ assert.equal(n.workpiece.stage,2);
+ assert.equal(k.WorldRuntime.begin(s,n,'craft_stage','resume'),true);
+ assert.equal(n.task.commandId,command);
+ assert.equal(n.task.readyAt-s.clock,5);
+ k.Simulation.advance(s,5);
+ assert.equal(spring.stock,originalStock-2,'Only the finished probe consumes its held unit');
+ assert.equal(n.inventory.flask,1);
+ assert.equal(n.knowledge.recipes.filter(x=>x==='flask').length,1);
+ assert.equal(k.Reservations.active(s).some(x=>x.commandId===command),false);
+ assert.equal(s.receipts.filter(x=>x.commandId===command&&
+  x.status==='COMPLETED'&&x.delta?.nodeStock?.some(d=>
+   d.key===spring.id&&d.delta===-1)).length,1);
+ assert.equal(s.receipts.filter(x=>x.commandId===drinkId&&
+  x.status==='COMPLETED'&&x.delta?.nodeStock?.some(d=>
+   d.key===spring.id&&d.delta===-1)).length,1);
+});
+
+test('canceling interrupted wet proof returns the exact unspent spring reservation and keeps the workpiece',()=>{
+ const run=setup(),{k,s,n,spring,peer}=run;
+ finalStage(run);
+ const originalStock=spring.stock;
+ assert.equal(k.WorldRuntime.begin(s,n,'craft_stage'),true);
+ const command=n.task.commandId;
+ k.Simulation.advance(s,3);
+ assert.ok(k.Activities.interrupt(s,n,'CRITICAL_NEED'));
+ n.task=null;n.path=[];n.action='none';
+ assert.equal(k.Reservations.active(s).filter(x=>x.commandId===command&&
+  x.kind==='water').length,1);
+ assert.equal(k.Reservations.releaseCommand(s,command,'CANCELLED'),1);
+ assert.equal(k.Reservations.releaseCommand(s,command,'CANCELLED'),0,
+  'Canceling the same reservation twice cannot create water');
+ assert.equal(spring.stock,originalStock);
+ assert.equal(n.workpiece.stage,2);
+ assert.equal(n.inventory.flask,0);
+ const peerClaim=k.Reservations.claim(s,peer.id,'cmd_980',[
+  {type:'node',id:spring.id,kind:'water',quantity:1}]);
+ assert.equal(peerClaim.ok,true,'The unspent physical unit becomes free to another actor');
+ k.Reservations.releaseCommand(s,'cmd_980','CANCELLED');
+ const saved=copy(k.Persistence.save(s));
+ const restored=k.Simulation.initial(379210);restored.auto=false;
+ assert.equal(k.Persistence.restore(restored,saved),true);
+ const actor=restored.npcs.find(x=>x.id===n.id);
+ assert.equal(actor.workpiece.stage,2);
+ assert.equal(restored.world.nodes.find(x=>x.id===spring.id).stock,originalStock);
+ assert.equal(k.Reservations.active(restored).filter(x=>x.commandId===command).length,0);
+ assert.equal(k.WorldRuntime.begin(restored,actor,'craft_stage','resume'),true,
+  'A canceled old claim must be restarted as a fresh legal command');
+ assert.notEqual(actor.task.commandId,command);
+ k.Simulation.advance(restored,8);
+ assert.equal(restored.world.nodes.find(x=>x.id===spring.id).stock,originalStock-1);
+ assert.equal(actor.inventory.flask,1);
+ assert.equal(restored.receipts.filter(r=>r.action==='craft_stage'&&
+  r.status==='COMPLETED'&&r.delta?.nodeStock?.some(x=>x.key===spring.id&&x.delta===-1)).length,1);
+});
