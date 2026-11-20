@@ -329,7 +329,15 @@
     add('none','Continue the current activity or observe before deciding');
     return list;
   }
-  function complete(n,world,residents) {
+  function harvestAmount(n,node,action){
+    const expertise=n.skills[skillNames[action]]||0;
+    const hatchetQuality=n.craftedItems?.find(item=>item.kind==='hatchet')?.quality||2;
+    const axeBonus=n.inventory.hatchet&&action==='collect_wood'?
+      (hatchetQuality>=4?2:1):0;
+    return Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3))+
+      axeBonus,roomFor(n,node.kind),action==='fill_water'?vesselRoom(n):1000);
+  }
+  function complete(n,world,residents,harvestBudget=Infinity) {
     const task=n.task;
     if(!task)return {ok:false,message:'No task'};
     // An NPC conversation never earns friendship from proximity alone.
@@ -370,15 +378,10 @@
       if(!node||node.stock<1||!sameLevel(n,node)||distance(n,node)>1)
         return {ok:false,message:'Resource no longer available'};
       // Repeated practice gradually improves output; expertise is earned, never assigned.
-      const expertise=n.skills[skillNames[task.key]]||0;
-      const hatchetQuality=n.craftedItems?.find(item=>item.kind==='hatchet')?.quality||2;
-      const axeBonus=n.inventory.hatchet&&task.key==='collect_wood'?
-       (hatchetQuality>=4?2:1):0;
       if(task.key==='fill_water'&&vesselRoom(n)<1)
         return {ok:false,message:'NO_LIQUID_CONTAINER: a real flask with space is required'};
-      const collected=Math.min(node.stock,2+Math.min(2,Math.floor(expertise/3))+
-        axeBonus,roomFor(n,node.kind),
-        task.key==='fill_water'?vesselRoom(n):1000);
+      const collected=Math.min(harvestAmount(n,node,task.key),harvestBudget);
+      if(harvestBudget<1)return {ok:false,message:'RESERVATION_CONFLICT: source stock already committed'};
       if(collected<1)return {ok:false,message:'CARRYING_CAPACITY: no room for harvested material'};
       // Do not commit a food harvest unless both inventory and nutrition
       // bookkeeping can accept all gathered portions.
@@ -776,5 +779,5 @@
     }));
   }
   root.AgentWorld={KEYS,HARVEST_KINDS,GROUND_KINDS,INVENTORY_KINDS:Object.freeze(Object.keys(ITEM_LOAD)),newWorld,newAgent,carrying,roomFor,vesselRoom,focus,available,complete,nextPlanAction,
-    validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById};
+    validatePlan,stepNeeds,regenerate,fallback,restoreWorld,describeObject,objectById,harvestAmount};
 })(globalThis);

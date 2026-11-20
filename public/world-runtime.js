@@ -380,11 +380,14 @@
   const finished={key:n.task.key,ref:n.task.ref,commandId:n.task.commandId,
    source:n.source};
   const expected=n.task.reservationIds?.length||0;
-  const outcome=root.WorldReceipts.execute(state,n,finished,()=>(
-   root.Reservations.validCommand(state,finished.commandId,expected)?
-    root.AgentWorld.complete(n,state.world,state.npcs):
-    {ok:false,message:'RESERVATION_EXPIRED: required materials unavailable'}
-  ));
+  const outcome=root.WorldReceipts.execute(state,n,finished,()=>{
+   if(!root.Reservations.validCommand(state,finished.commandId,expected))
+    return {ok:false,message:'RESERVATION_EXPIRED: required materials unavailable'};
+   const kind=root.AgentWorld.HARVEST_KINDS[finished.key];
+   const budget=kind?root.Reservations.harvestBudget(state,n.id,finished.commandId,
+    finished.ref,kind):undefined;
+   return root.AgentWorld.complete(n,state.world,state.npcs,budget);
+  });
   root.Reservations.releaseCommand(state,finished.commandId,
    outcome.ok?'CONSUMED_OR_RELEASED':'ACTION_FAILED');
   if(finished.key==='socialize'&&finished.source==='offline routine'){
