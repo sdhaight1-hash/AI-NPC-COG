@@ -12,6 +12,7 @@ jobs:
         with:
           node-version: '22'
       - run: node --check server.mjs
+      - run: node --check world-service.mjs
       - run: node --check public/app.js
       - run: node --check public/pixel-art.js
       - run: node --check public/physics.js
@@ -44,6 +45,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/world-service.test.mjs
       - name: Validate Windows scripts without downloading binaries
         shell: powershell
         run: .\tests\installer.test.ps1

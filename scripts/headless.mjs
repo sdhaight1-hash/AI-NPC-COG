@@ -2,10 +2,7 @@
 // Usage: node scripts/headless.mjs [ticks=10000] [seed=379210] [--auto] [--trace=trace.jsonl]
 import {createHash} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
-for(const name of ['frontier','construction','biology','crafting','cognition','agency',
- 'emergence','civilization','receipts','activities','reservations','projects','perception','evidence-memory','world-runtime','simulation','persistence']){
- await import('../public/'+name+'.js');
-}
+import '../simulation-runtime.mjs';
 const ticks=Number(process.argv[2]??10000);
 const seed=Number(process.argv[3]??379210);
 if(!Number.isInteger(ticks)||ticks<0||ticks>1000000||
