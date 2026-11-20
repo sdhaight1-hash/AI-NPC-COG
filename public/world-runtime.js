@@ -485,6 +485,15 @@
    !n.peerPending&&!n.peerReservedFor&&n.action!=='rest'&&
    state.clock>=n.thoughtAt).sort((a,b)=>a.thoughtAt-b.thoughtAt);
   for(const n of due){
+   // Self-directed, explicit technical instruction can serve a social need
+   // before the next construction project consumes the teacher's attention.
+   // It still requires an eligible learner, a tested method and a real example.
+   if(n.needs.social>=65&&n.needs.thirst<80&&n.needs.hunger<80&&n.energy>=30){
+    const lesson=available(state,n).find(o=>o.key==='teach_flask');
+    if(lesson&&begin(state,n,'teach_flask','offline routine',null,hooks)){
+     n.thoughtAt=state.clock+18;continue;
+    }
+   }
    if(n.needs.social>=80){
     const partner=available(state,n).find(o=>o.key==='socialize'&&
      o.target?.needs.social>=45&&o.target?.energy>=20&&n.energy>=25);
